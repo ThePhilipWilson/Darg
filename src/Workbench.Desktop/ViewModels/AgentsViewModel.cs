@@ -108,6 +108,28 @@ public partial class AgentsViewModel : ObservableObject
         if (Shown == a) Shown = Selected;
     }
 
+    /// <summary>Forget a Fettle chat from the list under this project's agents (as Fettle's own Forget does).</summary>
+    [RelayCommand]
+    void ForgetChat(ChatEntry? c)
+    {
+        if (c is not null) Mascot?.ForgetChat(c.Id);
+    }
+
+    partial void OnMascotChanged(MascotViewModel? oldValue, MascotViewModel? newValue)
+    {
+        if (oldValue is not null) oldValue.ChatForgotten -= LetGo;
+        if (newValue is not null) newValue.ChatForgotten += LetGo;
+    }
+
+    /// <summary>A Fettle chat was forgotten (from here or Fettle's box): stop showing it.</summary>
+    void LetGo(string id)
+    {
+        if (Shown?.Id != id) return;
+        BenchChat = null;
+        Shown = null;
+        Selected = Agents.FirstOrDefault();
+    }
+
     /// <summary>Close every agent here that's open but idle (not working, not waiting on the person).</summary>
     [RelayCommand]
     void CloseIdle()
