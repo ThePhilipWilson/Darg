@@ -28,7 +28,7 @@ public partial class MainViewModel : ObservableObject
             if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, $"Fettle: {what}", "", detail);
         };
         Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
-        Selected = Projects.FirstOrDefault();
+        Selected = LastProject.Pick(Projects, p => p.Config.Id); // the project that was open last time
         if (ArtifactHost.Server is { } artifacts)
         {
             artifacts.Reply += r => Avalonia.Threading.Dispatcher.UIThread.Post(() => FromArtifact(r));
@@ -213,9 +213,12 @@ public partial class MainViewModel : ObservableObject
             OpenSetupCommand.Execute(null);
             Setup?.AddFolder(add);
         }
-        if (Selected is null) return;
-        if (Enum.TryParse<Section>(Environment.GetEnvironmentVariable("WORKBENCH_SECTION"), true, out var s)) Selected.OpenCommand.Execute(s.ToString());
+        var section = Environment.GetEnvironmentVariable("WORKBENCH_SECTION");
         var prompt = Environment.GetEnvironmentVariable("WORKBENCH_AGENT");
+        // these act on the first project, whichever was open last
+        if (!string.IsNullOrWhiteSpace(section) || !string.IsNullOrWhiteSpace(prompt)) Selected = Projects.FirstOrDefault();
+        if (Selected is null) return;
+        if (Enum.TryParse<Section>(section, true, out var s)) Selected.OpenCommand.Execute(s.ToString());
         if (string.IsNullOrWhiteSpace(prompt) || Selected.Agents is null) return;
         var cwd = Environment.GetEnvironmentVariable("WORKBENCH_AGENT_CWD");
         // WORKBENCH_FLOW: run the prompt through that flow (by name) instead of starting one agent
@@ -265,6 +268,7 @@ public partial class MainViewModel : ObservableObject
     {
         foreach (var p in Projects) p.IsActive = p == value;
         Mascot?.ShowProject(value?.Config.Id); // Bench lists the chats of the project on screen
+        LastProject.Write(value?.Config.Id);
     }
 }
 
