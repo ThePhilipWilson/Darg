@@ -8,6 +8,23 @@
     <Style Selector="Border.list:pointerover Button.colpick, Button.colpick.on">
       <Setter Property="Opacity" Value="1"/>
     </Style>
+    <Style Selector="Button.head">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="6,0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="Opacity" Value="0.5"/>
+    </Style>
+    <Style Selector="Border.list:pointerover Button.head"><Setter Property="Opacity" Value="1"/></Style>
+    <Style Selector="Button.strip">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Top"/>
+      <Setter Property="Padding" Value="0,10"/>
+    </Style>
   </UserControl.Styles>
   <Panel>
   <Grid ColumnDefinitions="*,Auto">
@@ -43,21 +60,63 @@
     </Border>
 
     <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+      <StackPanel Orientation="Horizontal">
       <ItemsControl ItemsSource="{Binding Lists}" Margin="10">
         <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="10"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:ListViewModel">
+            <Panel>
+            <!-- minimized: a narrow strip with its name running down it; a click opens it, cards still drop on it -->
+            <Border Width="38" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8"
+                    Tag="{Binding Id}" Classes="list" IsVisible="{Binding IsMinimized}">
+              <Button Classes="strip" Command="{Binding ToggleMinimizedCommand}" ToolTip.Tip="{Binding Name, StringFormat='Open {0}'}"
+                      AutomationProperties.Name="{Binding Name, StringFormat='Open {0}'}">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Top" Classes="dim small" Text="{Binding Count}" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                  <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Top">
+                    <LayoutTransformControl.LayoutTransform><RotateTransform Angle="90"/></LayoutTransformControl.LayoutTransform>
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource Dim}"/>
+                  </LayoutTransformControl>
+                </DockPanel>
+              </Button>
+            </Border>
             <Border Width="290" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8"
-                    Tag="{Binding Id}" Classes="list">
+                    Tag="{Binding Id}" Classes="list" IsVisible="{Binding IsOpen}">
               <DockPanel>
-                <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="10,8">
-                  <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding Count}" VerticalAlignment="Center"/>
-                    <Button DockPanel.Dock="Right" Classes="workon colpick" Classes.on="{Binding AllPicked}" Content="{Binding PickText}"
-                            Command="{Binding PickCommand}" IsVisible="{Binding HasCards}" Margin="0,0,6,0"
-                            ToolTip.Tip="Pick every card showing in this column (click again to unpick them)"/>
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource Dim}" VerticalAlignment="Center"/>
-                  </DockPanel>
+                <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="10,6">
+                  <StackPanel Spacing="6">
+                    <DockPanel IsVisible="{Binding IsHeaderPlain}">
+                      <Button DockPanel.Dock="Right" Classes="head" Content="⋯" ToolTip.Tip="Rename, minimize or remove this list"
+                              AutomationProperties.Name="{Binding Name, StringFormat='{}{0} menu'}">
+                        <Button.Flyout>
+                          <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" IsVisible="{Binding IsColumn}"/>
+                            <MenuItem Header="Minimize" Command="{Binding ToggleMinimizedCommand}"/>
+                            <MenuItem Header="Remove column…" Command="{Binding AskRemoveCommand}" IsVisible="{Binding IsColumn}"/>
+                          </MenuFlyout>
+                        </Button.Flyout>
+                      </Button>
+                      <Button DockPanel.Dock="Right" Classes="head" Content="–" Command="{Binding ToggleMinimizedCommand}" ToolTip.Tip="Minimize to a strip"
+                              AutomationProperties.Name="{Binding Name, StringFormat='Minimize {0}'}"/>
+                      <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding Count}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                      <Button DockPanel.Dock="Right" Classes="workon colpick" Classes.on="{Binding AllPicked}" Content="{Binding PickText}"
+                              Command="{Binding PickCommand}" IsVisible="{Binding HasCards}" Margin="0,0,6,0"
+                              ToolTip.Tip="Pick every card showing in this column (click again to unpick them)"/>
+                      <TextBlock Classes="listname" Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource Dim}"
+                                 VerticalAlignment="Center" Background="Transparent" Tag="{Binding}"/>
+                    </DockPanel>
+                    <TextBox Classes="rename" Text="{Binding EditName}" IsVisible="{Binding IsRenaming}" FontSize="12" Tag="{Binding}"
+                             ToolTip.Tip="Enter to save, Esc to leave it as it was. Its cards are renamed with it."/>
+                    <StackPanel Spacing="6" IsVisible="{Binding ConfirmingRemove}">
+                      <TextBlock Text="{Binding RemoveQuestion}" TextWrapping="Wrap" FontSize="12"/>
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Remove" Command="{Binding RemoveCommand}" Foreground="{StaticResource Bad}"/>
+                        <Button Content="Keep it" Command="{Binding KeepItCommand}"/>
+                      </StackPanel>
+                    </StackPanel>
+                    <TextBlock Classes="bad" Text="{Binding Error}" TextWrapping="Wrap" FontSize="11"
+                               IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                  </StackPanel>
                 </Border>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                   <ItemsControl ItemsSource="{Binding Cards}" Margin="8">
@@ -108,9 +167,13 @@
                 </ScrollViewer>
               </DockPanel>
             </Border>
+            </Panel>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
+      <Button VerticalAlignment="Top" Content="+ Column" Command="{Binding AddColumnCommand}" Margin="0,10,10,10"
+              ToolTip.Tip="Add a column before the last (done) column, and name it"/>
+      </StackPanel>
     </ScrollViewer>
   </Grid>
 

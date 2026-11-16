@@ -25,6 +25,8 @@ public sealed class Board
     public string Prefix { get; init; } = "";
     public IReadOnlyList<Column> Columns { get; init; } = [];
     public IReadOnlyDictionary<string, List<Card>> Lists { get; init; } = new Dictionary<string, List<Card>>();
+    /// <summary>Lists shown folded to a narrow strip (board.json's "minimized"; Tatty keeps keys it doesn't know).</summary>
+    public IReadOnlySet<string> Minimized { get; init; } = new HashSet<string>();
 
     /// <summary>Lists in display order: backlog, the columns, completed.</summary>
     public IEnumerable<(string Id, string Name)> ListOrder()
@@ -73,7 +75,100 @@ public static class BoardStore
         {
             Name = Path.GetFileName(folder), Folder = folder, Prefix = (string?)json["prefix"] ?? "",
             Columns = columns, Lists = lists,
+            Minimized = (json["minimized"] as JsonArray ?? []).Select(x => (string?)x).OfType<string>().ToHashSet(),
         };
+    }
+
+    static JsonObject ReadJson(string folder) => JsonNode.Parse(File.ReadAllText(Path.Combine(folder, "board.json")))!.AsObject();
+    static void WriteJson(string folder, JsonObject json) =>
+        File.WriteAllText(Path.Combine(folder, "board.json"), json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
+    static JsonArray ColumnsOf(JsonObject json) => json["columns"] as JsonArray ?? (JsonArray)(json["columns"] = new JsonArray());
+
+    /// <summary>A usable column name, as Tatty checks it: one line, at most 40 characters, not a list of
+    /// its own (Backlog, Completed) and not another column's name. Throws with why not.</summary>
+    static string ColumnName(JsonObject json, string name, string keepId = "")
+    {
+        name = Regex.Replace(name, @"\s+", " ").Trim();
+        if (name.Length > 40) name = name[..40].TrimEnd();
+        if (name.Length == 0) throw new ArgumentException("A column needs a name.");
+        if (name.ToLowerInvariant() is "backlog" or "completed" or "not on a column")
+            throw new ArgumentException($"{name} can't be a column's name: it's a list of its own.");
+        if (ColumnsOf(json).Any(c => ((string?)c?["name"] ?? "").Equals(name, StringComparison.OrdinalIgnoreCase) && (string?)c?["id"] != keepId))
+            throw new ArgumentException($"There's a {name} column already.");
+        return name;
+    }
+
+    /// <summary>Add a column (at the end, or at index among the columns), with the next free cN id as Tatty
+    /// names them. Returns its id.</summary>
+    public static string AddColumn(string folder, string name, int? index = null)
+    {
+        var json = ReadJson(folder);
+        name = ColumnName(json, name);
+        var cols = ColumnsOf(json);
+        var n = 1 + cols.Select(c => (string?)c?["id"] ?? "").Select(id => Regex.Match(id, @"^c(\d+)$"))
+            .Where(m => m.Success).Select(m => int.Parse(m.Groups[1].Value)).DefaultIfEmpty(0).Max();
+        var id = $"c{n}";
+        cols.Insert(Math.Clamp(index ?? cols.Count, 0, cols.Count), new JsonObject { ["id"] = id, ["name"] = name });
+        WriteJson(folder, json);
+        return id;
+    }
+
+    /// <summary>Rename a column: board.json, and the Status line of every card in it (a card's Status is
+    /// its column's name, so they would fall out of it otherwise).</summary>
+    public static void RenameColumn(string folder, string columnId, string name)
+    {
+        var json = ReadJson(folder);
+        var col = ColumnsOf(json).OfType<JsonObject>().FirstOrDefault(c => (string?)c["id"] == columnId)
+                  ?? throw new ArgumentException("There's no such column.", nameof(columnId));
+        name = ColumnName(json, name, columnId);
+        var cards = Load(folder).Lists.GetValueOrDefault(columnId) ?? [];
+        col["name"] = name;
+        WriteJson(folder, json);
+        foreach (var card in cards) RewriteFields(folder, card, t => SetField(t, "Status", name));
+    }
+
+    /// <summary>Remove a column. Its cards go to the end of the backlog, as Tatty does; a board keeps at
+    /// least one column. Returns how many cards moved.</summary>
+    public static int RemoveColumn(string folder, string columnId)
+    {
+        var json = ReadJson(folder);
+        var cols = ColumnsOf(json);
+        var col = cols.OfType<JsonObject>().FirstOrDefault(c => (string?)c["id"] == columnId)
+                  ?? throw new ArgumentException("There's no such column.", nameof(columnId));
+        if (cols.Count == 1) throw new ArgumentException("A board needs at least one column.");
+        var cards = Load(folder).Lists.GetValueOrDefault(columnId) ?? [];
+        cols.Remove(col);
+        var order = json["order"] as JsonObject ?? new JsonObject();
+        json["order"] = order;
+        if (order[Board.Backlog] is not JsonArray backlog) order[Board.Backlog] = backlog = new JsonArray();
+        foreach (var card in cards)
+            if (!backlog.Any(x => (string?)x == card.Id)) backlog.Add(card.Id);
+        order.Remove(columnId);
+        if (json["minimized"] is JsonArray min) foreach (var x in min.Where(x => (string?)x == columnId).ToList()) min.Remove(x);
+        WriteJson(folder, json);
+        foreach (var card in cards) RewriteFields(folder, card, t => SetField(t, "Status", "Backlog"));
+        return cards.Count;
+    }
+
+    /// <summary>Fold a list (backlog, a column, completed) to a narrow strip, or open it again. Kept in
+    /// board.json, so it stays that way next time and on every machine the board syncs to.</summary>
+    public static void SetMinimized(string folder, string listId, bool minimized)
+    {
+        var json = ReadJson(folder);
+        var ids = (json["minimized"] as JsonArray ?? []).Select(x => (string?)x).OfType<string>().Where(x => x != listId).ToList();
+        if (minimized) ids.Add(listId);
+        if (ids.Count == 0) json.Remove("minimized");
+        else json["minimized"] = new JsonArray(ids.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray());
+        WriteJson(folder, json);
+    }
+
+    static void RewriteFields(string folder, Card card, Func<string, string> change)
+    {
+        var file = Path.Combine(folder, "items", card.File);
+        var raw = File.ReadAllText(file);
+        var crlf = raw.Contains("\r\n");
+        var text = change(raw.Replace("\r\n", "\n"));
+        File.WriteAllText(file, crlf ? text.Replace("\n", "\r\n") : text, new UTF8Encoding(false));
     }
 
     /// <summary>Which list a Status puts a card in, as Tatty decides it.</summary>
