@@ -1,0 +1,146 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Workbench.Desktop.ViewModels"
+             x:Class="Workbench.Desktop.Views.AgentsView"
+             x:DataType="vm:AgentsViewModel">
+  <Grid ColumnDefinitions="280,*">
+    <!-- agent list -->
+    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Bottom" Margin="10" Spacing="6">
+          <TextBox Text="{Binding NewPrompt}" PlaceholderText="What should a new agent do?" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"/>
+          <TextBlock Classes="dim small" Text="{Binding Folder, StringFormat='Runs in {0}'}" TextWrapping="Wrap"/>
+          <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="+ New agent" Command="{Binding StartAgentCommand}"/>
+        </StackPanel>
+        <ListBox ItemsSource="{Binding Agents}" SelectedItem="{Binding Selected}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:AgentViewModel">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Classes="dim small" Text="{Binding StateText}"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <!-- the selected agent -->
+    <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" DataContext="{Binding Selected}" x:DataType="vm:AgentViewModel"
+          IsVisible="{Binding $parent[UserControl].((vm:AgentsViewModel)DataContext).Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding Working}"/>
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <TextBlock Classes="dim small" Text="{Binding StateText}" VerticalAlignment="Center"/>
+            <TextBlock Classes="dim small mono" Text="{Binding Model}" VerticalAlignment="Center"/>
+            <TextBlock Classes="dim small mono" Text="{Binding Cwd}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <ScrollViewer Grid.Row="1" x:Name="Scroll">
+        <ItemsControl ItemsSource="{Binding Items}" Margin="18,14" MaxWidth="980" HorizontalAlignment="Left">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="10"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.DataTemplates>
+            <DataTemplate DataType="vm:UserItem">
+              <Border Background="#2b2a22" BorderBrush="#4a4330" BorderThickness="1" CornerRadius="10" Padding="12,8" HorizontalAlignment="Right" MaxWidth="700">
+                <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+              </Border>
+            </DataTemplate>
+            <DataTemplate DataType="vm:TextItem">
+              <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" LineHeight="21"/>
+            </DataTemplate>
+            <DataTemplate DataType="vm:NoteItem">
+              <TextBlock Text="{Binding Text}" Classes="dim small" TextWrapping="Wrap" Classes.bad="{Binding Bad}"/>
+            </DataTemplate>
+            <DataTemplate DataType="vm:ToolItem">
+              <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6">
+                <StackPanel>
+                  <DockPanel Margin="9,5">
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" Foreground="{StaticResource Info}" FontWeight="SemiBold" Classes="mono" Margin="0,0,8,0"/>
+                    <TextBlock DockPanel.Dock="Right" Text="✓" Foreground="{StaticResource Ok}" IsVisible="{Binding Done}" Margin="8,0,0,0"/>
+                    <TextBlock Text="{Binding Summary}" Classes="dim mono" TextTrimming="CharacterEllipsis"/>
+                  </DockPanel>
+                  <Image Source="{Binding Image}" IsVisible="{Binding HasImage}" MaxHeight="420" HorizontalAlignment="Left" Margin="9,0,9,9" Stretch="Uniform"/>
+                  <StackPanel IsVisible="{Binding HasDiff}">
+                    <Border Background="{StaticResource DelBg}" Padding="10,4" IsVisible="{Binding Removed, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <SelectableTextBlock Classes="mono" Foreground="#f0a0a0" Text="{Binding Removed}" TextWrapping="Wrap"/>
+                    </Border>
+                    <Border Background="{StaticResource AddBg}" Padding="10,4" IsVisible="{Binding Added, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <SelectableTextBlock Classes="mono" Foreground="#a8e6b8" Text="{Binding Added}" TextWrapping="Wrap"/>
+                    </Border>
+                  </StackPanel>
+                  <Border IsVisible="{Binding HasPreview}" Background="#15171b" Padding="10,6">
+                    <SelectableTextBlock Classes="mono" Text="{Binding Preview}" TextWrapping="Wrap"/>
+                  </Border>
+                  <Border IsVisible="{Binding Result, Converter={x:Static ObjectConverters.IsNotNull}}" Background="#101215" Padding="10,6">
+                    <SelectableTextBlock Classes="mono" Text="{Binding Result}" TextWrapping="Wrap" Foreground="{StaticResource Dim}"/>
+                  </Border>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+            <DataTemplate DataType="vm:PermissionItem">
+              <Border BorderBrush="{StaticResource Accent}" BorderThickness="1" CornerRadius="8" Background="#2a2416" Padding="12,10">
+                <StackPanel Spacing="8">
+                  <TextBlock><Run Text="Allow "/><Run Text="{Binding Tool}" FontWeight="SemiBold"/><Run Text="?"/></TextBlock>
+                  <SelectableTextBlock Classes="mono" Text="{Binding Summary}" TextWrapping="Wrap"/>
+                  <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Pending}">
+                    <Button Classes="primary" Content="Allow" Command="{Binding AllowCommand}"/>
+                    <Button Content="Deny" Command="{Binding DenyCommand}"/>
+                  </StackPanel>
+                  <TextBlock Classes="dim small" Text="{Binding Decision}" IsVisible="{Binding !Pending}"/>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+            <DataTemplate DataType="vm:QuestionItem">
+              <Border BorderBrush="{StaticResource Accent}" BorderThickness="1" CornerRadius="8" Background="#2a2416" Padding="12,10">
+                <ItemsControl ItemsSource="{Binding Questions}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="12"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:QuestionGroup">
+                      <StackPanel Spacing="6">
+                        <TextBlock Classes="dim small" Text="{Binding Header}"/>
+                        <TextBlock Text="{Binding Question}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                        <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNull}}">
+                          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:QuestionOption">
+                              <Button Command="{Binding Command}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                                <StackPanel Spacing="2">
+                                  <TextBlock Text="{Binding Label}" FontWeight="SemiBold"/>
+                                  <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap"/>
+                                </StackPanel>
+                              </Button>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                   Text="{Binding Chosen, StringFormat='You picked: {0}'}" Foreground="{StaticResource Accent}"/>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.DataTemplates>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <Border Grid.Row="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="14,10">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Classes="primary" Content="Send" Command="{Binding SendCommand}" Margin="8,0,0,0" VerticalAlignment="Bottom"/>
+          <TextBox x:Name="ComposeBox" Text="{Binding Compose}" PlaceholderText="Message this agent… (Enter sends, Shift+Enter for a new line)"
+                   AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160"/>
+        </DockPanel>
+      </Border>
+    </Grid>
+
+    <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6"
+                IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNull}}">
+      <TextBlock Text="No agent selected" FontSize="16" HorizontalAlignment="Center"/>
+      <TextBlock Classes="dim" Text="Describe a job on the left to start one." HorizontalAlignment="Center"/>
+    </StackPanel>
+  </Grid>
+</UserControl>

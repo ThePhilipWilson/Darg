@@ -1,0 +1,76 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Workbench.Desktop.App"
+             RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <SolidColorBrush x:Key="Bg" Color="#14161a"/>
+    <SolidColorBrush x:Key="Chrome" Color="#0f1114"/>
+    <SolidColorBrush x:Key="Panel" Color="#1b1e24"/>
+    <SolidColorBrush x:Key="Panel2" Color="#22262e"/>
+    <SolidColorBrush x:Key="Line" Color="#2e333d"/>
+    <SolidColorBrush x:Key="Dim" Color="#8b93a1"/>
+    <SolidColorBrush x:Key="Accent" Color="#e0a84a"/>
+    <SolidColorBrush x:Key="Ok" Color="#5fbf7f"/>
+    <SolidColorBrush x:Key="Bad" Color="#e06464"/>
+    <SolidColorBrush x:Key="Info" Color="#6aa5e8"/>
+    <SolidColorBrush x:Key="AddBg" Color="#1f3a27"/>
+    <SolidColorBrush x:Key="DelBg" Color="#3a1f22"/>
+    <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{StaticResource Bg}"/>
+    </Style>
+    <Style Selector="TextBlock.dim, SelectableTextBlock.dim">
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+    </Style>
+    <Style Selector="TextBlock.bad">
+      <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector="TextBlock.small">
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style Selector="TextBlock.mono, SelectableTextBlock.mono">
+      <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{StaticResource Panel2}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Padding" Value="9,7"/>
+    </Style>
+    <Style Selector="Border.card:pointerover">
+      <Setter Property="BorderBrush" Value="#4a5160"/>
+    </Style>
+    <Style Selector="Border.label">
+      <Setter Property="Background" Value="#2a2f39"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="6,0"/>
+      <Setter Property="Margin" Value="0,0,4,2"/>
+    </Style>
+    <Style Selector="ToggleButton.chip">
+      <Setter Property="Padding" Value="8,2"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Margin" Value="0,0,5,5"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+    <Style Selector="Button.rail, ToggleButton.rail">
+      <Setter Property="Width" Value="48"/>
+      <Setter Property="Height" Value="48"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="0,2"/>
+      <Setter Property="CornerRadius" Value="10"/>
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+      <Setter Property="Foreground" Value="#1a1408"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+  </Application.Styles>
+</Application>

@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Workbench.Desktop.ViewModels"
+             xmlns:views="using:Workbench.Desktop.Views"
+             x:Class="Workbench.Desktop.Views.ProjectView"
+             x:DataType="vm:ProjectViewModel">
+  <Grid ColumnDefinitions="60,*">
+    <Border Background="#111317" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <StackPanel Margin="0,8,0,0" HorizontalAlignment="Center">
+        <ToggleButton Classes="rail" IsChecked="{Binding OnBoard, Mode=OneWay}" IsVisible="{Binding Board, Converter={x:Static ObjectConverters.IsNotNull}}"
+                      Command="{Binding OpenCommand}" CommandParameter="Board" ToolTip.Tip="Board">
+          <StackPanel><TextBlock Text="▦" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Board" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
+        </ToggleButton>
+        <ToggleButton Classes="rail" IsChecked="{Binding OnAgents, Mode=OneWay}" IsVisible="{Binding Agents, Converter={x:Static ObjectConverters.IsNotNull}}"
+                      Command="{Binding OpenCommand}" CommandParameter="Agents" ToolTip.Tip="Agents">
+          <StackPanel><TextBlock Text="✦" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Agents" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
+        </ToggleButton>
+        <ToggleButton Classes="rail" IsChecked="{Binding OnTerminal, Mode=OneWay}" IsVisible="{Binding UsesTerminal}"
+                      Command="{Binding OpenCommand}" CommandParameter="Terminal" ToolTip.Tip="Terminal">
+          <StackPanel><TextBlock Text="▶" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Term" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
+        </ToggleButton>
+      </StackPanel>
+    </Border>
+
+    <Panel Grid.Column="1">
+      <views:BoardView DataContext="{Binding Board}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnBoard}"/>
+      <views:AgentsView DataContext="{Binding Agents}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnAgents}"/>
+      <Border x:Name="TerminalHost" IsVisible="{Binding OnTerminal}" Background="Black" Padding="6"/>
+    </Panel>
+  </Grid>
+</UserControl>
