@@ -158,6 +158,9 @@ public partial class AgentViewModel : ObservableObject
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou))] public partial AgentState State { get; set; }
     [ObservableProperty] public partial string Compose { get; set; } = "";
     [ObservableProperty] public partial string Model { get; set; } = "";
+    /// <summary>How the session is paid for: "on your subscription", or which API key it uses.</summary>
+    [ObservableProperty] public partial string Billing { get; set; } = "";
+    bool OnSubscription { get; set; } = true;
     public bool Working => State is AgentState.Working or AgentState.Starting;
     public bool NeedsYou => State == AgentState.NeedsYou;
     public string StateText => State switch
@@ -265,6 +268,8 @@ public partial class AgentViewModel : ObservableObject
             case SessionStarted s:
                 Model = s.Model;
                 SessionId = s.SessionId;
+                OnSubscription = s.OnSubscription;
+                Billing = s.OnSubscription ? "on your subscription" : $"API key ({s.ApiKeySource})";
                 State = AgentState.Working;
                 Save();
                 break;
@@ -293,7 +298,9 @@ public partial class AgentViewModel : ObservableObject
                 break;
             case TurnFinished f:
                 if (f.IsError) Items.Add(new NoteItem(f.Text, true));
-                Items.Add(new NoteItem(f.CostUsd is { } cost ? $"Turn done · ${cost:0.000}" : "Turn done", false));
+                // Claude Code reports a cost on every turn, priced as if on the API; on a subscription
+                // nothing is charged per turn, so only an API-key session shows it
+                Items.Add(new NoteItem(!OnSubscription && f.CostUsd is { } cost ? $"Turn done · ${cost:0.000} (API key)" : "Turn done", false));
                 State = AgentState.Idle;
                 Save();
                 Notify?.Invoke(f.IsError ? "stopped with an error" : "finished",

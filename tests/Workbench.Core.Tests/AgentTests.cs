@@ -8,9 +8,15 @@ public sealed class StreamParserTests
     [Fact]
     public void Init_gives_the_session()
     {
-        var e = Assert.Single(StreamParser.Parse("""{"type":"system","subtype":"init","session_id":"abc","model":"claude-haiku-5-5","cwd":"D:\\x"}"""));
+        var e = Assert.Single(StreamParser.Parse("""{"type":"system","subtype":"init","session_id":"abc","model":"claude-haiku-5-5","cwd":"D:\\x","apiKeySource":"none"}"""));
         Assert.Equal(new SessionStarted("abc", "claude-haiku-5-5", "D:\\x"), e);
+        Assert.True(((SessionStarted)e).OnSubscription);
     }
+
+    [Fact]
+    public void An_api_key_session_says_so() =>
+        Assert.False(Assert.IsType<SessionStarted>(Assert.Single(StreamParser.Parse(
+            """{"type":"system","subtype":"init","session_id":"a","model":"m","cwd":"c","apiKeySource":"ANTHROPIC_API_KEY"}"""))).OnSubscription);
 
     [Fact]
     public void Assistant_text_and_tool_use_come_out_in_order_and_thinking_is_skipped()

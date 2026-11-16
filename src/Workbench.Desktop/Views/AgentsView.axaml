@@ -63,6 +63,7 @@
             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
             <TextBlock Classes="dim small" Text="{Binding StateText}" VerticalAlignment="Center"/>
             <TextBlock Classes="dim small mono" Text="{Binding Model}" VerticalAlignment="Center"/>
+            <TextBlock Classes="dim small" Text="{Binding Billing}" VerticalAlignment="Center"/>
             <TextBlock Classes="dim small mono" Text="{Binding Cwd}" VerticalAlignment="Center"/>
           </StackPanel>
         </DockPanel>

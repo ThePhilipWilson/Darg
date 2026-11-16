@@ -7,7 +7,12 @@ namespace Workbench.Core;
 
 /// <summary>What an agent's session says, parsed from Claude Code's stream-json output.</summary>
 public abstract record AgentEvent;
-public sealed record SessionStarted(string SessionId, string Model, string Cwd) : AgentEvent;
+/// <param name="ApiKeySource">Where Claude Code's login comes from: "none" means no API key, so the
+/// person's Claude subscription; anything else names the API key's source (and real per-token cost).</param>
+public sealed record SessionStarted(string SessionId, string Model, string Cwd, string ApiKeySource = "none") : AgentEvent
+{
+    public bool OnSubscription => ApiKeySource is "" or "none";
+}
 public sealed record AssistantText(string Text) : AgentEvent;
 public sealed record ToolCall(string Id, string Name, JsonObject Input) : AgentEvent;
 public sealed record ToolResult(string ToolUseId, string Text, bool IsError) : AgentEvent;
@@ -29,7 +34,8 @@ public static class StreamParser
         switch ((string?)m["type"])
         {
             case "system" when (string?)m["subtype"] == "init":
-                yield return new SessionStarted((string?)m["session_id"] ?? "", (string?)m["model"] ?? "", (string?)m["cwd"] ?? "");
+                yield return new SessionStarted((string?)m["session_id"] ?? "", (string?)m["model"] ?? "", (string?)m["cwd"] ?? "",
+                    (string?)m["apiKeySource"] ?? "none");
                 break;
             case "assistant":
                 foreach (var c in m["message"]?["content"] as JsonArray ?? [])
