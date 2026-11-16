@@ -66,10 +66,12 @@
     <!-- Fettle, the mascot: a box for talking to an assistant that can act on any project -->
     <!-- sits above the agents view's message bar, so it never covers Send -->
     <StackPanel Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,22,78" Spacing="10">
-      <Border Width="400" IsVisible="{Binding Mascot.Open}" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}"
+      <!-- the box moves where you drag its header (MainWindow.axaml.cs); a double-click on the header puts it back -->
+      <Border x:Name="MascotBubble" Width="400" IsVisible="{Binding Mascot.Open}" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}"
               BorderThickness="1" CornerRadius="14" BoxShadow="0 14 40 0 #90000000" HorizontalAlignment="Right">
         <DockPanel>
-          <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,8">
+          <Border x:Name="MascotHeader" DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,8"
+                  Background="Transparent" Cursor="SizeAll" ToolTip.Tip="Drag to move · double-click to put it back">
             <StackPanel Spacing="6">
               <DockPanel>
                 <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent"
