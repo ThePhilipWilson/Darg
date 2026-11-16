@@ -485,6 +485,15 @@ public partial class ProjectViewModel : ObservableObject
                 Watch(Agents.Start(CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id));
                 if (show) Section = Section.Agents;
             };
+            // not tied to the card (no cardId): once the card is filled out, Work on is free straight away
+            Board.Improve = (card, file) =>
+            {
+                var folder = Path.GetDirectoryName(file)!;
+                var commits = Core.Commits.For(Config, folder) is { } rule ? Core.Commits.Describe(rule, folder) : null;
+                var prompt = CardImprover.Prompt(Name, card, file, CardImprover.NoteFile(Config.NotesFolder(), card.Description), commits);
+                Agents.Start(prompt, CardFolder(card), name: $"Improve {card.Id} {card.Title}", job: CardJob(card));
+                Section = Section.Agents;
+            };
             Board.Flows = () => Agents.Flows;
             Board.RunFlow = (card, file, flow) =>
             {

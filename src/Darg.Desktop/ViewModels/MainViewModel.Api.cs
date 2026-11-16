@@ -25,6 +25,7 @@ public partial class MainViewModel
         Add("agent", "one agent: {id, last?}. Its details and transcript, the last n entries (default 20).", OneAgent);
         Add("start-agent", "start an agent in a project with a prompt: {project, prompt, cwd?, name?}. Returns its id. It costs a session: only when Philip asks.", StartAgent);
         Add("work-on", "start an agent on a board card, as the card's Work on button does (moves it to In Progress): {project, card}. Only when Philip asks.", WorkOn);
+        Add("improve-card", "start an agent that fills a thin card out (what's wanted, where in the code, done when), asking Philip first if its words are unclear; the card's Improve button: {project, card}. Only when Philip asks.", ImproveCard);
         Add("say", "send a message to a project's agent, as if Philip typed it: {id, text}. A saved agent resumes its session.", Say);
         Add("close-agents", "close agents' sessions: {ids} (a list, or ids separated by spaces). They stay listed and carry on when sent a message.", a => CloseAgents(a.List("ids")));
         Add("forget-agents", "forget agents, as the × in the Agents list does: {ids}. Each one's session ends, it leaves the list and its saved file goes " +
@@ -169,6 +170,16 @@ public partial class MainViewModel
         if (p.Agents.ForCard(id) is { } busy) throw new ApiError($"{id} already has an agent: \"{busy.Name}\" (id {busy.Id}, {busy.StateText}).");
         p.Board.StartWork(card);
         return p.Agents.ForCard(id) is { } started ? $"Started \"{started.Name}\" (id {started.Id}) on {id}." : $"Couldn't start an agent on {id}.";
+    }
+
+    string ImproveCard(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (p.Board is null || p.Agents is null) throw new ApiError($"{p.Name} needs a board and agents for that.");
+        var id = a.Need("card");
+        if (p.Board.Show(id) is not { } card) throw new ApiError($"No card {id} on {p.Name}'s boards.");
+        p.Board.StartImprove(card);
+        return $"Started an agent improving {id}.";
     }
 
     string Say(ApiArgs a)
