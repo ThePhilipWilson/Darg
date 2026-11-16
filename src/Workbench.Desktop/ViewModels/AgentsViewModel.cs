@@ -1082,9 +1082,15 @@ public sealed partial class QuestionItem : TranscriptItem, IPending
         foreach (var q in ask.Input["questions"] as JsonArray ?? [])
         {
             var text = (string?)q?["question"] ?? "";
-            var opts = (q?["options"] as JsonArray ?? []).Select(o => new QuestionOption(
-                (string?)o?["label"] ?? "", (string?)o?["description"] ?? "", this, text)).ToList();
-            Questions.Add(new QuestionGroup((string?)q?["header"] ?? "", text, opts, this));
+            var multi = (bool?)q?["multiSelect"] == true;
+            QuestionGroup? group = null;
+            var opts = (q?["options"] as JsonArray ?? []).Select(o =>
+            {
+                var label = (string?)o?["label"] ?? "";
+                return new QuestionOption(label, (string?)o?["description"] ?? "", multi, () => group!.Choose(label));
+            }).ToList();
+            group = new QuestionGroup((string?)q?["header"] ?? "", text, opts, multi, this);
+            Questions.Add(group);
         }
     }
 
@@ -1101,24 +1107,42 @@ public sealed partial class QuestionItem : TranscriptItem, IPending
     }
 }
 
-/// <summary>One question: its option buttons, and a box to type an answer of your own instead (the terminal's "Other").</summary>
-public sealed partial class QuestionGroup(string header, string question, IReadOnlyList<QuestionOption> options, QuestionItem owner) : ObservableObject
+/// <summary>One question: its option buttons, and a box to type an answer of your own instead (the terminal's "Other").
+/// A multiSelect question takes several options: they toggle, and Send picks sends them together, labels joined by commas.</summary>
+public sealed partial class QuestionGroup(string header, string question, IReadOnlyList<QuestionOption> options, bool multiSelect, QuestionItem owner) : ObservableObject
 {
     public string Header { get; } = header;
     public string Question { get; } = question;
     public IReadOnlyList<QuestionOption> Options { get; } = options;
-    [ObservableProperty] public partial string? Chosen { get; set; }
+    public bool MultiSelect { get; } = multiSelect;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowSendPicks))] public partial string? Chosen { get; set; }
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(SendOwnCommand))] public partial string OwnAnswer { get; set; } = "";
+
+    public bool ShowSendPicks => MultiSelect && Chosen is null;
+
+    internal void Choose(string label)
+    {
+        if (!MultiSelect) { owner.Pick(Question, label); return; }
+        var option = Options.First(o => o.Label == label);
+        option.IsSelected = !option.IsSelected;
+        SendPicksCommand.NotifyCanExecuteChanged();
+    }
+
+    bool CanSendPicks => Options.Any(o => o.IsSelected);
+    [RelayCommand(CanExecute = nameof(CanSendPicks))] void SendPicks() =>
+        owner.Pick(Question, string.Join(", ", Options.Where(o => o.IsSelected).Select(o => o.Label)));
 
     bool CanSendOwn => !string.IsNullOrWhiteSpace(OwnAnswer);
     [RelayCommand(CanExecute = nameof(CanSendOwn))] void SendOwn() => owner.Pick(Question, OwnAnswer.Trim());
 }
 
-public sealed class QuestionOption(string label, string description, QuestionItem owner, string question)
+public sealed partial class QuestionOption(string label, string description, bool multiSelect, Action choose) : ObservableObject
 {
     public string Label { get; } = label;
     public string Description { get; } = description;
-    public IRelayCommand Command { get; } = new RelayCommand(() => owner.Pick(question, label));
+    public bool MultiSelect { get; } = multiSelect;
+    [ObservableProperty] public partial bool IsSelected { get; set; }
+    public IRelayCommand Command { get; } = new RelayCommand(choose);
 }
 
 /// <summary>A thumbnail of an image a step made; clicking it opens the full image in the system's viewer.</summary>

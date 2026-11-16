@@ -102,14 +102,19 @@
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:QuestionOption">
                       <Button Command="{Binding Command}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                        <StackPanel Spacing="2">
-                          <TextBlock Text="{Binding Label}" FontWeight="SemiBold"/>
-                          <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap"/>
-                        </StackPanel>
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                          <!-- a multiSelect question: a box per option, ticked while it is picked -->
+                          <CheckBox IsChecked="{Binding IsSelected}" IsHitTestVisible="False" IsVisible="{Binding MultiSelect}" VerticalAlignment="Top"/>
+                          <StackPanel Grid.Column="1" Spacing="2">
+                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap"/>
+                          </StackPanel>
+                        </Grid>
                       </Button>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <Button Classes="primary" Content="Send picks" HorizontalAlignment="Left" Command="{Binding SendPicksCommand}" IsVisible="{Binding ShowSendPicks}"/>
                 <!-- or answer in your own words: Enter sends, Shift+Enter starts a new line -->
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNull}}">
                   <TextBox Text="{Binding OwnAnswer}" PlaceholderText="Or type your own answer…" AcceptsReturn="True" TextWrapping="Wrap"
