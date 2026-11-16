@@ -56,6 +56,53 @@ public sealed class CreateCardTests : IDisposable
         Assert.Equal("New text.\n\nTwo paragraphs.", u.Description);
     }
 
+    [Fact]
+    public void A_card_is_a_task_unless_made_a_bug_and_its_type_can_change()
+    {
+        var c = BoardStore.Create(_dir, "Plain");
+        Assert.Equal(("Task", false), (c.Kind, c.IsBug));
+        var b = BoardStore.Create(_dir, "Broken", type: CardTypes.Bug);
+        Assert.Contains("- **Type:** Bug\n", File.ReadAllText(Path.Combine(_dir, "items", b.File)));
+        Assert.True(b.IsBug);
+        var u = BoardStore.Update(_dir, c.Id, type: "Bug");
+        Assert.True(u.IsBug);
+        Assert.Contains("- **Type:** Bug\n", File.ReadAllText(Path.Combine(_dir, "items", u.File)));
+        Assert.Equal("Task", BoardStore.Update(_dir, c.Id, type: "").Kind); // blank means Task
+    }
+
+    [Fact]
+    public void A_card_without_a_type_line_reads_as_a_task_and_gets_one_when_set()
+    {
+        var old = BoardStore.ReadCards(_dir).Single(x => x.Id == "VOT-0007");
+        Assert.Equal("Task", old.Kind);
+        BoardStore.Update(_dir, "VOT-0007", type: "Bug");
+        Assert.Equal("# VOT-0007: Old\n\n- **Status:** Backlog\n- **Type:** Bug\n", File.ReadAllText(Path.Combine(_dir, "items", "VOT-0007 - Old.md")));
+    }
+
+    [Theory] // words people write when the thing is a bug, and ones that only mention one
+    [InlineData("Bug forgetting an agent doesn't refresh the board", null, "Bug")]
+    [InlineData("bug: drag drops on the wrong column", null, "Bug")]
+    [InlineData("[BUG] crash on open", null, "Bug")]
+    [InlineData("Bugs in the wall archive", null, "Bug")]
+    [InlineData("- bug - toasts open the wrong agent", null, "Bug")]
+    [InlineData("Crash on open", "bug", "Bug")]
+    [InlineData("Crash on open", "type: bug", "Bug")]
+    [InlineData("Crash on open", "Type/Bug", "Bug")]
+    [InlineData("ticket types, task and bug for now", null, "Task")]
+    [InlineData("Debugger attach button", null, "Task")]
+    [InlineData("bugbear art pass", null, "Task")]
+    [InlineData("Crash on open", "debugging", "Task")]
+    public void Guesses_bug_from_the_words_or_labels(string text, string? label, string expected) =>
+        Assert.Equal(expected, CardTypes.Guess(text, label is null ? null : [label]));
+
+    [Fact]
+    public void A_note_that_opens_with_bug_becomes_a_bug_card()
+    {
+        var notes = Directory.CreateDirectory(Path.Combine(_root, "notes")).FullName;
+        var n = NoteStore.Save(notes, new Note(NoteStore.NewId(), "Bug: the wall forgets its scroll", "Loose", "yellow", [], "", ""));
+        Assert.True(NoteStore.MakeTicket(notes, n, _dir).Card.IsBug);
+    }
+
     public void Dispose() => Directory.Delete(_root, true);
 }
 

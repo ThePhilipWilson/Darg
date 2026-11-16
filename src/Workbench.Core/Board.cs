@@ -10,6 +10,25 @@ public sealed record Card(string Id, string Title, string Status, string Priorit
     IReadOnlyList<string> Labels, string File, string Description)
 {
     public int Number => int.TryParse(Id[(Id.LastIndexOf('-') + 1)..], out var n) ? n : int.MaxValue;
+    /// <summary>Its type, Task when the file leaves it blank.</summary>
+    public string Kind => Type.Trim() is { Length: > 0 } t ? t : CardTypes.Task;
+    public bool IsBug => Kind.Equals(CardTypes.Bug, StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>The types a card can have: Task and Bug for now. A card file may name another (Tatty's own
+/// types, or one typed by hand); it's kept as written.</summary>
+public static class CardTypes
+{
+    public const string Task = "Task", Bug = "Bug";
+    public static readonly IReadOnlyList<string> All = [Task, Bug];
+
+    /// <summary>The type to give a card made from words someone wrote (a note, an issue): Bug when they
+    /// open with "bug" ("Bug: ...", "bug - ...", "[bug] ...", "Bug forgetting ...") or a label is bug,
+    /// bugs or type: bug; else Task.</summary>
+    public static string Guess(string text, IEnumerable<string>? labels = null) =>
+        Regex.IsMatch(text, @"^\W*bugs?\b", RegexOptions.IgnoreCase)
+        || (labels ?? []).Any(l => Regex.IsMatch(l.Trim(), @"^(type\s*[:/]\s*)?bugs?$", RegexOptions.IgnoreCase))
+            ? Bug : Task;
 }
 
 public sealed record Column(string Id, string Name);
@@ -406,11 +425,11 @@ public static class BoardStore
         File.WriteAllText(boardPath, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
     }
 
-    /// <summary>Change a card's title, description, labels or priority (null leaves one as it is). The
+    /// <summary>Change a card's title, description, labels, priority or type (null leaves one as it is). The
     /// rest of the file, sections Workbench doesn't edit included, stays as written. A new title renames
     /// the file to match, as Tatty does. Returns the card as saved.</summary>
     public static Card Update(string folder, string cardId, string? title = null, string? description = null,
-        IEnumerable<string>? labels = null, string? priority = null)
+        IEnumerable<string>? labels = null, string? priority = null, string? type = null)
     {
         var card = ReadCards(folder).FirstOrDefault(c => c.Id == cardId)
                    ?? throw new ArgumentException($"No card {cardId} on this board.", nameof(cardId));
@@ -427,6 +446,16 @@ public static class BoardStore
         if (labels is not null)
             text = SetField(text, "Labels", string.Join(", ", labels.Select(l => l.Trim()).Where(l => l.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)));
         if (priority is not null) text = SetField(text, "Priority", priority.Trim());
+        if (type is not null)
+        {
+            var t = type.Trim() is { Length: > 0 } given ? given : CardTypes.Task;
+            if (Regex.IsMatch(text, @"^- \*\*Type:\*\*", RegexOptions.Multiline)) text = SetField(text, "Type", t);
+            else // a card written without a Type line gets one after Priority (or Status)
+            {
+                var after = new Regex(@"^- \*\*(Priority|Status):\*\*[^\n]*$", RegexOptions.Multiline).Matches(text).LastOrDefault();
+                if (after is not null) text = text.Insert(after.Index + after.Length, $"\n- **Type:** {t}");
+            }
+        }
         if (description is not null)
         {
             const string head = "\n## Description\n";

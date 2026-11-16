@@ -189,7 +189,7 @@ public static class NoteStore
         var rest = note.Text.Contains('\n') ? note.Text[(note.Text.IndexOf('\n') + 1)..].Trim() : "";
         var title = note.FirstLine.Length > 70 ? note.FirstLine[..70].TrimEnd() : note.FirstLine;
         var desc = (rest.Length > 0 ? rest + "\n\n" : "") + $"From a note on the wall ({note.Id}).";
-        var card = BoardStore.Create(boardFolder, title, desc, note.Tags);
+        var card = BoardStore.Create(boardFolder, title, desc, note.Tags, type: CardTypes.Guess(note.Text, note.Tags));
         return (Save(folder, note with { Ticket = card.Id }), card);
     }
 
