@@ -180,6 +180,11 @@
       <Setter Property="CaretBrush" Value="#2a2620"/>
       <Setter Property="SelectionBrush" Value="#55000000"/>
       <Setter Property="SelectionForegroundBrush" Value="#2a2620"/>
+      <!-- the "Write it down…" hint: ink (Fluent fades placeholders itself), not Fluent's light grey that vanishes on yellow -->
+      <Setter Property="PlaceholderForeground" Value="#2a2620"/>
+    </Style>
+    <Style Selector="TextBox.paper /template/ :is(TextBlock)#PART_Placeholder">
+      <Setter Property="Foreground" Value="#2a2620"/>
     </Style>
     <Style Selector="Button.onpaper">
       <Setter Property="Background" Value="#22000000"/>
