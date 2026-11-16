@@ -86,7 +86,7 @@ public partial class MainViewModel : ObservableObject
     public void SaveAll()
     {
         foreach (var p in Projects) p.Agents?.SaveAll();
-        Mascot.Agent?.Save();
+        Mascot.SaveAll();
     }
 
     // ---------------------------------------------------------------- Setup
@@ -162,7 +162,15 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Open a project's agent: its tab, the agents section, that agent, the window to the front.</summary>
     public void OpenAgent(string projectId, string agentId)
     {
-        if (projectId == MascotId) { Mascot.Open = true; BringToFront?.Invoke(); return; }
+        if (projectId == MascotId)
+        {
+            // a Bench chat: its project's tab, then that chat in Bench's box
+            if (Mascot.ProjectOf(agentId) is { } home && Projects.FirstOrDefault(p => p.Config.Id == home) is { } owner) Selected = owner;
+            Mascot.OpenChat(agentId);
+            Mascot.Open = true;
+            BringToFront?.Invoke();
+            return;
+        }
         var project = Projects.FirstOrDefault(p => p.Config.Id == projectId);
         var agent = project?.Agents?.Find(agentId);
         if (project is null || agent is null) { BringToFront?.Invoke(); return; }
@@ -175,6 +183,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedChanged(ProjectViewModel? value)
     {
         foreach (var p in Projects) p.IsActive = p == value;
+        Mascot?.ShowProject(value?.Config.Id); // Bench lists the chats of the project on screen
     }
 }
 

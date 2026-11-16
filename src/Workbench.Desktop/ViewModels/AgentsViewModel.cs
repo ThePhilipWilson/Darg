@@ -34,7 +34,7 @@ public partial class AgentsViewModel : ObservableObject
 
     public ObservableCollection<AgentViewModel> Agents { get; } = [];
 
-    /// <summary>Bench, shared by every project: its chats are listed here too, under their own heading.</summary>
+    /// <summary>Bench, shared by every project: the chats started in this project are listed here too, under their own heading.</summary>
     [ObservableProperty] public partial MascotViewModel? Mascot { get; set; }
     /// <summary>The Bench chat open in this view (null while a project agent is).</summary>
     [ObservableProperty] public partial ChatEntry? BenchChat { get; set; }
@@ -187,6 +187,8 @@ public partial class AgentViewModel : ObservableObject
     public string? SessionId { get; private set; }
     /// <summary>Where this agent is saved (set by its owner); null: not saved.</summary>
     public string? StoreFolder { get; set; }
+    /// <summary>For a Bench chat: the project it belongs to.</summary>
+    public string? Project { get; set; }
     readonly List<string> _args;
     DateTime _created = DateTime.Now;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou))] public partial AgentState State { get; set; }
@@ -237,7 +239,7 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>An agent from an earlier run of Workbench: its transcript, and its session to resume.</summary>
     public AgentViewModel(AgentRecord r, string storeFolder)
     {
-        Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; SessionId = r.SessionId;
+        Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; SessionId = r.SessionId; Project = r.Project;
         _args = r.Args; _created = r.Created; StoreFolder = storeFolder;
         foreach (var i in r.Items) Items.Add(FromRecord(i));
         State = AgentState.Saved;
@@ -269,7 +271,7 @@ public partial class AgentViewModel : ObservableObject
         {
             AgentStore.Save(StoreFolder, new AgentRecord
             {
-                Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, SessionId = SessionId, Args = _args,
+                Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Project = Project, SessionId = SessionId, Args = _args,
                 Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
             });
         }
