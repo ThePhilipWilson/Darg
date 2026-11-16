@@ -59,6 +59,11 @@ public partial class AgentsViewModel : ObservableObject
         Shown = value;
     }
 
+    partial void OnShownChanged(AgentViewModel? value)
+    {
+        if (value is not null) value.Unseen = false;
+    }
+
     /// <summary>Forget an agent: off the list and its saved file gone (Claude Code's own history stays).</summary>
     [RelayCommand]
     void Forget(AgentViewModel? a)
@@ -86,6 +91,8 @@ public partial class AgentsViewModel : ObservableObject
             if (e.PropertyName != nameof(AgentViewModel.State)) return;
             NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
             if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
+            // news from an agent that isn't the one open here stays marked in the list until it's looked at
+            if (agent != Shown && agent.State is AgentState.NeedsYou or AgentState.Idle or AgentState.Exited) agent.Unseen = true;
         };
         agent.Notify += (what, detail) => Notify?.Invoke(agent, what, detail);
         if (select) { Agents.Insert(0, agent); Selected = agent; }
@@ -214,7 +221,16 @@ public partial class AgentViewModel : ObservableObject
     public string? Project { get; set; }
     readonly List<string> _args;
     DateTime _created = DateTime.Now;
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou), nameof(Open))] public partial AgentState State { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou), nameof(Open), nameof(IsDone), nameof(IsFailed))]
+    public partial AgentState State { get; set; }
+    /// <summary>The last turn ended in an error: shown as failed rather than done.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(IsDone), nameof(IsFailed))] public partial bool TurnFailed { get; set; }
+    /// <summary>Tool calls in the turn under way: the progress shown while it works.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText))] public partial int Steps { get; set; }
+    /// <summary>One line on what it's doing now, what it asks, or how its turn ended.</summary>
+    [ObservableProperty] public partial string Activity { get; set; } = "";
+    /// <summary>It finished, failed or asked something since it was last open (set by the list that owns it).</summary>
+    [ObservableProperty] public partial bool Unseen { get; set; }
     [ObservableProperty] public partial string Compose { get; set; } = "";
     [ObservableProperty] public partial string Model { get; set; } = "";
 
@@ -257,11 +273,26 @@ public partial class AgentViewModel : ObservableObject
     public bool NeedsYou => State == AgentState.NeedsYou;
     /// <summary>True while a Claude process runs for this agent (what Close ends).</summary>
     public bool Open => _session is not null;
+    /// <summary>Its turn ended well and it waits for the next message.</summary>
+    public bool IsDone => State == AgentState.Idle && !TurnFailed;
+    /// <summary>Its turn ended in an error, or its session died or never started.</summary>
+    public bool IsFailed => (State == AgentState.Idle && TurnFailed) || State == AgentState.Exited;
     public string StateText => State switch
     {
-        AgentState.Starting => "starting", AgentState.Working => "working", AgentState.NeedsYou => "needs you",
-        AgentState.Idle => "idle", AgentState.Saved => "saved · send to carry on", _ => "ended",
+        AgentState.Starting => "starting",
+        AgentState.Working => Steps switch { 0 => "working", 1 => "working · 1 step", _ => $"working · {Steps} steps" },
+        AgentState.NeedsYou => "needs you",
+        AgentState.Idle => TurnFailed ? "stopped with an error" : "done",
+        AgentState.Saved => "saved · send to carry on", _ => "ended",
     };
+
+    /// <summary>A turn starts: progress counts from nothing again.</summary>
+    void TurnBegins(string what)
+    {
+        Steps = 0;
+        TurnFailed = false;
+        Activity = what;
+    }
 
     /// <param name="shown">What the transcript shows for the first message, when what's sent carries more
     /// (Bench sends a line of context ahead of the person's words).</param>
@@ -292,6 +323,7 @@ public partial class AgentViewModel : ObservableObject
             return;
         }
         _session.Send(sent);
+        TurnBegins("Thinking…");
         State = AgentState.Working;
     }
 
@@ -307,6 +339,7 @@ public partial class AgentViewModel : ObservableObject
         ModeChoice = AgentChoices.Find(AgentChoices.Modes, r.Mode);
         _fromSession = false;
         foreach (var i in r.Items) Items.Add(FromRecord(i));
+        Activity = OneLine(Items.OfType<TextItem>().LastOrDefault()?.Text);
         State = AgentState.Saved;
     }
 
@@ -322,11 +355,13 @@ public partial class AgentViewModel : ObservableObject
             // a session closed on request still reports its last events and its exit: they're not news
             session.Event += e => Dispatcher.UIThread.Post(() => { if (_session == session) On(e); });
             session.Send(message);
+            TurnBegins("Starting…");
             State = AgentState.Starting;
         }
         catch (Exception e)
         {
             Items.Add(new NoteItem($"Couldn't start Claude: {e.Message}", true));
+            Activity = OneLine($"Couldn't start Claude: {e.Message}");
             State = AgentState.Exited;
         }
     }
@@ -393,11 +428,14 @@ public partial class AgentViewModel : ObservableObject
                 break;
             case AssistantText t:
                 Items.Add(new TextItem(t.Text));
+                if (Working) Activity = OneLine(t.Text);
                 break;
             case ToolCall c:
                 var item = ToolItem.From(c);
                 _tools[c.Id] = item;
                 Items.Add(item);
+                Steps++;
+                Activity = OneLine(item.Summary.Length > 0 ? $"{c.Name}: {item.Summary}" : c.Name);
                 break;
             case ToolResult r when _tools.TryGetValue(r.ToolUseId, out var tool):
                 tool.SetResult(r, Cwd);
@@ -405,12 +443,14 @@ public partial class AgentViewModel : ObservableObject
             case PermissionAsked { ToolName: "AskUserQuestion" } q:
                 var question = new QuestionItem(q, this);
                 Items.Add(question);
+                Activity = OneLine(question.Questions.FirstOrDefault()?.Question ?? "has a question");
                 State = AgentState.NeedsYou;
                 Notify?.Invoke("has a question", question.Questions.FirstOrDefault()?.Question ?? "");
                 break;
             case PermissionAsked p:
                 var perm = new PermissionItem(p, this);
                 Items.Add(perm);
+                Activity = OneLine($"wants {p.ToolName}: {perm.Summary}");
                 State = AgentState.NeedsYou;
                 Notify?.Invoke($"wants to use {p.ToolName}", perm.Summary);
                 break;
@@ -419,6 +459,8 @@ public partial class AgentViewModel : ObservableObject
                 // Claude Code reports a cost on every turn, priced as if on the API; on a subscription
                 // nothing is charged per turn, so only an API-key session shows it
                 Items.Add(new NoteItem(!OnSubscription && f.CostUsd is { } cost ? $"Turn done · ${cost:0.000} (API key)" : "Turn done", false));
+                TurnFailed = f.IsError;
+                Activity = OneLine(f.IsError ? f.Text : Items.OfType<TextItem>().LastOrDefault()?.Text ?? f.Text);
                 State = AgentState.Idle;
                 Save();
                 Notify?.Invoke(f.IsError ? "stopped with an error" : "finished",
@@ -428,11 +470,21 @@ public partial class AgentViewModel : ObservableObject
                 // a session we closed ourselves (resume later) isn't news; one that died is
                 if (x.ExitCode != 0) Items.Add(new NoteItem($"Session ended ({x.ExitCode}) {Last(x.Stderr)}", true));
                 _session = null;
+                if (x.ExitCode != 0) Activity = OneLine($"Session ended ({x.ExitCode}) {Last(x.Stderr)}");
                 State = SessionId is not null && x.ExitCode == 0 ? AgentState.Saved : AgentState.Exited;
                 Save();
                 break;
         }
     }
+
+    /// <summary>The first non-empty line of some text, without markdown heading marks, cut to fit a list row.</summary>
+    static string OneLine(string? s, int max = 90)
+    {
+        var line = (s ?? "").Split(NewLines, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
+        line = line.TrimStart('#', '*', ' ');
+        return line.Length > max ? line[..max].TrimEnd() + "…" : line;
+    }
+    static readonly char[] NewLines = [(char)13, (char)10];
 
     static string Last(string s) => string.Join(" ", s.Split('\n', StringSplitOptions.RemoveEmptyEntries).TakeLast(3));
 
@@ -453,6 +505,7 @@ public partial class AgentViewModel : ObservableObject
             return;
         }
         _session.Send(text);
+        TurnBegins("Thinking…");
         State = AgentState.Working;
     }
 
@@ -505,7 +558,9 @@ public partial class AgentViewModel : ObservableObject
     {
         if (_session is null) return;
         respond(_session);
-        State = Items.OfType<IPending>().Any(p => p.Pending) ? AgentState.NeedsYou : AgentState.Working;
+        var waiting = Items.OfType<IPending>().Any(p => p.Pending);
+        if (!waiting) Activity = "Carrying on…";
+        State = waiting ? AgentState.NeedsYou : AgentState.Working;
     }
 
     internal static bool IsImage(string? path) => path is not null && ImageExts.Contains(Path.GetExtension(path));

@@ -155,10 +155,16 @@
                               </ItemsControl.ItemTemplate>
                             </ItemsControl>
                             <Button IsVisible="{Binding HasAgent}" Command="{Binding OpenAgentCommand}" Classes="agentline"
-                                    Classes.needs="{Binding Agent.NeedsYou, FallbackValue=False}" ToolTip.Tip="Open this card's agent">
-                              <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Ellipse Width="7" Height="7" Classes="dot"/>
-                                <TextBlock FontSize="11" Text="{Binding Agent.StateText, StringFormat='agent {0}', FallbackValue=''}"/>
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" ToolTip.Tip="Open this card's agent">
+                              <StackPanel Spacing="1" Classes="agentstate" Classes.working="{Binding Agent.Working, FallbackValue=False}"
+                                          Classes.needs="{Binding Agent.NeedsYou, FallbackValue=False}" Classes.done="{Binding Agent.IsDone, FallbackValue=False}"
+                                          Classes.failed="{Binding Agent.IsFailed, FallbackValue=False}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                  <Ellipse Width="7" Height="7" Classes="dot" VerticalAlignment="Center"/>
+                                  <TextBlock Classes="state" FontSize="11" Text="{Binding Agent.StateText, StringFormat='agent {0}', FallbackValue=''}"/>
+                                </StackPanel>
+                                <TextBlock Classes="dim" FontSize="10" Text="{Binding Agent.Activity, FallbackValue=''}" TextTrimming="CharacterEllipsis"
+                                           IsVisible="{Binding Agent.Working, FallbackValue=False}"/>
                               </StackPanel>
                             </Button>
                           </StackPanel>

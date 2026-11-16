@@ -23,13 +23,22 @@
                  ScrollViewer.VerticalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:AgentViewModel">
-              <DockPanel>
+              <!-- its state at a glance: a coloured bar and dot (blue working, amber needs you, green done,
+                   red failed, grey saved), what it's doing or how it finished, and a bold name for news not yet seen -->
+              <DockPanel Classes="agentstate" Classes.working="{Binding Working}" Classes.needs="{Binding NeedsYou}"
+                         Classes.done="{Binding IsDone}" Classes.failed="{Binding IsFailed}" Classes.unseen="{Binding Unseen}">
+                <Border DockPanel.Dock="Left" Classes="bar" Width="3" CornerRadius="2" Margin="-6,0,8,0"/>
                 <Button DockPanel.Dock="Right" Content="×" Padding="6,0" Background="Transparent" MinHeight="0" VerticalAlignment="Center"
                         Command="{Binding $parent[UserControl].((vm:AgentsViewModel)DataContext).ForgetCommand}" CommandParameter="{Binding}"
                         ToolTip.Tip="Forget this agent (Claude Code keeps its own history)" AutomationProperties.Name="Forget agent"/>
                 <StackPanel Spacing="2">
-                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
-                  <TextBlock Classes="dim small" Text="{Binding StateText}"/>
+                  <TextBlock Classes="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Ellipse Classes="dot" Width="7" Height="7" VerticalAlignment="Center"/>
+                    <TextBlock Classes="state small" Text="{Binding StateText}"/>
+                  </StackPanel>
+                  <TextBlock Classes="dim small" Text="{Binding Activity}" TextTrimming="CharacterEllipsis"
+                             IsVisible="{Binding Activity, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" ToolTip.Tip="{Binding Activity}"/>
                 </StackPanel>
               </DockPanel>
             </DataTemplate>
@@ -78,7 +87,12 @@
           <!-- a DockPanel, not a StackPanel, so the folder (last) gets only the room left and trims instead of running under the pickers -->
           <DockPanel>
             <TextBlock DockPanel.Dock="Left" Margin="0,0,12,0" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-            <TextBlock DockPanel.Dock="Left" Margin="0,0,12,0" Classes="dim small" Text="{Binding StateText}" VerticalAlignment="Center"/>
+            <StackPanel DockPanel.Dock="Left" Margin="0,0,12,0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                        Classes="agentstate" Classes.working="{Binding Working}" Classes.needs="{Binding NeedsYou}"
+                        Classes.done="{Binding IsDone}" Classes.failed="{Binding IsFailed}">
+              <Ellipse Classes="dot" Width="7" Height="7" VerticalAlignment="Center"/>
+              <TextBlock Classes="state small" Text="{Binding StateText}" VerticalAlignment="Center"/>
+            </StackPanel>
             <TextBlock DockPanel.Dock="Left" Margin="0,0,12,0" Classes="dim small mono" Text="{Binding Model}" VerticalAlignment="Center"/>
             <TextBlock DockPanel.Dock="Left" Margin="0,0,12,0" Classes="dim small" Text="{Binding Billing}" VerticalAlignment="Center"/>
             <TextBlock Classes="dim small mono" Text="{Binding Cwd}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"

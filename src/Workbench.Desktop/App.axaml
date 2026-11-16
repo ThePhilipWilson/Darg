@@ -283,16 +283,69 @@
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Padding" Value="0,2"/>
       <Setter Property="MinHeight" Value="0"/>
-      <Setter Property="Foreground" Value="{StaticResource Ok}"/>
     </Style>
-    <Style Selector="Button.agentline Ellipse.dot">
+    <!-- An agent's state, wherever it shows (agents list, its header, a board card): put .agentstate on the
+         container with .working / .needs / .done / .failed bound to the agent, and the Ellipse.dot, Border.bar
+         and TextBlock.state inside take the colour. Grey: saved or ended. Working pulses; needs you is a
+         filled row, as it's the one to act on; .unseen (news not yet opened) makes the name bold. -->
+    <Style Selector=".agentstate Ellipse.dot">
+      <Setter Property="Fill" Value="#5a606c"/>
+    </Style>
+    <Style Selector=".agentstate Border.bar">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector=".agentstate TextBlock.state">
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+    </Style>
+    <Style Selector=".agentstate.working Ellipse.dot">
+      <Setter Property="Fill" Value="{StaticResource Info}"/>
+      <Style.Animations>
+        <Animation Duration="0:0:1.2" IterationCount="Infinite" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+          <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.25"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector=".agentstate.working Border.bar">
+      <Setter Property="Background" Value="{StaticResource Info}"/>
+    </Style>
+    <Style Selector=".agentstate.working TextBlock.state">
+      <Setter Property="Foreground" Value="{StaticResource Info}"/>
+    </Style>
+    <Style Selector=".agentstate.needs Ellipse.dot">
+      <Setter Property="Fill" Value="{StaticResource Accent}"/>
+    </Style>
+    <Style Selector=".agentstate.needs Border.bar">
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+    </Style>
+    <Style Selector=".agentstate.needs TextBlock.state">
+      <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="ListBoxItem:not(:selected) DockPanel.agentstate.needs">
+      <Setter Property="Background" Value="#2a2418"/>
+    </Style>
+    <Style Selector=".agentstate.done Ellipse.dot">
       <Setter Property="Fill" Value="{StaticResource Ok}"/>
     </Style>
-    <Style Selector="Button.agentline.needs">
-      <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+    <Style Selector=".agentstate.done Border.bar">
+      <Setter Property="Background" Value="{StaticResource Ok}"/>
     </Style>
-    <Style Selector="Button.agentline.needs Ellipse.dot">
-      <Setter Property="Fill" Value="{StaticResource Accent}"/>
+    <Style Selector=".agentstate.done TextBlock.state">
+      <Setter Property="Foreground" Value="{StaticResource Ok}"/>
+    </Style>
+    <Style Selector=".agentstate.failed Ellipse.dot">
+      <Setter Property="Fill" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector=".agentstate.failed Border.bar">
+      <Setter Property="Background" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector=".agentstate.failed TextBlock.state">
+      <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector=".agentstate.unseen TextBlock.name">
+      <Setter Property="FontWeight" Value="Bold"/>
     </Style>
     <!-- Fettle: bobs gently and blinks; squishes under the pointer; while it works it bobs quicker,
          glances about and purses its mouth; when it needs you it says "oh" and shows a badge -->
