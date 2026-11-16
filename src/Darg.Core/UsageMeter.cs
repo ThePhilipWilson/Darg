@@ -90,13 +90,15 @@ public sealed class UsageMeter
     }
 
     /// <summary>Time left until a reset, short enough for the header: "2h 14m", "45m", "3d 4h", "<1m".</summary>
-    public static string Countdown(DateTimeOffset resetsAt, DateTimeOffset now)
+    public static string Countdown(DateTimeOffset resetsAt, DateTimeOffset now) =>
+        resetsAt - now is var left && left <= TimeSpan.Zero ? "now" : Span(left);
+
+    /// <summary>A length of time as the header shows it: "3d 4h", "2h 14m", "45m", "<1m".</summary>
+    public static string Span(TimeSpan t)
     {
-        var left = resetsAt - now;
-        if (left <= TimeSpan.Zero) return "now";
-        if (left.TotalDays >= 1) return $"{(int)left.TotalDays}d {left.Hours}h";
-        if (left.TotalHours >= 1) return $"{(int)left.TotalHours}h {left.Minutes:00}m";
-        return left.TotalMinutes >= 1 ? $"{(int)left.TotalMinutes}m" : "<1m";
+        if (t.TotalDays >= 1) return $"{(int)t.TotalDays}d {t.Hours}h";
+        if (t.TotalHours >= 1) return $"{(int)t.TotalHours}h {t.Minutes:00}m";
+        return t.TotalMinutes >= 1 ? $"{(int)t.TotalMinutes}m" : "<1m";
     }
 
     /// <summary>How long ago, for "as of": "just now", "12 min ago", "3 h ago", "2 days ago".</summary>

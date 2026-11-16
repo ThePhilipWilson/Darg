@@ -4,15 +4,18 @@ using Darg.Core;
 
 namespace Darg.Desktop.ViewModels;
 
-/// <summary>The usage bar and timer in the header (WOR-0069): how much of the 5-hour window is used and how
-/// long until it resets, with the week beside it. Fed by <see cref="UsageMeter.Shared"/>, which every agent
-/// turn updates; the countdown ticks on its own between turns.</summary>
+/// <summary>The usage bar and timers in the header (WOR-0069): how much of the 5-hour window is used and how
+/// long until it resets, with the week beside it, fed by <see cref="UsageMeter.Shared"/>, which every agent
+/// turn updates (the countdown ticks on its own between turns); and today's Claude time from
+/// claude-code-timer's timings (<see cref="WorkTimer"/>), when that is installed.</summary>
 public partial class UsageViewModel : ObservableObject
 {
     /// <summary>The bar's full width in the header, in pixels.</summary>
     public const double BarWidth = 64;
     readonly UsageMeter _meter;
     readonly DispatcherTimer _tick;
+    readonly WorkTimer? _work = WorkTimer.FromConfig();
+    bool _reading;
 
     public UsageViewModel(UsageMeter? meter = null)
     {
@@ -20,9 +23,40 @@ public partial class UsageViewModel : ObservableObject
         _meter.Changed += () => Dispatcher.UIThread.Post(Refresh);
         _meter.Attach();
         _tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
-        _tick.Tick += (_, _) => Refresh();
+        _tick.Tick += (_, _) => { Refresh(); ReadWork(); };
         _tick.Start();
         Refresh();
+        ReadWork();
+    }
+
+    /// <summary>"today 3h 12m": Claude time today; empty without claude-code-timer.</summary>
+    [ObservableProperty] public partial string Today { get; set; } = "";
+    [ObservableProperty] public partial string TodayTip { get; set; } = "";
+
+    /// <summary>Today's Claude time, read off the UI thread (it looks at every recent timings file).</summary>
+    void ReadWork()
+    {
+        if (_work is null || _reading) return;
+        _reading = true;
+        var now = DateTimeOffset.Now;
+        Task.Run(() => _work.Today(now)).ContinueWith(t =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                _reading = false;
+                if (t.IsCompletedSuccessfully) ShowWork(t.Result, now);
+            });
+        });
+    }
+
+    void ShowWork(WorkDay d, DateTimeOffset now)
+    {
+        Today = $"today {(d.Active < TimeSpan.FromMinutes(1) ? "0m" : UsageMeter.Span(d.Active))}";
+        TodayTip = $"Claude time today (since {WorkTimer.DayStart(now).ToLocalTime():HH:mm}): {UsageMeter.Span(d.Active)} active, "
+            + $"of which {UsageMeter.Span(d.Busy)} with a session mid-turn and the rest gaps under {d.BreakAfter.TotalMinutes:0} min between turns. "
+            + $"{d.Turns} turns in {d.Sessions} sessions, yours and agents' alike; sessions running at once count once. "
+            + (d.Working ? "A turn is running now. " : "")
+            + "From claude-code-timer's timings.";
     }
 
     [ObservableProperty] public partial bool Visible { get; set; }
