@@ -20,9 +20,12 @@ public partial class NotesViewModel : ObservableObject
     };
     public static IBrush BrushFor(string colour) => new SolidColorBrush(Paper.GetValueOrDefault(colour, Paper["yellow"]));
 
-    readonly FileSystemWatcher? _watch;
+    readonly FileSystemWatcher? _watch, _watchBoards;
     readonly DispatcherTimer _debounce;
     List<Note> _all = [];
+    List<Note> _archived = [];
+    /// <summary>Every ticket's Status, by card ID, read from the project's boards on each reload.</summary>
+    Dictionary<string, string> _statuses = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Picked note ids. Only ever notes that are showing: a filter that hides one unpicks it, so
     /// a batch never touches a note you can't see.</summary>
     readonly HashSet<string> _picked = [];
@@ -31,6 +34,8 @@ public partial class NotesViewModel : ObservableObject
     string? _notice;
 
     public string Folder { get; }
+    /// <summary>The project's boards folder, where the notes' tickets are looked up (null when there's none).</summary>
+    public string? Boards { get; }
     /// <summary>Set by the project: the board folder a note's ticket goes to (null when there's none).</summary>
     public Func<string?>? TicketBoard { get; set; }
     /// <summary>Set by the project: show a card on the board by its ID.</summary>
@@ -59,9 +64,16 @@ public partial class NotesViewModel : ObservableObject
     }
     public bool CanMakeTickets => Shown().Any(v => v.IsPicked && !v.HasTicket);
 
-    public NotesViewModel(string folder)
+    /// <summary>Show the archive (notes whose ticket is completed) as a last column.</summary>
+    [ObservableProperty] public partial bool ShowArchive { get; set; }
+    public string ArchiveText => ShowArchive ? "Hide archive" : $"Archive ({_archived.Count})";
+    public bool HasArchive => _archived.Count > 0;
+    [RelayCommand] void ToggleArchive() => ShowArchive = !ShowArchive;
+
+    public NotesViewModel(string folder, string? boards = null)
     {
         Folder = folder;
+        Boards = boards;
         ColourChoices = NoteStore.Colours.Select(c => new ColourChoice(c, BrushFor(c), new RelayCommand(() => { if (Editor is not null) Editor.Colour = c; }))).ToList();
         foreach (var c in NoteStore.Colours)
         {
@@ -79,14 +91,45 @@ public partial class NotesViewModel : ObservableObject
             _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
         }
         catch (Exception e) { Status = $"Can't watch {folder}: {e.Message}"; }
+        // a ticket moving on the board changes its note: completed sends the note to the archive
+        try
+        {
+            if (boards is not null && Directory.Exists(boards))
+            {
+                _watchBoards = new FileSystemWatcher(boards, "*.md") { IncludeSubdirectories = true, EnableRaisingEvents = true };
+                void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
+                _watchBoards.Changed += Poke; _watchBoards.Created += Poke; _watchBoards.Deleted += Poke; _watchBoards.Renamed += (s, e) => Poke(s, e);
+            }
+        }
+        catch (Exception e) { Status = $"Can't watch {boards}: {e.Message}"; }
     }
 
     partial void OnFilterChanged(string value) { _notice = null; Apply(); }
+    partial void OnShowArchiveChanged(bool value) { OnPropertyChanged(nameof(ArchiveText)); Apply(); }
 
     public void Reload()
     {
-        try { _all = NoteStore.List(Folder); ColumnNames = NoteStore.Columns(Folder); }
+        try
+        {
+            _statuses = NoteStore.TicketStatuses(Boards);
+            var (archived, restored) = NoteStore.SyncArchive(Folder, _statuses);
+            if (archived + restored > 0)
+                _notice = (archived, restored) switch
+                {
+                    (1, 0) => "A note's ticket is completed: moved the note to the archive",
+                    (_, 0) => $"{archived} notes' tickets are completed: moved them to the archive",
+                    (0, 1) =>"An archived note's ticket is open again: put it back on the wall",
+                    (0, _) => $"{restored} archived notes' tickets are open again: put them back on the wall",
+                    _ => $"Archived {archived} notes with completed tickets, put back {restored} reopened",
+                };
+            _all = NoteStore.List(Folder);
+            _archived = NoteStore.Archived(Folder);
+            ColumnNames = NoteStore.Columns(Folder);
+        }
         catch (Exception e) { Status = $"Couldn't read the notes: {e.Message}"; return; }
+        if (_archived.Count == 0) ShowArchive = false;
+        OnPropertyChanged(nameof(ArchiveText));
+        OnPropertyChanged(nameof(HasArchive));
         var was = Tags.ToDictionary(t => t.Name, t => t.Mode, StringComparer.OrdinalIgnoreCase);
         foreach (var t in Tags) t.Changed -= Apply;
         Tags.Clear();
@@ -106,26 +149,36 @@ public partial class NotesViewModel : ObservableObject
         var (anyColour, allColours) = LabelChip.Picked(Colours); // a note has one colour, so "must" two colours keeps none
         bool Keep(Note n) => LabelFilter.Matches(n.Tags, anyTag, allTags) && LabelFilter.Matches([n.Colour], anyColour, allColours)
                              && words.All(w => n.Text.Contains(w, StringComparison.OrdinalIgnoreCase));
-        var names = ColumnNames.ToList();
+        var names = ColumnNames.Where(c => !c.Equals(NoteStore.Ticketed, StringComparison.OrdinalIgnoreCase)).ToList();
+        var loose = _all.Where(n => n.Ticket.Length == 0).ToList();
         // a note naming a column the wall doesn't have still shows, in a column of its own
-        foreach (var extra in _all.Select(n => n.Column).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var extra in loose.Select(n => n.Column).Distinct(StringComparer.OrdinalIgnoreCase))
             if (!names.Contains(extra, StringComparer.OrdinalIgnoreCase)) names.Add(extra);
         Columns.Clear();
         foreach (var name in names)
-            Columns.Add(new NoteColumn(name, _all.Where(n => n.Column.Equals(name, StringComparison.OrdinalIgnoreCase) && Keep(n))
+            Columns.Add(new NoteColumn(name, loose.Where(n => n.Column.Equals(name, StringComparison.OrdinalIgnoreCase) && Keep(n))
                 .Select(n => new NoteViewModel(n, this) { IsPicked = _picked.Contains(n.Id) })));
+        // a note with a ticket leaves its column for Ticketed, where it shows how far its ticket has got
+        if (_all.Any(n => n.Ticket.Length > 0))
+            Columns.Add(new NoteColumn(NoteStore.Ticketed, _all.Where(n => n.Ticket.Length > 0 && Keep(n))
+                .Select(n => new NoteViewModel(n, this, _statuses.GetValueOrDefault(n.Ticket)) { IsPicked = _picked.Contains(n.Id) })));
+        if (ShowArchive)
+            Columns.Add(new NoteColumn("Archive", _archived.Where(Keep)
+                .Select(n => new NoteViewModel(n, this, _statuses.GetValueOrDefault(n.Ticket)) { IsArchived = true }), isArchive: true));
         _picked.IntersectWith(Shown().Select(v => v.Id));
         PickedChanged();
-        var shown = Columns.Sum(c => c.Notes.Count);
+        var shown = Shown().Count();
         Status = _notice ?? (shown == _all.Count ? $"{_all.Count} notes" : $"{shown} of {_all.Count} notes");
     }
 
-    IEnumerable<NoteViewModel> Shown() => Columns.SelectMany(c => c.Notes);
+    /// <summary>The notes on the wall, not counting the archive (its notes can't be picked or edited).</summary>
+    IEnumerable<NoteViewModel> Shown() => Columns.Where(c => !c.IsArchive).SelectMany(c => c.Notes);
 
     /// <summary>A click on a post-it: with Ctrl or Shift held, or once anything is picked, it picks or
-    /// unpicks the note; otherwise it opens the note to edit.</summary>
+    /// unpicks the note; otherwise it opens the note to edit. An archived note opens its ticket.</summary>
     public void Click(NoteViewModel n, KeyModifiers keys)
     {
+        if (n.IsArchived) { OpenTicket?.Invoke(n.Note.Ticket); return; }
         if (!HasPicked && (keys & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Meta)) == 0) { n.Edit(); return; }
         Editor = null;
         _notice = null;
@@ -186,8 +239,10 @@ public partial class NotesViewModel : ObservableObject
 
     public void Move(string noteId, string column)
     {
+        // Ticketed and the archive follow the ticket, not where a note is dropped
+        if (column.Equals(NoteStore.Ticketed, StringComparison.OrdinalIgnoreCase) || column == "Archive") return;
         var n = _all.FirstOrDefault(x => x.Id == noteId);
-        if (n is null || n.Column == column) return;
+        if (n is null || n.Ticket.Length > 0 || n.Column == column) return;
         NoteStore.Save(Folder, n with { Column = column });
         Reload();
     }
@@ -202,21 +257,26 @@ public partial class NotesViewModel : ObservableObject
 
 public sealed record ColourChoice(string Name, IBrush Brush, IRelayCommand Command);
 
-public sealed class NoteColumn(string name, IEnumerable<NoteViewModel> notes)
+public sealed class NoteColumn(string name, IEnumerable<NoteViewModel> notes, bool isArchive = false)
 {
     public string Name { get; } = name;
+    public bool IsArchive { get; } = isArchive;
     public ObservableCollection<NoteViewModel> Notes { get; } = new(notes);
 }
 
-public sealed partial class NoteViewModel(Note note, NotesViewModel wall) : ObservableObject
+public sealed partial class NoteViewModel(Note note, NotesViewModel wall, string? ticketStatus = null) : ObservableObject
 {
     [ObservableProperty] public partial bool IsPicked { get; set; }
+    public bool IsArchived { get; init; }
+    public double PaperOpacity => IsArchived ? 0.6 : 1;
     public Note Note { get; } = note;
     public string Id => Note.Id;
     public string Text => Note.Text;
     public IBrush Brush { get; } = NotesViewModel.BrushFor(note.Colour);
     public string Meta => string.Join(" ", Note.Tags.Select(t => "#" + t));
-    public string Ticket => Note.Ticket.Length > 0 ? "→ " + Note.Ticket : "";
+    /// <summary>"→ WOR-0015 · In Progress": the ticket and where it is on the board ("not found" once it's gone).</summary>
+    public string Ticket => Note.Ticket.Length == 0 ? ""
+        : $"→ {Note.Ticket} · " + (ticketStatus is null ? "not found" : ticketStatus.Length == 0 ? "Backlog" : ticketStatus);
     public bool HasTicket => Note.Ticket.Length > 0;
     public IRelayCommand GoToTicketCommand { get; } = new RelayCommand(() => wall.OpenTicket?.Invoke(note.Ticket));
     /// <summary>A small tilt, the same for a note every time it is drawn.</summary>

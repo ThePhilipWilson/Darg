@@ -102,6 +102,49 @@ public static class NoteStore
         return (Save(folder, note with { Ticket = card.Id }), card);
     }
 
+    /// <summary>The column a note with a ticket shows in, whatever column its file names.</summary>
+    public const string Ticketed = "Ticketed";
+
+    /// <summary>Where notes go once their ticket is completed: &lt;folder&gt;/archive.</summary>
+    public static string ArchiveFolder(string folder) => Path.Combine(folder, "archive");
+
+    public static List<Note> Archived(string folder) => List(ArchiveFolder(folder));
+
+    /// <summary>Every card's Status across a project's boards (each subfolder with a board.json), by card ID.</summary>
+    public static Dictionary<string, string> TicketStatuses(string? boardsFolder)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var board in BoardStore.List(boardsFolder))
+            foreach (var card in BoardStore.ReadCards(Path.Combine(boardsFolder!, board)))
+                map.TryAdd(card.Id, card.Status);
+        return map;
+    }
+
+    public static bool IsCompleted(string status) => BoardStore.PlaceOf(status, []) == Board.Completed;
+
+    /// <summary>Keep the archive in step with the tickets: a note whose ticket is completed moves to the
+    /// archive, an archived note whose ticket is open again comes back. A ticket that can't be found leaves
+    /// its note where it is. Returns how many went each way.</summary>
+    public static (int Archived, int Restored) SyncArchive(string folder, IReadOnlyDictionary<string, string> statuses)
+    {
+        int archived = 0, restored = 0;
+        var archive = ArchiveFolder(folder);
+        foreach (var n in List(folder))
+            if (n.Ticket.Length > 0 && statuses.TryGetValue(n.Ticket, out var s) && IsCompleted(s))
+            {
+                Directory.CreateDirectory(archive);
+                File.Move(Path.Combine(folder, n.Id + ".md"), Path.Combine(archive, n.Id + ".md"), overwrite: true);
+                archived++;
+            }
+        foreach (var n in List(archive))
+            if (n.Ticket.Length > 0 && statuses.TryGetValue(n.Ticket, out var s) && !IsCompleted(s))
+            {
+                File.Move(Path.Combine(archive, n.Id + ".md"), Path.Combine(folder, n.Id + ".md"), overwrite: true);
+                restored++;
+            }
+        return (archived, restored);
+    }
+
     /// <summary>Turn several notes into cards at once, oldest note first so the card IDs follow the order
     /// the notes were written. Notes that already have a ticket, or have no text, are left alone.</summary>
     public static List<Card> MakeTickets(string folder, IEnumerable<Note> notes, string boardFolder) =>
