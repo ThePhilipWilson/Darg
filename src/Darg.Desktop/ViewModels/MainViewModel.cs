@@ -482,7 +482,9 @@ public partial class ProjectViewModel : ObservableObject
             Board.WorkOn = (card, file, alongside, show) =>
             {
                 var id = AgentsViewModel.NewId();
-                Watch(Agents.Start(CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id));
+                // a card in QA: Work on gets the result running for me to try (WOR-0075), not more work
+                var inQa = BoardColumns.Qa(Board.Columns) is { } qa && BoardStore.PlaceOf(card.Status, Board.Columns) == BoardStore.PlaceOf(qa, Board.Columns);
+                Watch(Agents.Start(inQa ? ReportStore.CheckPrompt(Name, card, file) : CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id));
                 if (show) Section = Section.Agents;
             };
             // not tied to the card (no cardId): once the card is filled out, Work on is free straight away
