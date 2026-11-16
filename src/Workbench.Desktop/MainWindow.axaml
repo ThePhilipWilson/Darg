@@ -14,7 +14,7 @@
         <Button DockPanel.Dock="Right" Content="⚙ Setup" Command="{Binding OpenSetupCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Which projects this instance has, and which features each uses"/>
         <Button DockPanel.Dock="Right" Content="🔧 Tools" Command="{Binding OpenToolsCommand}" Background="Transparent"
-                VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Forge, ComfyUI, Ollama and Pinokio on this machine"/>
+                VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Forge, ComfyUI, Ollama, Pinokio and claude-draw on this machine"/>
         <ListBox x:Name="ProjectTabs" ItemsSource="{Binding Projects}" SelectedItem="{Binding Selected}" Background="Transparent"
                  VerticalAlignment="Bottom">
           <ListBox.ItemsPanel>
