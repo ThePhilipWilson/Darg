@@ -38,6 +38,8 @@ public sealed class AgentRecord
     public string? Model { get; set; }
     public string? Effort { get; set; }
     public string? Mode { get; set; }
+    /// <summary>Out of usage, and set to carry on at this time (when the limit resets); null: not waiting.</summary>
+    public DateTimeOffset? ContinueAt { get; set; }
     public DateTime Created { get; set; }
     public DateTime Updated { get; set; }
     public List<ItemRecord> Items { get; set; } = [];
