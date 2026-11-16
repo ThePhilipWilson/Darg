@@ -97,7 +97,7 @@ public static class ProjectDetect
     }
 
     /// <summary>Darg's own folder in a repo, under its old name too.</summary>
-    static bool IsDargFolder(string d) => Path.GetFileName(d) is ".darg" or ".darg";
+    static bool IsDargFolder(string d) => Path.GetFileName(d) is ".darg" or ".workbench";
 
     static IEnumerable<string> SafeDirs(string d)
     {

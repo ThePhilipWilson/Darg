@@ -320,7 +320,7 @@ public sealed class ArtifactServer : IDisposable
     /// <summary>The page with the bridge put in: inside &lt;head&gt; if it has one, else first.</summary>
     public static string WithBridge(string html, string replyPath)
     {
-        var script = "<script>window.darg=window.darg={send:function(d){return fetch(" + Js(replyPath) +
+        var script = "<script>window.darg=window.workbench={send:function(d){return fetch(" + Js(replyPath) +
                      ",{method:'POST',headers:{'Content-Type':'text/plain'},body:typeof d==='string'?d:JSON.stringify(d,null,1)})" +
                      ".then(function(r){return r.ok},function(){return false})}};</script>";
         var head = Regex.Match(html, @"<head(\s[^>]*)?>", RegexOptions.IgnoreCase);

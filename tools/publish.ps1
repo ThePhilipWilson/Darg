@@ -7,8 +7,8 @@ $repo = Split-Path -Parent $PSScriptRoot
 if (-not $env:NUGET_PACKAGES) { $env:NUGET_PACKAGES = 'D:\nuget\packages' }
 
 # a copy running from the install folder holds its files: close it (its agents are saved after every turn)
-$running = @(Get-CimInstance Win32_Process -Filter "Name='Darg.Desktop.exe' OR Name='Darg.Desktop.exe'" |
-    Where-Object { $p = $_.ExecutablePath; $p -and (@($To, (Join-Path (Split-Path $To) 'Darg')) | Where-Object { $p.StartsWith($_.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) }) })
+$running = @(Get-CimInstance Win32_Process -Filter "Name='Darg.Desktop.exe' OR Name='Workbench.Desktop.exe'" |
+    Where-Object { $p = $_.ExecutablePath; $p -and (@($To, (Join-Path (Split-Path $To) 'Workbench')) | Where-Object { $p.StartsWith($_.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) }) })
 
 # ...unless this script was started from inside that copy (an agent in Darg running it): closing it
 # would kill the agent mid-publish and leave the old build in place. Walk up the parent processes to check.
@@ -34,7 +34,7 @@ Set-Content -LiteralPath (Join-Path $To 'source.txt') -Value $repo
 if ($NoShortcuts -or -not $IsWindows) { return }
 $shell = New-Object -ComObject WScript.Shell
 foreach ($dir in @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('Desktop'))) {
-    Remove-Item -LiteralPath (Join-Path $dir 'Darg.lnk') -ErrorAction SilentlyContinue # the old name
+    Remove-Item -LiteralPath (Join-Path $dir 'Workbench.lnk') -ErrorAction SilentlyContinue # the old name
     $lnk = $shell.CreateShortcut((Join-Path $dir 'Darg.lnk'))
     $lnk.TargetPath = $exe
     $lnk.WorkingDirectory = $To

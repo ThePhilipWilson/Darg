@@ -32,10 +32,10 @@ public sealed class InstanceConfig
         if (home is not null) return home;
         var name = Env("DARG_INSTANCE") ?? "home";
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        MigrateFromDarg(appData);
+        MigrateFromWorkbench(appData);
         var folder = Path.Combine(appData, "Darg", name);
         // the move can fail while an old copy still has the folder open: carry on from where the data is
-        var old = Path.Combine(appData, "Darg", name);
+        var old = Path.Combine(appData, "Workbench", name);
         return !Directory.Exists(folder) && Directory.Exists(old) ? old : folder;
     }
 
@@ -43,16 +43,16 @@ public sealed class InstanceConfig
     static string? Env(string name)
     {
         var v = Environment.GetEnvironmentVariable(name);
-        if (string.IsNullOrWhiteSpace(v)) v = Environment.GetEnvironmentVariable("DARG_" + name["DARG_".Length..]);
+        if (string.IsNullOrWhiteSpace(v)) v = Environment.GetEnvironmentVariable("WORKBENCH_" + name["DARG_".Length..]);
         return string.IsNullOrWhiteSpace(v) ? null : v;
     }
 
     /// <summary>The app was called Darg: its data folder moves to Darg the first time, and a junction at
     /// the old name points at the new one so paths saved in agents (artifact folders) still resolve. If the
     /// move fails (an old copy has files open) nothing changes and the old folder is used until it can.</summary>
-    public static void MigrateFromDarg(string appData)
+    public static void MigrateFromWorkbench(string appData)
     {
-        var old = Path.Combine(appData, "Darg");
+        var old = Path.Combine(appData, "Workbench");
         var now = Path.Combine(appData, "Darg");
         if (!Directory.Exists(old) || Directory.Exists(now)) return;
         try
