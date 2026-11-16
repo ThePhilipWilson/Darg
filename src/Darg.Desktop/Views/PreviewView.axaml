@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             x:Class="Darg.Desktop.Views.PreviewView"
+             x:DataType="vm:PreviewViewModel">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="4" Margin="0,0,8,0">
+          <Button Content="←" Click="Back" ToolTip.Tip="Back" AutomationProperties.Name="Back"/>
+          <Button Content="→" Click="Forward" ToolTip.Tip="Forward" AutomationProperties.Name="Forward"/>
+          <Button Content="↻" Click="Reload" ToolTip.Tip="Reload" AutomationProperties.Name="Reload"/>
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
+          <Button Content="{Binding ServerLabel}" Command="{Binding ToggleServerCommand}" IsVisible="{Binding HasCommand}" ToolTip.Tip="{Binding ServerTip}"/>
+          <ToggleButton Content="Log" IsChecked="{Binding ShowLog}" IsVisible="{Binding HasCommand}" ToolTip.Tip="The dev server's output"/>
+          <Button Content="Open ↗" Command="{Binding OpenInBrowserCommand}" ToolTip.Tip="Open this page in your browser"/>
+        </StackPanel>
+        <TextBox x:Name="AddressBox" Text="{Binding Address}" Classes="mono" VerticalAlignment="Center" KeyDown="AddressKey"/>
+      </DockPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="10,3">
+      <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Height="220" Background="Black" IsVisible="{Binding ShowLog}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+      <ScrollViewer x:Name="LogScroll">
+        <SelectableTextBlock Classes="mono" Text="{Binding Log}" Margin="8,6" TextWrapping="Wrap" Foreground="#cfcfcf"/>
+      </ScrollViewer>
+    </Border>
+    <Panel>
+      <TextBlock Classes="dim" Text="{Binding Status}" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="600"
+                 IsVisible="{Binding Page, Converter={x:Static ObjectConverters.IsNull}}"/>
+      <NativeWebView x:Name="Web" IsVisible="{Binding Page, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+    </Panel>
+  </DockPanel>
+</UserControl>
