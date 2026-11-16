@@ -23,10 +23,12 @@ public static class DefaultContext
         sb.AppendLine($"- `--add-dir {artifactsDir}`: the agent's own artifacts folder, so it can write pages there.");
         foreach (var r in project.OtherRepos(folder))
             sb.AppendLine($"- `--add-dir {r}`: the project's {ProjectConfig.RepoName(r)} repo, so it can work there too.");
+        var mistakes = MistakeLog.PathFor(project.Id, instanceFolder).Replace('\\', '/');
+        sb.AppendLine($"- `--add-dir {Path.GetDirectoryName(mistakes)!.Replace('\\', '/')}`: the project's mistake log folder, so it can append to the log.");
         sb.AppendLine("- `--append-system-prompt`, with this text:");
         sb.AppendLine();
         sb.AppendLine("```text");
-        sb.AppendLine(ArtifactStore.Briefing(artifactsDir));
+        sb.AppendLine(ArtifactStore.Briefing(artifactsDir) + " " + MistakeLog.Briefing(mistakes));
         sb.AppendLine("```");
         sb.AppendLine();
         sb.AppendLine("## CLAUDE.md files Claude Code loads");
