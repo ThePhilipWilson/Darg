@@ -134,6 +134,15 @@ public partial class AgentsViewModel : ObservableObject
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(FlowStore.Folder()) { UseShellExecute = true }); } catch (Exception) { }
     }
 
+    /// <summary>Open profiles.md (written with the starter set if there isn't one) to change which model and
+    /// effort new agents start on. It's read again for every new agent, so there's nothing to reload.</summary>
+    [RelayCommand]
+    void EditProfiles()
+    {
+        ModelProfiles.Load();
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ModelProfiles.FilePath()) { UseShellExecute = true }); } catch (Exception) { }
+    }
+
     [RelayCommand]
     void StartFlow()
     {
@@ -145,11 +154,17 @@ public partial class AgentsViewModel : ObservableObject
 
     /// <summary>Run a flow on a task: each stage an agent named for the task and its role ("WOR-0023 … · QA"), started when the one
     /// before it hands on.</summary>
-    public FlowRun RunFlow(Flow flow, string task, string name, string? cwd = null, string? cardId = null)
+    /// <param name="job">The task's job (a card's type and labels); each stage's agent picks its profile by it and its role.</param>
+    public FlowRun RunFlow(Flow flow, string task, string name, string? cwd = null, string? cardId = null, AgentJob? job = null)
     {
         var run = new FlowRun(flow, task, (r, stage, prompt) =>
         {
-            var a = Start(prompt, cwd, cardId, $"{name} · {flow.Stages[stage].Role}");
+            var s = flow.Stages[stage];
+            var stageJob = (job ?? new AgentJob(JobKinds.Flow, task)) with
+            {
+                Kind = JobKinds.Flow, Role = s.Role, Text = $"Role: {s.Role}\n{s.Brief.Trim()}\n\nThe task:\n{(job?.Text ?? task).Trim()}",
+            };
+            var a = Start(prompt, cwd, cardId, $"{name} · {s.Role}", stageJob);
             a.Flow = r;
             return a;
         });
@@ -167,11 +182,14 @@ public partial class AgentsViewModel : ObservableObject
         NewPrompt = "";
     }
 
-    public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null)
+    /// <param name="job">What it's for, which picks its model profile; a chat with the prompt when not given.</param>
+    public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null, AgentJob? job = null)
     {
         var id = Guid.NewGuid().ToString("N")[..10];
+        job ??= new AgentJob(JobKinds.Chat, prompt);
+        var profile = ModelProfiles.Pick(ModelProfiles.Load(), job with { Project = job.Project ?? project.Id });
         var agent = new AgentViewModel(string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd, prompt, cardId, name ?? ChatTitle.Guess(prompt),
-            args: ArtifactArgs(id), id: id) { StoreFolder = _store };
+            args: ArtifactArgs(id), id: id, profile: profile) { StoreFolder = _store };
         Add(agent, select: true);
         agent.Save();
         if (name is null) _ = Retitle(agent, prompt); // a card's agent is already named for the card
@@ -306,6 +324,7 @@ public partial class AgentViewModel : ObservableObject
     {
         if (_fromSession || value is null) return; // the session said so; nothing to tell it
         field = value.Value == AgentChoices.Default ? null : value.Value;
+        _handPicked = true;
         if (_session is not null) tell(_session);
         Save();
     }
@@ -359,7 +378,10 @@ public partial class AgentViewModel : ObservableObject
 
     /// <param name="shown">What the transcript shows for the first message, when what's sent carries more
     /// (Bench sends a line of context ahead of the person's words).</param>
-    public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null, string? shown = null, string? id = null)
+    /// <param name="profile">The model profile for its job, still being picked (WOR-0034): the session starts once
+    /// it is in, on that profile's model and effort. Null: start now on the person's own settings.</param>
+    public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null, string? shown = null, string? id = null,
+        Task<ProfilePick?>? profile = null)
     {
         if (id is not null) Id = id;
         Cwd = cwd;
@@ -369,7 +391,39 @@ public partial class AgentViewModel : ObservableObject
         var visible = shown ?? prompt;
         Name = name ?? (visible.Length > 40 ? visible[..40].TrimEnd() + "…" : visible);
         Items.Add(new UserItem(visible));
+        if (profile is null) Begin(prompt, resume: false);
+        else StartOnProfile(profile, prompt);
+    }
+
+    /// <summary>The model profile it started on ("Deep"), if one was picked.</summary>
+    [ObservableProperty] public partial string Profile { get; set; } = "";
+    bool _handPicked, _ended;
+
+    /// <summary>Wait for the profile (a rule's is there at once; Haiku's takes a few seconds), take its model
+    /// and effort unless the person picked their own meanwhile, then start.</summary>
+    async void StartOnProfile(Task<ProfilePick?> profile, string prompt)
+    {
+        ProfilePick? pick = null;
+        if (!profile.IsCompleted)
+        {
+            State = AgentState.Starting;
+            Activity = "Picking a model…";
+        }
+        try { pick = await profile; } catch (Exception) { }
+        if (_ended) return; // closed or forgotten while it was being picked
+        if (pick is not null && !_handPicked)
+        {
+            _model = pick.Profile.Model == AgentChoices.Default ? null : pick.Profile.Model;
+            _effort = pick.Profile.Effort == AgentChoices.Default ? null : pick.Profile.Effort;
+            _fromSession = true;
+            ModelChoice = AgentChoices.Find(AgentChoices.Models, _model);
+            EffortChoice = AgentChoices.Find(AgentChoices.Efforts, _effort);
+            _fromSession = false;
+            Profile = pick.Profile.Name;
+            Items.Add(new NoteItem($"Profile {pick.Profile.Name} ({pick.Profile.Summary}) · {pick.Why}", false));
+        }
         Begin(prompt, resume: false);
+        Save();
     }
 
     /// <summary>Set for Bench's chats: turns what the person typed into what's sent (adds where they are).</summary>
@@ -626,6 +680,7 @@ public partial class AgentViewModel : ObservableObject
     /// doing stops; the conversation can be resumed later if it has a session id.</summary>
     public void End()
     {
+        _ended = true;
         var s = _session;
         if (s is null) return;
         _session = null;
