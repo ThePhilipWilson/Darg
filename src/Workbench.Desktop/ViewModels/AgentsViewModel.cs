@@ -106,6 +106,7 @@ public partial class AgentsViewModel : ObservableObject
         AnyOutOfUsage = Agents.Any(x => x.CanContinueAfterReset);
         if (Selected == a) Selected = Agents.FirstOrDefault();
         if (Shown == a) Shown = Selected;
+        Forgotten?.Invoke(a);
     }
 
     /// <summary>Forget a Fettle chat from the list under this project's agents (as Fettle's own Forget does).</summary>
@@ -129,6 +130,9 @@ public partial class AgentsViewModel : ObservableObject
         Shown = null;
         Selected = Agents.FirstOrDefault();
     }
+
+    /// <summary>An agent was forgotten (it's off the list): a card it was on is free again.</summary>
+    public event Action<AgentViewModel>? Forgotten;
 
     /// <summary>Close every agent here that's open but idle (not working, not waiting on the person).</summary>
     [RelayCommand]
