@@ -79,5 +79,7 @@ public sealed class ProjectConfig
 
 public static class Features
 {
-    public const string Board = "board", Notes = "notes", Agents = "agents", Terminal = "terminal";
+    public const string Board = "board", Notes = "notes", Agents = "agents", Code = "code", Terminal = "terminal";
+    /// <summary>Every feature, in the order the rail shows them (the Setup view's tick boxes).</summary>
+    public static readonly string[] All = [Board, Notes, Agents, Code, Terminal];
 }

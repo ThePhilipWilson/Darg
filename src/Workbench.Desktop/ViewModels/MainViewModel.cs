@@ -79,7 +79,7 @@ public partial class MainViewModel : ObservableObject
     }
 }
 
-public enum Section { Board, Notes, Agents, Terminal }
+public enum Section { Board, Notes, Agents, Code, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -88,12 +88,13 @@ public partial class ProjectViewModel : ObservableObject
     public IBrush Brush { get; }
     public BoardViewModel? Board { get; }
     public NotesViewModel? Notes { get; }
+    public CodeViewModel? Code { get; }
     public AgentsViewModel? Agents { get; }
     public string TerminalFolder => Config.WorkingFolder();
     public string Shell => OperatingSystem.IsWindows() ? "pwsh.exe" : Environment.GetEnvironmentVariable("SHELL") ?? "/bin/zsh";
     public bool UsesTerminal => Config.Uses(Features.Terminal);
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnAgents), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnAgents), nameof(OnCode), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -102,6 +103,7 @@ public partial class ProjectViewModel : ObservableObject
 
     public bool OnBoard => Section == Section.Board;
     public bool OnNotes => Section == Section.Notes;
+    public bool OnCode => Section == Section.Code;
     public bool OnAgents => Section == Section.Agents;
     public bool OnTerminal => Section == Section.Terminal;
 
@@ -113,6 +115,7 @@ public partial class ProjectViewModel : ObservableObject
         if (config.Uses(Features.Agents)) Agents = new AgentsViewModel(config);
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
             Notes = new NotesViewModel(notes) { TicketBoard = () => Board?.Folder };
+        if (config.Uses(Features.Code) && config.Repos.Count > 0) Code = new CodeViewModel(config);
         Section = Board is not null ? Section.Board : Agents is not null ? Section.Agents : Section.Terminal;
         if (Board is not null && Agents is not null)
         {
@@ -131,6 +134,7 @@ public partial class ProjectViewModel : ObservableObject
     partial void OnSectionChanged(Section value)
     {
         if (value == Section.Terminal) TerminalStarted = true;
+        if (value == Section.Code) Code?.Load();
     }
 
     [RelayCommand] void Open(string section) => Section = Enum.Parse<Section>(section);
