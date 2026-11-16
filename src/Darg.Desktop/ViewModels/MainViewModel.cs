@@ -295,7 +295,8 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Every notification agents have raised this run, newest first: the popups come and go, this stays.</summary>
     public System.Collections.ObjectModel.ObservableCollection<NotificationEntry> Notifications { get; } = [];
     [ObservableProperty] public partial bool ShowNotifications { get; set; }
-    [RelayCommand] void ToggleNotifications() => ShowNotifications = !ShowNotifications;
+    [RelayCommand] void ShowChatTab() => ShowNotifications = false;
+    [RelayCommand] void ShowNotificationsTab() => ShowNotifications = true;
     [RelayCommand] void ClearNotifications() => Notifications.Clear();
     [RelayCommand] void OpenNotification(NotificationEntry? n) { if (n is not null) OpenAgent(n.ProjectId, n.AgentId); }
 

@@ -106,14 +106,20 @@
               <DockPanel>
                 <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent"
                         AutomationProperties.Name="Hide Fettle"/>
-                <Button DockPanel.Dock="Right" Command="{Binding ToggleNotificationsCommand}" Padding="8,0" Background="Transparent" FontSize="11"
-                        Content="{Binding Notifications.Count, StringFormat='🔔 {0}'}" ToolTip.Tip="Everything agents have notified you of this run"
-                        AutomationProperties.Name="Notifications"/>
                 <Button DockPanel.Dock="Right" Content="+ New chat" Command="{Binding Mascot.FreshCommand}" Padding="8,0" Background="Transparent"
                         FontSize="11" IsVisible="{Binding Mascot.HasChat}"/>
                 <TextBlock Classes="dim small" VerticalAlignment="Center"
                            Text="{Binding Mascot.Agent.StateText, StringFormat='Fettle · {0}', FallbackValue='Fettle · new chat'}"/>
               </DockPanel>
+              <!-- two tabs so the chat and the notifications never show at once -->
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <ToggleButton Content="Chat" Command="{Binding ShowChatTabCommand}" IsChecked="{Binding !ShowNotifications, Mode=OneWay}"
+                              Padding="10,2" FontSize="11" Background="Transparent" AutomationProperties.Name="Fettle chat tab"/>
+                <ToggleButton Command="{Binding ShowNotificationsTabCommand}" IsChecked="{Binding ShowNotifications, Mode=OneWay}"
+                              Padding="10,2" FontSize="11" Background="Transparent"
+                              Content="{Binding Notifications.Count, StringFormat='🔔 Notifications {0}'}"
+                              ToolTip.Tip="Everything agents have notified you of this run" AutomationProperties.Name="Notifications"/>
+              </StackPanel>
               <!-- earlier chats: pick one to carry on with it -->
               <DockPanel IsVisible="{Binding Mascot.Chats.Count}">
                 <Button DockPanel.Dock="Right" Content="×" Command="{Binding Mascot.ForgetCommand}" IsVisible="{Binding Mascot.HasChat}"
@@ -123,7 +129,7 @@
               </DockPanel>
             </StackPanel>
           </Border>
-          <DockPanel DockPanel.Dock="Bottom">
+          <DockPanel DockPanel.Dock="Bottom" IsVisible="{Binding !ShowNotifications}">
             <Button DockPanel.Dock="Right" Content="➤" Command="{Binding Mascot.SendCommand}" Background="Transparent"
                     AutomationProperties.Name="Send to Fettle" VerticalAlignment="Bottom" Margin="0,0,6,6"/>
             <TextBox x:Name="MascotBox" Text="{Binding Mascot.Compose}" BorderThickness="0,1,0,0" CornerRadius="0,0,0,14"
@@ -137,7 +143,7 @@
                 <TextBlock Classes="dim small" VerticalAlignment="Center" Text="Notifications"/>
               </DockPanel>
               <TextBlock Classes="dim small" Margin="12,0,12,8" Text="None yet." IsVisible="{Binding !Notifications.Count}"/>
-              <ScrollViewer MaxHeight="220">
+              <ScrollViewer MaxHeight="380">
                 <ItemsControl ItemsSource="{Binding Notifications}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -155,11 +161,11 @@
               </ScrollViewer>
             </StackPanel>
           </Border>
-          <ScrollViewer x:Name="MascotScroll" MaxHeight="380" IsVisible="{Binding Mascot.HasChat}">
+          <Border IsVisible="{Binding !ShowNotifications}"><ScrollViewer x:Name="MascotScroll" MaxHeight="380" IsVisible="{Binding Mascot.HasChat}">
             <ItemsControl ItemsSource="{Binding Mascot.Items}" Margin="12,10" FontSize="13">
               <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
             </ItemsControl>
-          </ScrollViewer>
+          </ScrollViewer></Border>
         </DockPanel>
       </Border>
 
