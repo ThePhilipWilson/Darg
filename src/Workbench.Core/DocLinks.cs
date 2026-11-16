@@ -5,6 +5,9 @@ public abstract record DocLink
 {
     /// <summary>A doc in the docs folder (its path relative to the folder, with forward slashes).</summary>
     public sealed record Doc(string Path) : DocLink;
+    /// <summary>A markdown doc outside the docs folder (elsewhere in the vault, another project's docs, a
+    /// repo's README): its full path, to open in Workbench rather than hand to another app.</summary>
+    public sealed record Elsewhere(string FullPath) : DocLink;
     /// <summary>Something for the system to open: a web or mail link, or a file that isn't a doc (an image, a PDF).</summary>
     public sealed record External(string Target) : DocLink;
     /// <summary>Nowhere: the reason, to show.</summary>
@@ -14,11 +17,14 @@ public abstract record DocLink
 /// <summary>Resolves the links in a docs folder's markdown the way Obsidian and GitHub do: [[Name]],
 /// [[folder/Name]], [[Name#heading|text]]; [text](Other.md), (sub/Doc.md#part), (../Up.md), (My%20Notes.md),
 /// (&lt;My Notes.md&gt;), (/from/the/root.md), a doc linked without .md; web, mailto and file links; a link to
-/// a heading in the same doc stays put.</summary>
+/// a heading in the same doc stays put. A link may leave the folder, into another repo or the rest of the
+/// vault: (../../Other/README.md), (D:/repo/Doc.md), or a [[Name]] found elsewhere in the Obsidian vault the
+/// folder sits in, as Obsidian would find it. A markdown doc out there is a <see cref="DocLink.Elsewhere"/>.</summary>
 public static class DocLinks
 {
     /// <param name="link">The span's target: "wiki:Name" for an Obsidian link, else the markdown link's URL.</param>
-    /// <param name="current">The open doc, relative to the folder (forward slashes), or null.</param>
+    /// <param name="current">The open doc, relative to the folder (forward slashes), or its full path when it
+    /// is outside the folder, or null.</param>
     /// <param name="docs">Every doc in the folder, relative, forward slashes.</param>
     /// <param name="folder">The docs folder, to find files that aren't docs.</param>
     public static DocLink Resolve(string link, string? current, IReadOnlyList<string> docs, string folder)
@@ -53,8 +59,18 @@ public static class DocLinks
             return Local(path, docs, folder) ?? new DocLink.Missing($"No file at {path}.");
 
         var baseDir = path.StartsWith('/') ? "" : Dir(current);
+        if (IsFull(current) && baseDir.Length > 0)
+        {
+            // the open doc is outside the folder: relative to where it is
+            var full = Path.GetFullPath(Path.Combine(baseDir, path));
+            return Local(full, docs, folder) ?? new DocLink.Missing($"No file at {full}.");
+        }
         var rel = Normalise(baseDir.Length == 0 ? path.TrimStart('/') : baseDir + "/" + path);
-        if (rel is null) return Local(Path.GetFullPath(Path.Combine(folder, baseDir, path)), docs, folder) ?? new DocLink.Missing($"{path} is outside the docs folder.");
+        if (rel is null)
+        {
+            var full = Path.GetFullPath(Path.Combine(folder, baseDir, path));
+            return Local(full, docs, folder) ?? new DocLink.Missing($"No file at {full}.");
+        }
         return Find(rel, docs, folder) ?? new DocLink.Missing($"No doc at {rel}.");
     }
 
@@ -75,7 +91,7 @@ public static class DocLinks
             var tail = "/" + Strip(name);
             var ends = docs.Where(d => ("/" + Strip(d)).EndsWith(tail, StringComparison.OrdinalIgnoreCase)).ToList();
             if (ends.Count > 0) return new DocLink.Doc(Nearest(ends, dir));
-            return new DocLink.Missing($"No doc called {name} in this folder.");
+            return InVault(name, current, folder) ?? new DocLink.Missing($"No doc called {name} in this folder or its vault.");
         }
 
         // "Name" or "Name.md" (and "v1.2", whose dot isn't an extension)
@@ -83,7 +99,7 @@ public static class DocLinks
         if (named.Count > 0) return new DocLink.Doc(Nearest(named, dir));
 
         // ![[image.png]] style: a file that isn't markdown, anywhere in the folder
-        if (Path.HasExtension(name) && Directory.Exists(folder))
+        if (Path.HasExtension(name) && !IsMarkdown(name) && Directory.Exists(folder))
         {
             try
             {
@@ -92,8 +108,58 @@ public static class DocLinks
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
-        return new DocLink.Missing($"No doc called {name} in this folder.");
+        return InVault(name, current, folder) ?? new DocLink.Missing($"No doc called {name} in this folder or its vault.");
     }
+
+    /// <summary>A [[Name]] that isn't in the docs folder: searched for in the vault the folder is in (the nearest
+    /// folder at or above it holding .obsidian), as Obsidian would, the one nearest the open doc first. A markdown
+    /// doc is an Elsewhere; another file (an image) opens in its own app. Folders starting with a dot are skipped.</summary>
+    static DocLink? InVault(string name, string? current, string folder)
+    {
+        if (Vault(folder) is not { } vault) return null;
+        var file = Path.GetFileName(name);
+        var md = IsMarkdown(file) || !LooksLikeFileType(Path.GetExtension(file)); // "v1.2" is a doc called v1.2
+        var pattern = md && !IsMarkdown(file) ? file + ".md" : file;
+        List<string> hits;
+        try
+        {
+            var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, MatchCasing = MatchCasing.CaseInsensitive };
+            hits = Directory.EnumerateFiles(vault, pattern, options)
+                .Select(f => Path.GetRelativePath(vault, f).Replace('\\', '/'))
+                .Where(f => !f.Split('/').Any(part => part.StartsWith('.')))
+                .Where(f => !name.Contains('/') || ("/" + Strip(f)).EndsWith("/" + Strip(name.TrimStart('/')), StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
+        if (hits.Count == 0) return null;
+        var open = current is null ? folder : Path.GetDirectoryName(Path.GetFullPath(Path.Combine(folder, current))) ?? folder;
+        var here = Path.GetRelativePath(vault, open).Replace('\\', '/');
+        var at = here == "." ? [] : here.Split('/');
+        int Shared(string hit) => Dir(hit).Split('/').Zip(at).TakeWhile(p => p.First.Equals(p.Second, StringComparison.OrdinalIgnoreCase)).Count();
+        var best = hits.OrderByDescending(Shared).ThenBy(h => h.Count(c => c == '/')).ThenBy(h => h, StringComparer.OrdinalIgnoreCase).First();
+        var hit = Path.GetFullPath(Path.Combine(vault, best));
+        return md ? new DocLink.Elsewhere(hit) : new DocLink.External(hit);
+    }
+
+    /// <summary>The Obsidian vault a folder is in: the nearest folder at or above it holding .obsidian, or null.</summary>
+    public static string? Vault(string folder)
+    {
+        try
+        {
+            for (var d = new DirectoryInfo(Path.GetFullPath(folder)); d is not null; d = d.Parent)
+                if (Directory.Exists(Path.Combine(d.FullName, ".obsidian"))) return d.FullName;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
+        return null;
+    }
+
+    static bool IsMarkdown(string name) => name.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>".png" or ".pdf" is a file type; the ".2" of "v1.2" isn't.</summary>
+    static bool LooksLikeFileType(string ext) => ext.Length is >= 2 and <= 6 && ext.Skip(1).All(char.IsAsciiLetterOrDigit) && ext.Skip(1).Any(char.IsAsciiLetter);
+
+    /// <summary>A path from the root of a drive (D:/x, //server/x, or /x on Mac and Linux), as an outside doc's is.</summary>
+    static bool IsFull(string? doc) => doc is not null && (IsDrive(doc) || doc.StartsWith("//", StringComparison.Ordinal) || (Path.IsPathRooted(doc) && !OperatingSystem.IsWindows()));
 
     /// <summary>A path relative to the folder: the doc itself, the doc with .md added, or a file that isn't a doc.</summary>
     static DocLink? Find(string rel, IReadOnlyList<string> docs, string folder)
@@ -107,11 +173,15 @@ public static class DocLinks
         return null;
     }
 
-    /// <summary>An absolute path: a doc if it's inside the folder, else the file itself.</summary>
+    /// <summary>An absolute path: a doc if it's inside the folder, a markdown doc elsewhere (linked with or
+    /// without its .md), else the file itself.</summary>
     static DocLink? Local(string full, IReadOnlyList<string> docs, string folder)
     {
+        full = Path.GetFullPath(full);
         var rel = Path.GetRelativePath(folder, full).Replace('\\', '/');
-        if (!rel.StartsWith("../", StringComparison.Ordinal) && !Path.IsPathRooted(rel) && Find(rel, docs, folder) is { } hit) return hit;
+        if (rel != ".." && !rel.StartsWith("../", StringComparison.Ordinal) && !Path.IsPathRooted(rel) && Find(rel, docs, folder) is { } hit) return hit;
+        if (IsMarkdown(full) && File.Exists(full)) return new DocLink.Elsewhere(full);
+        if (!File.Exists(full) && !Directory.Exists(full) && File.Exists(full + ".md")) return new DocLink.Elsewhere(full + ".md");
         return File.Exists(full) || Directory.Exists(full) ? new DocLink.External(full) : null;
     }
 

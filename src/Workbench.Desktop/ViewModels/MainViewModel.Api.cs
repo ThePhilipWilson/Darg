@@ -97,7 +97,8 @@ public partial class MainViewModel
             if (rel.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) rel = rel[..^3];
             p.OpenCommand.Execute(nameof(Section.Docs));
             p.Docs.OpenLink("wiki:" + Path.GetFileName(rel.Replace('\\', '/')));
-            done.Add(p.Docs.Selected is { } open ? $"doc {open.Path} open" : $"no doc called {doc}");
+            if (Selected != p && Selected?.Docs?.Selected is { } there) done.Add($"doc {there.Path} open in {Selected.Name}"); // another project's docs held it
+            else done.Add(p.Docs.Selected is { } open ? $"doc {open.Path} open" : $"no doc called {doc}");
         }
         if (a.Get("agent") is { } id)
         {
