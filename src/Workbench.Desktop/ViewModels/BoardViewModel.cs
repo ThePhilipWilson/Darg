@@ -375,6 +375,18 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             Labels.Add(chip);
         }
         Apply();
+        Reloaded?.Invoke();
+    }
+
+    /// <summary>Raised after each reload of the board from disk.</summary>
+    public event Action? Reloaded;
+
+    /// <summary>A card is done when it's in Completed or the board's last column (its done column).</summary>
+    public bool IsDone(string cardId)
+    {
+        if (_board is null) return false;
+        var lists = new[] { Board.Completed, _board.Columns.LastOrDefault()?.Id };
+        return lists.Any(list => list is not null && _board.Lists.TryGetValue(list, out var cards) && cards.Any(c => c.Id == cardId));
     }
 
     /// <summary>Rebuild the lists from the board through the filter: text matches the ID, title or
