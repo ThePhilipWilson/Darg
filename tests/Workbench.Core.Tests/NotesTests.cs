@@ -296,3 +296,59 @@ public sealed class WallColumnTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dir, true);
 }
+
+public sealed class PictureTests : IDisposable
+{
+    readonly string _dir = Directory.CreateTempSubdirectory("wb-pic-").FullName;
+    public void Dispose() => Directory.Delete(_dir, true);
+
+    string Png(string name)
+    {
+        var p = Path.Combine(_dir, name);
+        File.WriteAllBytes(p, [0x89, 0x50, 0x4E, 0x47]);
+        return p;
+    }
+
+    [Fact]
+    public void Add_copies_in_and_never_overwrites()
+    {
+        var notes = Directory.CreateDirectory(Path.Combine(_dir, "notes")).FullName;
+        var src = Png("My Shot (1).PNG");
+        Assert.Equal("images/My-Shot-1.png", Pictures.Add(notes, src));
+        Assert.Equal("images/My-Shot-1-2.png", Pictures.Add(notes, src));
+        Assert.True(File.Exists(Path.Combine(notes, "images", "My-Shot-1.png")));
+        Assert.Throws<InvalidOperationException>(() => Pictures.Add(notes, Path.Combine(_dir, "x.txt")));
+    }
+
+    [Fact]
+    public void A_note_keeps_its_image_through_save_and_parse()
+    {
+        var notes = Directory.CreateDirectory(Path.Combine(_dir, "notes")).FullName;
+        var n = NoteStore.Save(notes, new Note("n1", "holiday", "Loose", "pink", [], "", "", "images/a.png"));
+        Assert.Equal("images/a.png", NoteStore.List(notes).Single().Image);
+        Assert.Equal("", NoteStore.Parse(NoteStore.Render(n with { Image = "" }), "n1")!.Image);
+    }
+
+    [Fact]
+    public void A_ticket_made_from_a_picture_note_carries_the_picture()
+    {
+        var boards = Directory.CreateDirectory(Path.Combine(_dir, "tasks")).FullName;
+        var board = Directory.CreateDirectory(Path.Combine(boards, "Main")).FullName;
+        File.WriteAllText(Path.Combine(board, "board.json"), """{"columns":[{"id":"c1","name":"In Progress"}],"prefix":"T","nextId":1,"order":{}}""");
+        var notes = Directory.CreateDirectory(Path.Combine(_dir, "notes")).FullName;
+        var img = Pictures.Add(notes, Png("shot.png"));
+        var n = NoteStore.Save(notes, new Note("n1", "fix this look", "Loose", "yellow", [], "", "", img));
+        var (_, card) = NoteStore.MakeTicket(notes, n, board);
+        Assert.Contains("![](images/shot.png)", card.Description);
+        Assert.Single(Pictures.InDescription(board, card.Description));
+    }
+
+    [Fact]
+    public void Description_images_that_are_missing_or_not_pictures_are_skipped()
+    {
+        var board = Directory.CreateDirectory(Path.Combine(_dir, "b")).FullName;
+        var ok = Pictures.Add(board, Png("a b.png"));
+        var found = Pictures.InDescription(board, $"x\n\n![]({ok})\n![](images/gone.png)\n![t](https://x.test/a.png)\n![](notes.md)");
+        Assert.Single(found);
+    }
+}

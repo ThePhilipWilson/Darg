@@ -660,7 +660,29 @@ public partial class CardEditor : ObservableObject
     public IReadOnlyList<string> TypeChoices { get; }
     [ObservableProperty] public partial string Type { get; set; }
     [ObservableProperty] public partial string Title { get; set; }
-    [ObservableProperty] public partial string Description { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Pictures))] public partial string Description { get; set; }
+    /// <summary>The pictures the description shows (markdown images, files under the board's folder), for a preview under the box.</summary>
+    public IReadOnlyList<Avalonia.Media.Imaging.Bitmap> Pictures => _board.Folder is null ? [] :
+        Workbench.Core.Pictures.InDescription(_board.Folder, Description).Select(p =>
+        {
+            try { using var f = File.OpenRead(p); return Avalonia.Media.Imaging.Bitmap.DecodeToWidth(f, 720); }
+            catch (Exception) { return null; }
+        }).OfType<Avalonia.Media.Imaging.Bitmap>().ToList();
+    public bool HasPictures => Pictures.Count > 0;
+    partial void OnDescriptionChanged(string value) => OnPropertyChanged(nameof(HasPictures));
+
+    /// <summary>A picture was chosen: copy it into the board's images folder and add it to the end of the description.</summary>
+    public void AddPicture(string path)
+    {
+        if (_board.Folder is null) return;
+        try
+        {
+            var rel = Workbench.Core.Pictures.Add(_board.Folder, path);
+            Description = (Description.TrimEnd() + $"\n\n![]({rel})").TrimStart();
+            Error = "";
+        }
+        catch (Exception e) { Error = e.Message; }
+    }
     [ObservableProperty] public partial string LabelsText { get; set; }
     [ObservableProperty] public partial string Priority { get; set; }
     [ObservableProperty] public partial string Error { get; set; } = "";
@@ -757,4 +779,5 @@ public partial class CardEditor : ObservableObject
 public static class Bools
 {
     public static readonly Avalonia.Data.Converters.FuncValueConverter<bool, string> CreateOrSave = new(isNew => isNew ? "Create" : "Save");
+    public static readonly Avalonia.Data.Converters.FuncValueConverter<bool, string> ChangeOrAddPicture = new(has => has ? "Change picture…" : "Add picture…");
 }

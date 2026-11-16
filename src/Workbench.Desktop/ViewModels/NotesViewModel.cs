@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Avalonia.Input;
+using Avalonia.Media.Imaging;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -13,6 +14,18 @@ namespace Workbench.Desktop.ViewModels;
 /// notes (after the first, a plain click picks too); picked notes can be made tickets in one go.</summary>
 public partial class NotesViewModel : ObservableObject
 {
+    /// <summary>A note's picture decoded to a width, or null when it has none or the file is missing or isn't an image.</summary>
+    public static Bitmap? LoadPicture(string folder, string image, int width)
+    {
+        try
+        {
+            if (Pictures.Resolve(folder, image) is not { } path || !File.Exists(path)) return null;
+            using var f = File.OpenRead(path);
+            return Bitmap.DecodeToWidth(f, width);
+        }
+        catch (Exception) { return null; }
+    }
+
     static readonly Dictionary<string, Color> Paper = new(StringComparer.OrdinalIgnoreCase)
     {
         ["yellow"] = Color.Parse("#f2dd7a"), ["pink"] = Color.Parse("#f2a7c3"), ["blue"] = Color.Parse("#9fd0f2"),
@@ -411,6 +424,12 @@ public sealed partial class NoteViewModel(Note note, NotesViewModel wall, string
     public Note Note { get; } = note;
     public string Id => Note.Id;
     public string Text => Note.Text;
+    /// <summary>The note's picture, small (it sits on a polaroid), or null: a note with one is drawn as a polaroid.</summary>
+    public Bitmap? Picture { get; } = NotesViewModel.LoadPicture(wall.Folder, note.Image, 260);
+    public bool HasPicture => Picture is not null;
+    /// <summary>What the paper is: the note's colour, or a polaroid's white card when it has a picture (the colour shows as a strip).</summary>
+    public IBrush Paper => HasPicture ? PolaroidWhite : Brush;
+    static readonly IBrush PolaroidWhite = new SolidColorBrush(Color.Parse("#f7f4ec"));
     public IBrush Brush { get; } = NotesViewModel.BrushFor(note.Colour);
     public string Meta => string.Join(" ", Note.Tags.Select(t => "#" + t));
     /// <summary>"→ WOR-0015 · In Progress": the ticket and where it is on the board ("not found" once it's gone).</summary>
@@ -436,7 +455,20 @@ public partial class NoteEditor : ObservableObject
     [ObservableProperty] public partial string TagsText { get; set; }
     [ObservableProperty] public partial string Column { get; set; }
     [ObservableProperty] public partial string Error { get; set; } = "";
+    /// <summary>The note's picture as a name under the notes folder's images folder ("" for none).</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Picture), nameof(HasPicture))] public partial string Image { get; set; } = "";
+    public Bitmap? Picture => NotesViewModel.LoadPicture(_wall.Folder, Image, 600);
+    public bool HasPicture => Picture is not null;
     public IBrush Brush => NotesViewModel.BrushFor(Colour);
+
+    /// <summary>A picture was chosen: copy it into the wall's images folder and show it.</summary>
+    public void SetPicture(string path)
+    {
+        try { Image = Pictures.Add(_wall.Folder, path); Error = ""; }
+        catch (Exception e) { Error = e.Message; }
+    }
+
+    [RelayCommand] void RemovePicture() => Image = "";
     public string Ticket => _note?.Ticket ?? "";
     public bool CanMakeTicket => _note is not null && _note.Ticket.Length == 0;
     public bool HasTicket => Ticket.Length > 0;
@@ -456,11 +488,12 @@ public partial class NoteEditor : ObservableObject
         Colour = note?.Colour ?? "yellow";
         TagsText = note is null ? "" : string.Join(", ", note.Tags);
         Column = note?.Column ?? wall.ColumnNames[0];
+        Image = note?.Image ?? "";
     }
 
     Note Current() => new(_note?.Id ?? NoteStore.NewId(), Text.Trim(), Column, Colour,
         TagsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(t => t.TrimStart('#')).ToList(),
-        _note?.Created ?? "", _note?.Ticket ?? "");
+        _note?.Created ?? "", _note?.Ticket ?? "", Image);
 
     [RelayCommand]
     void Save()
