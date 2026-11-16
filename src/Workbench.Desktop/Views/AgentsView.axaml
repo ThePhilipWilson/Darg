@@ -58,7 +58,10 @@
           IsVisible="{Binding $parent[UserControl].((vm:AgentsViewModel)DataContext).Shown, Converter={x:Static ObjectConverters.IsNotNull}}">
       <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
         <DockPanel>
-          <Button DockPanel.Dock="Right" Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding Working}"/>
+          <Button DockPanel.Dock="Right" Content="Close" Command="{Binding CloseCommand}" IsEnabled="{Binding Open}" Margin="6,0,0,0"
+                  ToolTip.Tip="End this agent's Claude session. The agent stays listed; send it a message to carry on." AutomationProperties.Name="Close session"/>
+          <Button DockPanel.Dock="Right" Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding Working}"
+                  ToolTip.Tip="Stop the turn in progress; the session stays open"/>
           <!-- change the session as it runs: from its next turn (a saved agent starts with these when it resumes) -->
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="0,0,10,0">
             <ComboBox ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding ModelChoice}" FontSize="12" MinHeight="0" Padding="8,3"
