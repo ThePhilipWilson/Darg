@@ -245,8 +245,14 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
             Boards: each board is a folder with board.json (columns [{id,name}], prefix, nextId, order {list id: [card ids]}) and items/<ID> - <title>.md. A card file starts "# <ID>: <title>", then "- **Status:** ...", "- **Priority:** ...", "- **Type:** ...", "- **Labels:** a, b", "- **Created:** ...", "- **Done:** ...", then "## Description". Status is Backlog, Completed or a column's name. To add a card: the next ID is past nextId and every ID in items, bump nextId, add the ID to order.backlog, and name the file "<ID> - <title>.md" (slashes as spaces, no : ? * < > | ", at most 60 characters of title).
             Notes: one .md per note, with properties at the top between --- lines (column, colour, tags: [a, b], created, ticket) and the text below.
             Docs are Obsidian notes: moving one breaks [[links]] to it unless you update them too.
-            Change these files directly; Workbench shows changes within a second. Ask with AskUserQuestion before deleting anything or before changing more than 20 files. Never commit or push.
+            Change these files directly; Workbench shows changes within a second. Ask with AskUserQuestion before deleting anything or before changing more than 20 files.
             """);
+        // commit and push rules are per folder: Workbench's own repo is pushed freely, the live site's needs a yes
+        var rules = Projects.SelectMany(Commits.Describe).Distinct().ToList();
+        if (rules.Count > 0)
+            sb.AppendLine("Commits and pushes, per folder (a folder's rule covers what's inside it; the deepest folder's wins): " + string.Join(" ", rules) +
+                          " Anywhere else, never commit or push.");
+        else sb.AppendLine("Never commit or push.");
         if (ArtifactHost.Server is { } server)
             sb.AppendLine($$"""
                 Workbench API: for anything that isn't a file edit (showing Philip a card, doc, section or agent, listing agents and reading their transcripts, starting an agent or putting one on a card, sending an agent a message, closing agents, running a flow or a saved command), use the API with curl. TOKEN is the text of the file artifact-token in your working folder. GET {{server.Root}}api/TOKEN lists the commands and what each takes; read it before your first call in a chat. Run one with POST {{server.Root}}api/TOKEN/NAME and its arguments as a JSON object in the body (curl -s -X POST URL -d '{"project":"x"}'). A 400 answer says what was wrong; correct it and try again.

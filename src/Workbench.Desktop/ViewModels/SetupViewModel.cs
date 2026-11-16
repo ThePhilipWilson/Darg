@@ -116,6 +116,7 @@ public partial class ProjectSetup : ObservableObject
     [ObservableProperty] public partial string ReposText { get; set; }
     [ObservableProperty] public partial string GitHubAccount { get; set; }
     [ObservableProperty] public partial string CommandsText { get; set; }
+    [ObservableProperty] public partial string CommitsText { get; set; }
     /// <summary>What was worked out from the folder, for a project just added from one.</summary>
     public string Found { get; init; } = "";
     public bool HasFound => Found.Length > 0;
@@ -134,6 +135,7 @@ public partial class ProjectSetup : ObservableObject
         ReposText = string.Join(Environment.NewLine, p.Repos);
         GitHubAccount = p.GitHub ?? "";
         CommandsText = SavedCommand.Render(p.Commands);
+        CommitsText = Core.Commits.Render(p.Commits);
         _keep = p;
         foreach (var f in Core.Features.All) Features.Add(new FeatureTick(f, p.Uses(f)));
         Swatches = SetupViewModel.Palette.Select(c => new SwatchChoice(new SolidColorBrush(Avalonia.Media.Color.Parse(c)), new RelayCommand(() => Color = c))).ToList();
@@ -153,6 +155,7 @@ public partial class ProjectSetup : ObservableObject
             GitHub = GitHubAccount.Trim().Length > 0 ? GitHubAccount.Trim() : null,
             // a command's own folder isn't editable here yet: keep it when the command is unchanged
             Commands = SavedCommand.Parse(CommandsText).Select(c => _keep.Commands.FirstOrDefault(o => o.Name == c.Name && o.Command == c.Command) ?? c).ToList(),
+            Commits = Core.Commits.ParseText(CommitsText),
             Preview = _keep.Preview, // not editable here yet: set in instance.json
             // every feature ticked is stored as "all", so features added later are on by default
             Features = on.Count == Core.Features.All.Length ? [] : on,

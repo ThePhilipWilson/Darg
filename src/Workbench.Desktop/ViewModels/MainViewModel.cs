@@ -350,7 +350,8 @@ public partial class ProjectViewModel : ObservableObject
                     .Select(x => x.CardId ?? $"\"{x.Name}\"");
                 var others = alongside.Concat(busy).Where(x => x != card.Id).Distinct().ToList();
                 var repo = Directory.Exists(Path.Combine(folder, ".git")) || File.Exists(Path.Combine(folder, ".git")) ? folder : null;
-                return AgentsViewModel.CardPrompt(Name, card, file, others, repo);
+                var commits = Core.Commits.For(Config, folder) is { } rule ? Core.Commits.Describe(rule, folder) : null;
+                return AgentsViewModel.CardPrompt(Name, card, file, others, repo, commits);
             }
             // what picks a card agent's model profile: the card's words, type and labels, not the house rules around them
             static AgentJob CardJob(Card card) => new(JobKinds.Card, $"{card.Title}\n\n{card.Description}".Trim(), card.Type, card.Labels);

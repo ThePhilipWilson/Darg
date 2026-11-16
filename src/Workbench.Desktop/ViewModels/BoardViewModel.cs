@@ -79,14 +79,14 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         var busy = BoardStore.List(_project.Boards)
             .SelectMany(b => BoardStore.ReadCards(Path.Combine(_project.Boards, b)))
             .Where(c => AgentFor?.Invoke(c.Id) is not null).Select(c => c.Id).ToList();
-        StartAgent(SortPrompt(_project.Name, _project.Boards, BoardStore.List(_project.Boards), busy, hint),
+        StartAgent(SortPrompt(_project.Name, _project.Boards, BoardStore.List(_project.Boards), busy, hint, Core.Commits.For(_project, _project.Boards)),
             _project.Boards, $"Sort {_project.Name}'s cards into boards");
         Maker = null;
     }
 
     /// <summary>What the sorting agent is asked: read the cards, propose boards, ask, then make them in
     /// Tatty's format and move the cards (IDs kept, cards with a live agent left alone).</summary>
-    public static string SortPrompt(string projectName, string boardsFolder, IReadOnlyList<string> boards, IReadOnlyList<string> busy, string? hint)
+    public static string SortPrompt(string projectName, string boardsFolder, IReadOnlyList<string> boards, IReadOnlyList<string> busy, string? hint, CommitRule? commits = null)
     {
         var lines = new List<string>
         {
@@ -109,7 +109,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             "remove its ID from every list in the old board.json's order, and add it to the new board.json's order under the list " +
             "it belongs in: the column whose name matches its Status, else backlog (then set its Status line to Backlog).",
             "   - Don't renumber, rename or delete any card. If a board ends up empty, leave it and say so; I'll decide.",
-            "5. When you stop, list the boards and what moved where. Workbench shows the changes as you make them. Never commit or push.",
+            "5. When you stop, list the boards and what moved where. Workbench shows the changes as you make them. " +
+            (commits is { } rule ? Core.Commits.Describe(rule, boardsFolder) : "Never commit or push."),
         };
         if (busy.Count > 0)
             lines.AddRange(["", $"Agents are working on {string.Join(", ", busy)} right now: leave those cards on the board they're on (their agents hold the file's path)."]);
