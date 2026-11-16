@@ -17,6 +17,9 @@ public partial class AgentsViewModel(ProjectConfig project) : ObservableObject
     /// <summary>True while any agent here waits on the person (shown on the project's tab).</summary>
     [ObservableProperty] public partial bool NeedingYou { get; set; }
     public event Action<AgentViewModel>? AgentNeedsYou;
+    /// <summary>Something the person may want to hear about: (agent, what happened, detail).</summary>
+    public event Action<AgentViewModel, string, string>? Notify;
+    public AgentViewModel? Find(string id) => Agents.FirstOrDefault(a => a.Id == id);
 
     [RelayCommand]
     void StartAgent()
@@ -36,6 +39,7 @@ public partial class AgentsViewModel(ProjectConfig project) : ObservableObject
             NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
             if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
         };
+        agent.Notify += (what, detail) => Notify?.Invoke(agent, what, detail);
         Agents.Add(agent);
         Selected = agent;
     }
@@ -52,6 +56,8 @@ public partial class AgentViewModel : ObservableObject
     AgentSession? _session;
 
     public ObservableCollection<TranscriptItem> Items { get; } = [];
+    public string Id { get; } = Guid.NewGuid().ToString("N")[..10];
+    public event Action<string, string>? Notify;
     public string Name { get; }
     public string Cwd { get; }
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working))] public partial AgentState State { get; set; }
@@ -103,17 +109,23 @@ public partial class AgentViewModel : ObservableObject
                 tool.SetResult(r.Text, r.IsError);
                 break;
             case PermissionAsked { ToolName: "AskUserQuestion" } q:
-                Items.Add(new QuestionItem(q, this));
+                var question = new QuestionItem(q, this);
+                Items.Add(question);
                 State = AgentState.NeedsYou;
+                Notify?.Invoke("has a question", question.Questions.FirstOrDefault()?.Question ?? "");
                 break;
             case PermissionAsked p:
-                Items.Add(new PermissionItem(p, this));
+                var perm = new PermissionItem(p, this);
+                Items.Add(perm);
                 State = AgentState.NeedsYou;
+                Notify?.Invoke($"wants to use {p.ToolName}", perm.Summary);
                 break;
             case TurnFinished f:
                 if (f.IsError) Items.Add(new NoteItem(f.Text, true));
                 Items.Add(new NoteItem(f.CostUsd is { } cost ? $"Turn done · ${cost:0.000}" : "Turn done", false));
                 State = AgentState.Idle;
+                Notify?.Invoke(f.IsError ? "stopped with an error" : "finished",
+                    Items.OfType<TextItem>().LastOrDefault()?.Text ?? f.Text);
                 break;
             case SessionExited x:
                 Items.Add(new NoteItem(x.ExitCode == 0 ? "Session ended" : $"Session ended ({x.ExitCode}) {Last(x.Stderr)}", x.ExitCode != 0));

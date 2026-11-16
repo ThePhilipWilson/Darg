@@ -17,7 +17,14 @@ public partial class MainViewModel : ObservableObject
     {
         var config = InstanceConfig.Load();
         InstanceFile = InstanceConfig.FilePath();
-        foreach (var p in config.Projects) Projects.Add(new ProjectViewModel(p));
+        foreach (var p in config.Projects)
+        {
+            var vm = new ProjectViewModel(p);
+            if (vm.Agents is { } agents)
+                agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
+            Projects.Add(vm);
+        }
+        Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
         Selected = Projects.FirstOrDefault();
         DevHooks();
     }
@@ -32,6 +39,30 @@ public partial class MainViewModel : ObservableObject
         var prompt = Environment.GetEnvironmentVariable("WORKBENCH_AGENT");
         if (string.IsNullOrWhiteSpace(prompt) || Selected.Agents is null) return;
         Selected.Agents.Start(prompt, Environment.GetEnvironmentVariable("WORKBENCH_AGENT_CWD"));
+    }
+
+    /// <summary>Set by the window: whether it is the active window.</summary>
+    public bool WindowActive { get; set; }
+    /// <summary>Raised when the window should come to the front (a notification was clicked).</summary>
+    public event Action? BringToFront;
+
+    /// <summary>A notification, unless the person is already looking at that agent.</summary>
+    void Tell(ProjectViewModel project, AgentViewModel agent, string what, string detail)
+    {
+        var looking = WindowActive && Selected == project && project.OnAgents && project.Agents?.Selected == agent;
+        if (!looking) Notifier.Show(project.Config.Id, agent.Id, $"{project.Name}: {what}", agent.Name, detail);
+    }
+
+    /// <summary>Open a project's agent: its tab, the agents section, that agent, the window to the front.</summary>
+    public void OpenAgent(string projectId, string agentId)
+    {
+        var project = Projects.FirstOrDefault(p => p.Config.Id == projectId);
+        var agent = project?.Agents?.Find(agentId);
+        if (project is null || agent is null) { BringToFront?.Invoke(); return; }
+        Selected = project;
+        project.OpenCommand.Execute(nameof(Section.Agents));
+        project.Agents!.Selected = agent;
+        BringToFront?.Invoke();
     }
 
     partial void OnSelectedChanged(ProjectViewModel? value)

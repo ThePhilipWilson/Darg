@@ -12,6 +12,7 @@ class Program
     public static void Main(string[] args)
     {
         Workbench.Core.ChildProcesses.TieToThisProcess();
+        Notifier.Init();
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
