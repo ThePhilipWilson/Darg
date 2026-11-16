@@ -9,9 +9,9 @@ public sealed class ArtifactTests : IDisposable
     readonly string _home = Directory.CreateTempSubdirectory("wb-art-").FullName;
     static readonly HttpClient Http = new();
 
-    string Make(string agent, string name, string html)
+    string Make(string agent, string name, string html, string project = "alpha")
     {
-        var f = Path.Combine(ArtifactStore.AgentFolder("alpha", agent, _home), name);
+        var f = Path.Combine(ArtifactStore.AgentFolder(project, agent, _home), name);
         File.WriteAllText(f, html);
         return f;
     }
@@ -76,6 +76,53 @@ public sealed class ArtifactTests : IDisposable
         // (http.sys may refuse an encoded slash itself, 403, before the server sees it: either way, not served)
         foreach (var sneaky in new[] { "..%2F..%2F..%2F..%2Fsecret.txt", "..%5C..%5C..%5C..%5Csecret.txt", "%2E%2E/%2E%2E/%2E%2E/%2E%2E/secret.txt" })
             Assert.False((await Http.GetAsync($"{server.Root}a/alpha/a1/{sneaky}")).IsSuccessStatusCode, sneaky);
+    }
+
+    [Fact]
+    public void An_image_review_is_an_artifact_titled_from_its_json()
+    {
+        var titled = Make("a1", "round-3.review.json", "{\"title\": \"  Outfit   round 3 \", \"rows\": []}", "example");
+        var bare = Make("a1", "hands_fix.review.json", "not json at all", "example");
+        Make("a1", "data.json", "{}", "example");
+
+        Assert.Equal(["Outfit round 3", "hands fix"], ArtifactStore.List("example", _home).Select(a => a.Title).Order().Reverse());
+        Assert.Equal(("example", "a1"), ArtifactStore.Owner(titled, _home));
+        Assert.Equal(("example", "a1"), ArtifactStore.Owner(bare, _home));
+        Assert.Null(ArtifactStore.Owner(Path.Combine(Path.GetDirectoryName(titled)!, "data.json"), _home));
+    }
+
+    [Fact]
+    public void A_review_page_carries_its_rows_and_nothing_in_them_can_end_the_script()
+    {
+        var page = ArtifactServer.ReviewPage("{\"rows\": [{\"id\": \"cat\", \"note\": \"</script><script>alert(1)</script>\", \"candidates\": [\"D:/x/a.png\"]}]}", "Fish & <chips>");
+        Assert.Contains("<title>Fish &amp; &lt;chips&gt;</title>", page);
+        Assert.Contains("D:/x/a.png", page);
+        Assert.DoesNotContain("alert(1)</script>", page);
+        Assert.Contains(@"</script>", page);
+        Assert.Contains("const ERROR = null;", page);
+
+        var broken = ArtifactServer.ReviewPage("{\"rows\": [", "x");
+        Assert.Contains("const DATA = null;", broken);
+        Assert.Contains("JSON doesn", broken);
+        Assert.Contains("has no rows", ArtifactServer.ReviewPage("{\"title\": \"x\"}", "x"));
+    }
+
+    [Fact]
+    public async Task A_review_is_served_as_the_picker_with_the_bridge_and_its_picks_come_back()
+    {
+        Make("a1", "round.review.json", "{\"title\": \"Round\", \"folder\": \"D:/run\", \"rows\": [{\"id\": \"cat\", \"candidates\": [\"cat/seed1.png\"]}]}", "example");
+        using var server = ArtifactServer.Start(_home, FreePort());
+        var replies = new List<ArtifactReply>();
+        server.Reply += replies.Add;
+
+        var page = await Http.GetStringAsync(server.Url(ArtifactStore.List("example", _home).Single()));
+        Assert.Contains("Send picks", page);
+        Assert.Contains("cat/seed1.png", page);
+        var path = System.Text.RegularExpressions.Regex.Match(page, @"fetch\('([^']+)'").Groups[1].Value;
+        Assert.EndsWith("/example/a1/round.review.json", path);
+
+        await Http.PostAsync(server.Root.TrimEnd('/') + path, new StringContent("cat: seed1.png"));
+        Assert.Equal(new ArtifactReply("example", "a1", "round.review.json", "cat: seed1.png"), Assert.Single(replies));
     }
 
     [Fact]
