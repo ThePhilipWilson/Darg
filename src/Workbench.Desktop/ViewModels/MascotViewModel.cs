@@ -33,11 +33,25 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
 
     static string Store => AgentStore.Folder("~bench");
 
-    /// <summary>The chat list from disk, and the newest chat open (from an earlier run, to carry on).</summary>
+    /// <summary>The chat list from disk, and the newest chat open (from an earlier run, to carry on).
+    /// Chats with no real title yet (older ones were "Bench" or a cut-off first message) get one.</summary>
     public void Restore()
     {
         ListChats();
         if (Chats.FirstOrDefault() is { } newest) SelectedChat = newest;
+        foreach (var r in AgentStore.List(Store).Where(r => NeedsTitle(r.Name)))
+            if (r.Items.FirstOrDefault(i => i.Kind == "user")?.Text is { } first) _ = Retitle(r.Id, first);
+    }
+
+    static bool NeedsTitle(string name) => name is "Bench" or "" || name.EndsWith('…');
+
+    /// <summary>Give a chat a short title (Haiku, else a guess from the words) and save it.</summary>
+    async Task Retitle(string id, string firstMessage)
+    {
+        var title = await ChatTitle.Make(firstMessage);
+        if (Agent?.Id == id) { Agent.Name = title; Agent.Save(); }
+        else if (AgentStore.List(Store).FirstOrDefault(r => r.Id == id) is { } r) { r.Name = title; AgentStore.Save(Store, r); }
+        ListChats();
     }
 
     void ListChats()
@@ -106,10 +120,11 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         {
             var home = InstanceConfig.Folder();
             Directory.CreateDirectory(home);
-            var name = text.Length > 40 ? text[..40].TrimEnd() + "…" : text;
-            Agent = Wire(new AgentViewModel(home, sent, name: name, args: Args(), shown: text) { StoreFolder = Store });
+            // a quick title from the words now, a better one from Haiku a few seconds later
+            Agent = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text) { StoreFolder = Store });
             Agent.Save();
             ListChats();
+            _ = Retitle(Agent.Id, text);
             return;
         }
         Agent.Say(text, sent);

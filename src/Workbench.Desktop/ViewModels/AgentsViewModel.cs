@@ -20,6 +20,16 @@ public partial class AgentsViewModel : ObservableObject
         _store = AgentStore.Folder(project.Id.Length > 0 ? project.Id : "default");
         foreach (var r in AgentStore.List(_store)) Add(new AgentViewModel(r, _store), select: false);
         Selected = Agents.FirstOrDefault();
+        // older agents were named by cutting off their first message: give those a proper title
+        foreach (var a in Agents.Where(a => a.CardId is null && a.Name.EndsWith('…')).ToList())
+            if (a.Items.OfType<UserItem>().FirstOrDefault()?.Text is { } first) _ = Retitle(a, first);
+    }
+
+    /// <summary>Give an agent a short title (Haiku, else a guess from the words) and save it.</summary>
+    static async Task Retitle(AgentViewModel a, string firstMessage)
+    {
+        a.Name = await ChatTitle.Make(firstMessage);
+        a.Save();
     }
 
     public ObservableCollection<AgentViewModel> Agents { get; } = [];
@@ -100,9 +110,10 @@ public partial class AgentsViewModel : ObservableObject
 
     public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null)
     {
-        var agent = new AgentViewModel(string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd, prompt, cardId, name) { StoreFolder = _store };
+        var agent = new AgentViewModel(string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd, prompt, cardId, name ?? ChatTitle.Guess(prompt)) { StoreFolder = _store };
         Add(agent, select: true);
         agent.Save();
+        if (name is null) _ = Retitle(agent, prompt); // a card's agent is already named for the card
         return agent;
     }
 
@@ -136,7 +147,7 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>The board card this agent was started on, if any.</summary>
     public string? CardId { get; }
     public event Action<string, string>? Notify;
-    public string Name { get; }
+    [ObservableProperty] public partial string Name { get; set; }
     public string Cwd { get; }
     /// <summary>Claude Code's id for the conversation: what --resume takes.</summary>
     public string? SessionId { get; private set; }
