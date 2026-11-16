@@ -3,6 +3,18 @@
              xmlns:vm="using:Workbench.Desktop.ViewModels"
              x:Class="Workbench.Desktop.Views.NotesView"
              x:DataType="vm:NotesViewModel">
+  <UserControl.Styles>
+    <!-- a column's ⋯: faint until the pointer is on the column -->
+    <Style Selector="Button.head">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="6,0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="Opacity" Value="0.4"/>
+    </Style>
+    <Style Selector="Border.wallcol:pointerover Button.head"><Setter Property="Opacity" Value="1"/></Style>
+  </UserControl.Styles>
   <Panel>
   <Grid ColumnDefinitions="*,Auto">
     <Grid RowDefinitions="Auto,Auto,*">
@@ -49,13 +61,41 @@
       </Border>
 
       <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Background="#16181c">
+        <StackPanel Orientation="Horizontal">
         <ItemsControl ItemsSource="{Binding Columns}" Margin="16">
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="18"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:NoteColumn">
               <Border Width="250" Classes="wallcol" Tag="{Binding Name}" Background="Transparent">
                 <DockPanel>
-                  <TextBlock DockPanel.Dock="Top" Text="{Binding Name}" Classes="dim" FontSize="11" FontWeight="SemiBold" Margin="2,0,0,10"/>
+                  <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="2,0,0,10">
+                    <DockPanel IsVisible="{Binding IsHeaderPlain}">
+                      <Button DockPanel.Dock="Right" Classes="head" Content="⋯" IsVisible="{Binding IsEditable}" ToolTip.Tip="Rename, move or remove this column"
+                              AutomationProperties.Name="{Binding Name, StringFormat='{}{0} menu'}">
+                        <Button.Flyout>
+                          <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuItem Header="Rename" Command="{Binding StartRenameCommand}"/>
+                            <MenuItem Header="Move left" Command="{Binding ShiftLeftCommand}" IsVisible="{Binding CanShiftLeft}"/>
+                            <MenuItem Header="Move right" Command="{Binding ShiftRightCommand}" IsVisible="{Binding CanShiftRight}"/>
+                            <MenuItem Header="Remove column…" Command="{Binding AskRemoveCommand}" IsVisible="{Binding CanRemove}"/>
+                          </MenuFlyout>
+                        </Button.Flyout>
+                      </Button>
+                      <TextBlock Classes="dim wallname" Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"
+                                 Background="Transparent" Tag="{Binding}"/>
+                    </DockPanel>
+                    <TextBox Classes="rename" Text="{Binding EditName}" IsVisible="{Binding IsRenaming}" FontSize="12" Tag="{Binding}"
+                             ToolTip.Tip="Enter to save, Esc to leave it as it was. Its notes move with it."/>
+                    <StackPanel Spacing="6" IsVisible="{Binding ConfirmingRemove}">
+                      <TextBlock Text="{Binding RemoveQuestion}" TextWrapping="Wrap" FontSize="12"/>
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Remove" Command="{Binding RemoveCommand}" Foreground="{StaticResource Bad}"/>
+                        <Button Content="Keep it" Command="{Binding KeepItCommand}"/>
+                      </StackPanel>
+                    </StackPanel>
+                    <TextBlock Classes="bad" Text="{Binding Error}" TextWrapping="Wrap" FontSize="11"
+                               IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                  </StackPanel>
                   <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding Notes}" Padding="4,4,8,4">
                       <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="14"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -85,6 +125,9 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        <Button VerticalAlignment="Top" Content="+ Column" Command="{Binding AddColumnCommand}" Margin="0,12,16,16"
+                ToolTip.Tip="Add a column to the wall, and name it"/>
+        </StackPanel>
       </ScrollViewer>
     </Grid>
 

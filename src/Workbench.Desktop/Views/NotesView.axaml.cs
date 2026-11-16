@@ -10,6 +10,8 @@ namespace Workbench.Desktop.Views;
 /// Ctrl- or Shift-click picks it. Ctrl+A picks every note showing, Escape unpicks them.</summary>
 public partial class NotesView : UserControl
 {
+    static NotesView() => RenameBox.Hook();
+
     public NotesView()
     {
         InitializeComponent();
@@ -19,6 +21,17 @@ public partial class NotesView : UserControl
             click: (item, keys) => { if (DataContext is NotesViewModel wall && item is NoteViewModel n) wall.Click(n, keys); },
             ordered: false); // notes sit newest first in a column; only the column matters
         BoardView.ChipDoubleClicks(this);
+        // a column's name: double-click to rename; in the box, Enter saves and Esc leaves it as it was
+        AddHandler(DoubleTappedEvent, (_, e) =>
+        {
+            if (e.Source is TextBlock { Tag: NoteColumn { IsEditable: true } col } t && t.Classes.Contains("wallname")) { col.StartRenameCommand.Execute(null); e.Handled = true; }
+        });
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Source is not TextBox { Tag: NoteColumn col } box || !box.Classes.Contains("rename")) return;
+            if (e.Key == Key.Enter) { col.CommitRenameCommand.Execute(null); e.Handled = true; }
+            else if (e.Key == Key.Escape) { col.CancelRenameCommand.Execute(null); e.Handled = true; }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         // the post-it's text: Enter posts it; Shift+Enter, or a backslash typed just before Enter, is a new line
         PaperBox.AddHandler(KeyDownEvent, (_, e) =>
         {
