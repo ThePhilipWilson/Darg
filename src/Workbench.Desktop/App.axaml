@@ -189,6 +189,15 @@
       <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
       <Setter Property="Background" Value="#20242c"/>
     </Style>
+    <!-- a post-it picked for a batch (Ctrl- or Shift-click, Pick all) -->
+    <Style Selector="Border.postit">
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="3"/>
+    </Style>
+    <!-- white: it shows against the dark wall whatever colour the paper is -->
+    <Style Selector="Border.postit.picked">
+      <Setter Property="BorderBrush" Value="#f4f4f4"/>
+    </Style>
     <Style Selector="Border.wallcol.droptarget">
       <Setter Property="Background" Value="#22e0a84a"/>
       <Setter Property="CornerRadius" Value="8"/>

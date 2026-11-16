@@ -104,5 +104,22 @@ public sealed class NoteStoreTests : IDisposable
         Assert.Equal("T-0001", NoteStore.List(_dir).Single(x => x.Id == "n1").Ticket);
     }
 
+    [Fact]
+    public void Many_notes_become_tickets_oldest_first_skipping_ones_that_have_one()
+    {
+        var board = Directory.CreateDirectory(Path.Combine(_dir, "board")).FullName;
+        File.WriteAllText(Path.Combine(board, "board.json"), """{"columns":[],"prefix":"T","nextId":1,"order":{}}""");
+        var newer = NoteStore.Save(_dir, new Note("b", "newer", "Loose", "yellow", [], "2026-11-16 12:00", ""));
+        var older = NoteStore.Save(_dir, new Note("a", "older", "Loose", "yellow", [], "2026-11-15 09:00", ""));
+        var done = NoteStore.Save(_dir, new Note("c", "done", "Loose", "yellow", [], "2026-11-14 09:00", "T-0099"));
+        var cards = NoteStore.MakeTickets(_dir, [newer, done, older], board);
+        Assert.Equal(["older", "newer"], cards.Select(c => c.Title));
+        Assert.Equal(["T-0001", "T-0002"], cards.Select(c => c.Id));
+        var notes = NoteStore.List(_dir).ToDictionary(n => n.Id, n => n.Ticket);
+        Assert.Equal("T-0001", notes["a"]);
+        Assert.Equal("T-0002", notes["b"]);
+        Assert.Equal("T-0099", notes["c"]);
+    }
+
     public void Dispose() => Directory.Delete(_dir, true);
 }

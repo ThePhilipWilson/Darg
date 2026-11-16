@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -8,7 +9,8 @@ using Workbench.Core;
 namespace Workbench.Desktop.ViewModels;
 
 /// <summary>The notes wall: post-its in columns, filtered by text, tag and colour, edited in a side
-/// panel, kept live from disk (a note written in Obsidian shows up here).</summary>
+/// panel, kept live from disk (a note written in Obsidian shows up here). Ctrl- or Shift-click picks
+/// notes (after the first, a plain click picks too); picked notes can be made tickets in one go.</summary>
 public partial class NotesViewModel : ObservableObject
 {
     static readonly Dictionary<string, Color> Paper = new(StringComparer.OrdinalIgnoreCase)
@@ -21,6 +23,12 @@ public partial class NotesViewModel : ObservableObject
     readonly FileSystemWatcher? _watch;
     readonly DispatcherTimer _debounce;
     List<Note> _all = [];
+    /// <summary>Picked note ids. Only ever notes that are showing: a filter that hides one unpicks it, so
+    /// a batch never touches a note you can't see.</summary>
+    readonly HashSet<string> _picked = [];
+    /// <summary>What was just done ("Made 3 tickets…"): it stays in the status line through the reload the
+    /// file watcher does a moment later, until the filter changes or a note is picked.</summary>
+    string? _notice;
 
     public string Folder { get; }
     /// <summary>Set by the project: the board folder a note's ticket goes to (null when there's none).</summary>
@@ -37,6 +45,19 @@ public partial class NotesViewModel : ObservableObject
     [ObservableProperty] public partial string Status { get; set; } = "";
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsEditing))] public partial NoteEditor? Editor { get; set; }
     public bool IsEditing => Editor is not null;
+    public int PickedCount => _picked.Count;
+    public bool HasPicked => _picked.Count > 0;
+    public string PickedText => _picked.Count == 1 ? "1 picked" : $"{_picked.Count} picked";
+    /// <summary>"Make 3 tickets", counting only picked notes that don't have one yet.</summary>
+    public string MakeTicketsText
+    {
+        get
+        {
+            var n = Shown().Count(v => v.IsPicked && !v.HasTicket);
+            return n == 1 ? "Make 1 ticket" : $"Make {n} tickets";
+        }
+    }
+    public bool CanMakeTickets => Shown().Any(v => v.IsPicked && !v.HasTicket);
 
     public NotesViewModel(string folder)
     {
@@ -60,7 +81,7 @@ public partial class NotesViewModel : ObservableObject
         catch (Exception e) { Status = $"Can't watch {folder}: {e.Message}"; }
     }
 
-    partial void OnFilterChanged(string value) => Apply();
+    partial void OnFilterChanged(string value) { _notice = null; Apply(); }
 
     public void Reload()
     {
@@ -91,9 +112,73 @@ public partial class NotesViewModel : ObservableObject
             if (!names.Contains(extra, StringComparer.OrdinalIgnoreCase)) names.Add(extra);
         Columns.Clear();
         foreach (var name in names)
-            Columns.Add(new NoteColumn(name, _all.Where(n => n.Column.Equals(name, StringComparison.OrdinalIgnoreCase) && Keep(n)).Select(n => new NoteViewModel(n, this))));
+            Columns.Add(new NoteColumn(name, _all.Where(n => n.Column.Equals(name, StringComparison.OrdinalIgnoreCase) && Keep(n))
+                .Select(n => new NoteViewModel(n, this) { IsPicked = _picked.Contains(n.Id) })));
+        _picked.IntersectWith(Shown().Select(v => v.Id));
+        PickedChanged();
         var shown = Columns.Sum(c => c.Notes.Count);
-        Status = shown == _all.Count ? $"{_all.Count} notes" : $"{shown} of {_all.Count} notes";
+        Status = _notice ?? (shown == _all.Count ? $"{_all.Count} notes" : $"{shown} of {_all.Count} notes");
+    }
+
+    IEnumerable<NoteViewModel> Shown() => Columns.SelectMany(c => c.Notes);
+
+    /// <summary>A click on a post-it: with Ctrl or Shift held, or once anything is picked, it picks or
+    /// unpicks the note; otherwise it opens the note to edit.</summary>
+    public void Click(NoteViewModel n, KeyModifiers keys)
+    {
+        if (!HasPicked && (keys & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Meta)) == 0) { n.Edit(); return; }
+        Editor = null;
+        _notice = null;
+        n.IsPicked = !n.IsPicked;
+        if (n.IsPicked) _picked.Add(n.Id); else _picked.Remove(n.Id);
+        PickedChanged();
+    }
+
+    void PickedChanged()
+    {
+        OnPropertyChanged(nameof(PickedCount));
+        OnPropertyChanged(nameof(HasPicked));
+        OnPropertyChanged(nameof(PickedText));
+        OnPropertyChanged(nameof(MakeTicketsText));
+        OnPropertyChanged(nameof(CanMakeTickets));
+    }
+
+    /// <summary>Pick every note showing (the filter decides what "all" is).</summary>
+    [RelayCommand]
+    void PickAll()
+    {
+        Editor = null;
+        foreach (var v in Shown()) { v.IsPicked = true; _picked.Add(v.Id); }
+        PickedChanged();
+        _notice = null;
+        Apply();
+    }
+
+    [RelayCommand]
+    public void ClearPicked()
+    {
+        foreach (var v in Shown()) v.IsPicked = false;
+        _picked.Clear();
+        PickedChanged();
+    }
+
+    [RelayCommand]
+    void MakeTickets()
+    {
+        var board = TicketBoard?.Invoke();
+        if (board is null) { Status = "This project has no board to put tickets on."; return; }
+        var notes = _all.Where(n => _picked.Contains(n.Id)).ToList();
+        List<Card> cards;
+        try { cards = NoteStore.MakeTickets(Folder, notes, board); }
+        catch (Exception e) { _notice = $"Stopped making tickets: {e.Message}"; Reload(); return; }
+        _picked.Clear();
+        _notice = cards.Count switch
+        {
+            0 => "Those notes already have tickets.",
+            1 => $"Made {cards[0].Id}: {cards[0].Title}",
+            _ => $"Made {cards.Count} tickets: {cards[0].Id} to {cards[^1].Id}",
+        };
+        Reload();
     }
 
     [RelayCommand] void NewNote() => Editor = new NoteEditor(this, null);
@@ -110,8 +195,8 @@ public partial class NotesViewModel : ObservableObject
     internal void Saved(string? message = null)
     {
         Editor = null;
+        _notice = message;
         Reload();
-        if (message is not null) Status = message;
     }
 }
 
@@ -123,8 +208,9 @@ public sealed class NoteColumn(string name, IEnumerable<NoteViewModel> notes)
     public ObservableCollection<NoteViewModel> Notes { get; } = new(notes);
 }
 
-public sealed class NoteViewModel(Note note, NotesViewModel wall)
+public sealed partial class NoteViewModel(Note note, NotesViewModel wall) : ObservableObject
 {
+    [ObservableProperty] public partial bool IsPicked { get; set; }
     public Note Note { get; } = note;
     public string Id => Note.Id;
     public string Text => Note.Text;

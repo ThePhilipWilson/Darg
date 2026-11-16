@@ -18,7 +18,7 @@ public partial class BoardView : UserControl
                 if (DataContext is BoardViewModel board && item is CardViewModel card)
                     board.Move(card, list, (before as CardViewModel)?.Id);
             },
-            click: item => { if (DataContext is BoardViewModel board && item is CardViewModel card) board.Open(card); });
+            click: (item, _) => { if (DataContext is BoardViewModel board && item is CardViewModel card) board.Open(card); });
         ChipDoubleClicks(this);
     }
 

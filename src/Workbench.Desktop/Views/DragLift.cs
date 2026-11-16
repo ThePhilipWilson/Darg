@@ -15,7 +15,8 @@ namespace Workbench.Desktop.Views;
 ///
 /// Items are Borders with <paramref name="itemClass"/> whose Tag is the item; lists are Borders with
 /// <paramref name="listClass"/> whose Tag is the list's id and whose DataContext gives its items in
-/// order (<paramref name="itemsOf"/>). A press and release with no drag is a click.</summary>
+/// order (<paramref name="itemsOf"/>). A press and release with no drag is a click, passed with the keys
+/// held at the press (Ctrl or Shift for picking more than one).</summary>
 public sealed class DragLift
 {
     readonly Control _host;
@@ -23,11 +24,12 @@ public sealed class DragLift
     readonly string _itemClass, _listClass;
     readonly Func<object?, IReadOnlyList<object>> _itemsOf;
     readonly Action<object, string, object?> _drop;
-    readonly Action<object> _click;
+    readonly Action<object, KeyModifiers> _click;
     readonly bool _ordered;
 
     Border? _pressed;
     Point _pressAt, _grab;
+    KeyModifiers _pressKeys;
     bool _dragging;
     Control? _ghost;
     Rectangle? _line;
@@ -37,7 +39,7 @@ public sealed class DragLift
 
     /// <param name="ordered">Whether the drop place within a list matters (a line is shown and "before" passed).</param>
     public DragLift(Control host, Canvas overlay, string itemClass, string listClass, Func<object?, IReadOnlyList<object>> itemsOf,
-        Action<object, string, object?> drop, Action<object> click, bool ordered = true)
+        Action<object, string, object?> drop, Action<object, KeyModifiers> click, bool ordered = true)
     {
         _host = host; _overlay = overlay; _itemClass = itemClass; _listClass = listClass;
         _itemsOf = itemsOf; _drop = drop; _click = click; _ordered = ordered;
@@ -57,6 +59,7 @@ public sealed class DragLift
         if (Up<Control>(e.Source, c => c is Button or TextBox) is not null) { _pressed = null; return; }
         _pressed = Up<Border>(e.Source, b => b.Classes.Contains(_itemClass));
         _pressAt = e.GetPosition(_host);
+        _pressKeys = e.KeyModifiers;
     }
 
     void Moved(object? sender, PointerEventArgs e)
@@ -76,7 +79,7 @@ public sealed class DragLift
     {
         if (_pressed is null) return;
         if (_dragging) { Finish(drop: true); e.Handled = true; }
-        else _click(_pressed.Tag!);
+        else _click(_pressed.Tag!, _pressKeys);
         _pressed = null;
     }
 
