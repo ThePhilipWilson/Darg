@@ -130,10 +130,12 @@ public sealed record PermissionAsked(string RequestId, string ToolName, JsonObje
 public sealed record TurnFinished(bool IsError, string Text, double? CostUsd) : AgentEvent;
 public sealed record SessionExited(int ExitCode, string Stderr) : AgentEvent;
 /// <summary>Claude Code's word on the usage limit (a rate_limit_event). Rejected: out of usage until ResetsAt
-/// (the turn then fails); otherwise allowed, perhaps with a warning that it's close.</summary>
+/// (the turn then fails); otherwise allowed, perhaps with a warning that it's close. Windows: how much of
+/// each window (five_hour, seven_day) is used, when the CLI says (its unifiedWindows); empty when it doesn't.</summary>
 public sealed record UsageLimited(string Status, DateTimeOffset? ResetsAt, string? Kind) : AgentEvent
 {
     public bool Rejected => Status == "rejected";
+    public IReadOnlyList<UsageWindow> Windows { get; init; } = [];
 }
 
 /// <summary>Turns one line of stream-json into events (none for lines the host doesn't show).</summary>
@@ -188,15 +190,25 @@ public static class StreamParser
                     r["input"] as JsonObject ?? new JsonObject(), (bool?)r["requires_user_interaction"] ?? false);
                 break;
             case "rate_limit_event" when m["rate_limit_info"] is JsonObject info:
-                DateTimeOffset? resets = null;
-                try { if ((double?)info["resetsAt"] is { } at and > 0) resets = DateTimeOffset.FromUnixTimeSeconds((long)at); }
-                catch (Exception e) when (e is InvalidOperationException or FormatException or ArgumentOutOfRangeException) { }
-                yield return new UsageLimited((string?)info["status"] ?? "", resets, (string?)info["rateLimitType"]);
+                var windows = new List<UsageWindow>();
+                foreach (var (kind, w) in info["unifiedWindows"] as JsonObject ?? [])
+                    if (w is JsonObject win && Number(win["utilization"]) is { } used)
+                        windows.Add(new UsageWindow(kind, used, Epoch(win["resetsAt"]), Str(win["status"]) ?? ""));
+                yield return new UsageLimited(Str(info["status"]) ?? "", Epoch(info["resetsAt"]), Str(info["rateLimitType"])) { Windows = windows };
                 break;
             case "result":
                 yield return new TurnFinished((bool?)m["is_error"] ?? false, (string?)m["result"] ?? "", (double?)m["total_cost_usd"]);
                 break;
         }
+    }
+
+    // tolerant reads for the rate_limit_event, whose fields have changed shape between CLI versions
+    static string? Str(JsonNode? n) => n is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+    static double? Number(JsonNode? n) => n is JsonValue v && v.TryGetValue<double>(out var d) && double.IsFinite(d) ? d : null;
+    static DateTimeOffset? Epoch(JsonNode? n)
+    {
+        if (Number(n) is not { } secs || secs <= 0 || secs > 253402300799) return null;
+        return DateTimeOffset.FromUnixTimeSeconds((long)secs);
     }
 
     static List<byte[]> ResultImages(JsonNode? content)
@@ -278,6 +290,7 @@ public sealed class AgentSession : IAsyncDisposable
             foreach (var e in StreamParser.Parse(line))
             {
                 if (e is SessionStarted st) SessionId = st.SessionId;
+                if (e is UsageLimited u) UsageMeter.Shared.Report(u);
                 Event?.Invoke(e);
             }
         await _proc.WaitForExitAsync();
