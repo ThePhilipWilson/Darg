@@ -80,7 +80,9 @@ public static partial class ReportStore
     {
         var name = $"{DateTime.Now:yyyyMMdd-HHmm}-{card.Id}.md";
         var qa = qaColumn is not null
-            ? $"set its Status to {qaColumn} and move its id into that column in board.json's order"
+            ? $"first add a section headed ## How to check to the card file, below the description, with what changed, the branch and commit ids to look at, " +
+              "the exact command to run or file to open to try it (a screenshot path if you took one), and what to look for; " +
+              $"then set its Status to {qaColumn} and move its id into that column in board.json's order"
             : "leave it where it is (this board has no QA column)";
         return
             "When the work is finished and pushed, decide whether I need to check it. " +
@@ -97,6 +99,15 @@ public static partial class ReportStore
             "## Done (what you changed and how you checked it), ## Left (anything not done, or None). " +
             "Leave the card where it is while work is left.";
     }
+
+    /// <summary>The prompt for Work on a card already in the QA column: not more work, but getting the result
+    /// in front of the person. Free of double quotes, angle brackets, ampersands and pipes.</summary>
+    public static string CheckPrompt(string projectName, Card card, string file) =>
+        $"Work on this card from the {projectName} board: {card.Id}: {card.Title}{Environment.NewLine}Card file: {file}{Environment.NewLine}{Environment.NewLine}" +
+        "This card is in QA: the work is done and I want to try it, not have it changed. Read the card file, especially its How to check section, " +
+        "and the project's CLAUDE.md. Then get it running for me: build and start the app (or open the page, or run the command) from the branch or commit " +
+        "the card names, in a git worktree of its own if that is not what the main folder is on, and leave it running. Say in one message what is running, " +
+        "from which commit, and what to look at. Change no code and don't move the card. If something won't build or the How to check section is missing, say so plainly.";
 
     static bool IsTrue(string v) => v.Trim().Trim('"', '\'').ToLowerInvariant() is "true" or "yes" or "1";
 

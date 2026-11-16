@@ -121,5 +121,17 @@ public class ReportStoreTests
         Assert.DoesNotContain("\"", rules);
         foreach (var c in "<>&|") Assert.DoesNotContain(c, rules);
         Assert.Contains("this board has no QA column", ReportStore.Rules("r", card, null, null));
+        Assert.Contains("## How to check", rules);
+    }
+
+    [Fact]
+    public void Check_prompt_points_at_the_card_and_goes_on_a_command_line()
+    {
+        var card = new Card("WOR-0075", "QA", "QA Ready", "", "Task", [], "x.md", "");
+        var p = ReportStore.CheckPrompt("Darg", card, "C:\\b\\x.md");
+        Assert.Contains("How to check", p);
+        Assert.Contains("WOR-0075", p);
+        Assert.DoesNotContain("\"", p);
+        foreach (var c in "<>&|") Assert.DoesNotContain(c, p);
     }
 }
