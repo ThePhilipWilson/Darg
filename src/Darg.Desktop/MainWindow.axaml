@@ -103,6 +103,9 @@
               <DockPanel>
                 <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent"
                         AutomationProperties.Name="Hide Fettle"/>
+                <Button DockPanel.Dock="Right" Command="{Binding ToggleNotificationsCommand}" Padding="8,0" Background="Transparent" FontSize="11"
+                        Content="{Binding Notifications.Count, StringFormat='🔔 {0}'}" ToolTip.Tip="Everything agents have notified you of this run"
+                        AutomationProperties.Name="Notifications"/>
                 <Button DockPanel.Dock="Right" Content="+ New chat" Command="{Binding Mascot.FreshCommand}" Padding="8,0" Background="Transparent"
                         FontSize="11" IsVisible="{Binding Mascot.HasChat}"/>
                 <TextBlock Classes="dim small" VerticalAlignment="Center"
@@ -123,6 +126,32 @@
             <TextBox x:Name="MascotBox" Text="{Binding Mascot.Compose}" BorderThickness="0,1,0,0" CornerRadius="0,0,0,14"
                      PlaceholderText="What needs fettling?" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" Padding="12,9"/>
           </DockPanel>
+          <!-- every notification agents have raised; click one to open that agent -->
+          <Border DockPanel.Dock="Top" IsVisible="{Binding ShowNotifications}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+            <StackPanel>
+              <DockPanel Margin="12,6">
+                <Button DockPanel.Dock="Right" Content="Clear" Command="{Binding ClearNotificationsCommand}" Padding="6,0" Background="Transparent" FontSize="11"/>
+                <TextBlock Classes="dim small" VerticalAlignment="Center" Text="Notifications"/>
+              </DockPanel>
+              <TextBlock Classes="dim small" Margin="12,0,12,8" Text="None yet." IsVisible="{Binding !Notifications.Count}"/>
+              <ScrollViewer MaxHeight="220">
+                <ItemsControl ItemsSource="{Binding Notifications}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Button Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNotificationCommand}" CommandParameter="{Binding}"
+                              HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Padding="12,5">
+                        <StackPanel>
+                          <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                          <TextBlock Text="{Binding Sub}" Classes="dim small"/>
+                          <TextBlock Text="{Binding Detail}" Classes="dim small" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </StackPanel>
+          </Border>
           <ScrollViewer x:Name="MascotScroll" MaxHeight="380" IsVisible="{Binding Mascot.HasChat}">
             <ItemsControl ItemsSource="{Binding Mascot.Items}" Margin="12,10" FontSize="13">
               <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
