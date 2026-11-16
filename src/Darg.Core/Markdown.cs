@@ -14,6 +14,16 @@ public sealed record MdCode(string Language, string Text) : MdBlock;
 public sealed record MdQuote(IReadOnlyList<Span> Spans) : MdBlock;
 public sealed record MdTable(IReadOnlyList<IReadOnlyList<IReadOnlyList<Span>>> Rows) : MdBlock; // first row is the header
 public sealed record MdRule : MdBlock;
+/// <summary>A picture: its alt text, its source (a path relative to the doc, an absolute one, or a URL) and,
+/// for a badge or a picture wrapped in a link, where clicking it goes. Width is an HTML img's width in pixels.</summary>
+public sealed record MdImage(string Alt, string Src, string? Link = null, int? Width = null);
+/// <summary>A line (or lines) holding nothing but pictures: a screenshot, a row of badges. Centred when the HTML
+/// around them says so (&lt;p align="center"&gt;, as READMEs put a logo).</summary>
+public sealed record MdImages(IReadOnlyList<MdImage> Images, bool Centred = false) : MdBlock
+{
+    public bool Equals(MdImages? other) => other is not null && Centred == other.Centred && Images.SequenceEqual(other.Images);
+    public override int GetHashCode() => HashCode.Combine(Images.Count, Centred);
+}
 
 /// <summary>The markdown Claude writes, as blocks to draw: headings, paragraphs, lists, fenced code,
 /// quotes, tables and rules, with bold, italic, inline code and links inside them. Not a full
@@ -23,6 +33,14 @@ public static class Markdown
     static readonly Regex Bullet = new(@"^\s*[-*+]\s+(.*)$");
     static readonly Regex Numbered = new(@"^\s*(\d+)[.)]\s+(.*)$");
     static readonly Regex Heading = new(@"^(#{1,6})\s+(.*?)\s*#*\s*$");
+    // ![alt](src "title") and [![alt](src)](link); READMEs also centre pictures with HTML <img src="..." alt="...">
+    const string Target = @"\(\s*<?(?<{0}>[^)\s>]+)>?(?:\s+""[^""]*"")?\s*\)";
+    static readonly Regex MdImg = new(
+        @"\[!\[(?<alt>[^\]]*)\]" + string.Format(Target, "src") + @"\]" + string.Format(Target, "link")
+        + @"|!\[(?<alt>[^\]]*)\]" + string.Format(Target, "src"));
+    // only the tags READMEs wrap pictures in, so <https://…>, List<string> or a lone <T> in a transcript stays text
+    static readonly Regex HtmlTag = new(@"</?(?:a|img|p|div|br|center|picture|source|span|sub|sup)(?:\s[^>]*)?/?>", RegexOptions.IgnoreCase);
+    static readonly Regex Attr = new(@"\b(?<name>src|alt|href|width|align)\s*=\s*(?:""(?<v>[^""]*)""|'(?<v>[^']*)'|(?<v>[^\s>]+))", RegexOptions.IgnoreCase);
     static readonly Regex TableSep = new(@"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$");
 
     /// <summary>Text without Obsidian's properties block (a --- fenced block at the very top).</summary>
@@ -59,6 +77,20 @@ public static class Markdown
                 continue;
             }
             if (string.IsNullOrWhiteSpace(line)) { Flush(); continue; }
+            if (Pictures(line, out var centred) is { } pictures)
+            {
+                // a line of pictures (or of HTML that only wraps pictures) and those straight after it: one row
+                Flush();
+                var row = new List<MdImage>(pictures);
+                while (i + 1 < lines.Length && !string.IsNullOrWhiteSpace(lines[i + 1]) && Pictures(lines[i + 1], out var c) is { } more)
+                {
+                    row.AddRange(more);
+                    centred |= c;
+                    i++;
+                }
+                if (row.Count > 0) blocks.Add(new MdImages(row, centred));
+                continue;
+            }
             if (Heading.Match(line) is { Success: true } h) { Flush(); blocks.Add(new MdHeading(h.Groups[1].Length, Inline(h.Groups[2].Value))); continue; }
             if (Regex.IsMatch(line, @"^\s*([-*_])(\s*\1){2,}\s*$")) { Flush(); blocks.Add(new MdRule()); continue; }
             if (line.TrimStart().StartsWith('>'))
@@ -105,6 +137,42 @@ public static class Markdown
         return blocks;
     }
 
+    /// <summary>The pictures on a line that holds nothing else: markdown images (bare or linked) and HTML
+    /// &lt;img&gt;, with only whitespace and HTML tags (&lt;p align="center"&gt;, &lt;a href&gt;, &lt;br&gt;) around them.
+    /// An empty list for a line of HTML tags alone (it draws nothing); null for a line with any text on it.
+    /// Centred when a tag on it says align="center" (or is &lt;center&gt;).</summary>
+    public static List<MdImage>? Pictures(string line, out bool centred)
+    {
+        var centre = false;
+        centred = false;
+        if (!line.Contains('<') && !line.Contains("![", StringComparison.Ordinal)) return null;
+        var found = new List<(int At, MdImage Image)>();
+        var rest = MdImg.Replace(line, m =>
+        {
+            found.Add((m.Index, new MdImage(m.Groups["alt"].Value, m.Groups["src"].Value, m.Groups["link"].Success ? m.Groups["link"].Value : null)));
+            return new string(' ', m.Length); // keeps the positions of what follows, so pictures stay in order
+        });
+        string? href = null; // an <a href> around an <img> is the picture's link
+        rest = HtmlTag.Replace(rest, m =>
+        {
+            var tag = m.Value;
+            if (string.Equals(Get(tag, "align"), "center", StringComparison.OrdinalIgnoreCase) || tag.StartsWith("<center", StringComparison.OrdinalIgnoreCase)) centre = true;
+            if (tag.StartsWith("<a ", StringComparison.OrdinalIgnoreCase) && Get(tag, "href") is { } h) href = h;
+            else if (tag.StartsWith("</a", StringComparison.OrdinalIgnoreCase)) href = null;
+            else if (tag.StartsWith("<img", StringComparison.OrdinalIgnoreCase) && Get(tag, "src") is { } src)
+                found.Add((m.Index, new MdImage(Get(tag, "alt") ?? "", src, href,
+                    int.TryParse(Get(tag, "width")?.Replace("px", ""), out var w) && w > 0 ? w : null)));
+            return new string(' ', m.Length);
+        });
+        if (rest.Trim().Length > 0) return null;
+        centred = centre;
+        // nothing but tags draws nothing; a line of only markdown is never that (it had a picture)
+        return found.OrderBy(f => f.At).Select(f => f.Image).ToList();
+
+        static string? Get(string tag, string name) =>
+            Attr.Matches(tag).FirstOrDefault(a => a.Groups["name"].Value.Equals(name, StringComparison.OrdinalIgnoreCase))?.Groups["v"].Value;
+    }
+
     static IReadOnlyList<IReadOnlyList<Span>> Cells(string row)
     {
         var t = row.Trim();
@@ -129,6 +197,20 @@ public static class Markdown
             {
                 var end = s.IndexOf('`', i + 1);
                 if (end > i) { Emit(); spans.Add(new Span(s[(i + 1)..end], bold, italic, Code: true)); i = end; continue; }
+            }
+            if ((c == '!' && i + 1 < s.Length && s[i + 1] == '[') || (c == '[' && i + 1 < s.Length && s[i + 1] == '!'))
+            {
+                // a picture inside a sentence: a link to it (or to where a linked badge goes), named by its alt text
+                var m = MdImg.Match(s, i);
+                if (m.Success && m.Index == i)
+                {
+                    Emit();
+                    var src = m.Groups["src"].Value;
+                    var alt = m.Groups["alt"].Value;
+                    spans.Add(new Span(alt.Length > 0 ? alt : Path.GetFileName(src), bold, italic, Link: m.Groups["link"].Success ? m.Groups["link"].Value : src));
+                    i += m.Length - 1;
+                    continue;
+                }
             }
             if (c == '[' && i + 1 < s.Length && s[i + 1] == '[')
             {

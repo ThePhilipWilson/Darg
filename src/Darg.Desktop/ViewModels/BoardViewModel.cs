@@ -393,6 +393,16 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>Raised after each reload of the board from disk.</summary>
     public event Action? Reloaded;
 
+    /// <summary>Cards at work on the board on screen: those in a column after the first and before the last (the
+    /// done one), so In Progress, Review and the like, column by column in board order. None on a board of two.</summary>
+    public IReadOnlyList<(string Column, Card Card)> InProgress()
+    {
+        if (_board is null || _board.Columns.Count < 3) return [];
+        return _board.Columns.Skip(1).SkipLast(1)
+            .SelectMany(col => _board.Lists.TryGetValue(col.Id, out var cards) ? cards.Select(c => (col.Name, c)) : [])
+            .ToList();
+    }
+
     /// <summary>A card is done when it's in Completed or the board's last column (its done column).</summary>
     public bool IsDone(string cardId)
     {

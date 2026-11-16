@@ -55,7 +55,7 @@
       </Border>
       <Panel>
         <ScrollViewer IsVisible="{Binding Reading}">
-          <views:MarkdownView x:Name="Rendered" Markdown="{Binding Text}" Margin="28,20" MaxWidth="860" HorizontalAlignment="Left"/>
+          <views:MarkdownView x:Name="Rendered" Markdown="{Binding Text}" BaseFolder="{Binding DocFolder}" Margin="28,20" MaxWidth="860" HorizontalAlignment="Left"/>
         </ScrollViewer>
         <TextBox x:Name="Editor" IsVisible="{Binding Editing}" Text="{Binding EditText}" AcceptsReturn="True" AcceptsTab="True"
                  TextWrapping="Wrap" Classes="mono" BorderThickness="0" Padding="24,16"/>

@@ -1,0 +1,156 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:views="using:Darg.Desktop.Views"
+             x:Class="Darg.Desktop.Views.HomeView"
+             x:DataType="vm:HomeViewModel">
+  <UserControl.Styles>
+    <Style Selector="Border.tile">
+      <Setter Property="Background" Value="{StaticResource Panel}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="14,10"/>
+      <Setter Property="Width" Value="300"/>
+      <Setter Property="MinHeight" Value="120"/>
+    </Style>
+    <Style Selector="TextBlock.tilehead">
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="0,0,0,6"/>
+    </Style>
+    <Style Selector="Button.row">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="4,3"/>
+      <Setter Property="Margin" Value="-4,0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+      <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
+    </Border>
+    <ScrollViewer>
+      <StackPanel Margin="28,20" Spacing="18" MaxWidth="1280" HorizontalAlignment="Left">
+        <!-- the project: its colour, name and where it lives -->
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="⟳" Command="{Binding LoadCommand}" ToolTip.Tip="Read the README and commits again"
+                  AutomationProperties.Name="Refresh home" VerticalAlignment="Top"/>
+          <Border DockPanel.Dock="Left" Width="6" CornerRadius="3" Background="{Binding Brush}" Margin="0,2,12,2"/>
+          <StackPanel Spacing="2">
+            <TextBlock Text="{Binding Name}" FontSize="24" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding Where}" Classes="dim small mono" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Where}"/>
+          </StackPanel>
+        </DockPanel>
+
+        <!-- what's going on -->
+        <WrapPanel ItemSpacing="12" LineSpacing="12">
+          <Border Classes="tile" IsVisible="{Binding ShowsCards}">
+            <StackPanel>
+              <TextBlock Classes="tilehead" Text="{Binding CardsTitle}"/>
+              <TextBlock Classes="dim small" Text="{Binding CardsEmpty}" IsVisible="{Binding CardsEmpty, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              <ItemsControl ItemsSource="{Binding Cards}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:HomeCard">
+                    <Button Classes="row" Command="{Binding $parent[UserControl].((vm:HomeViewModel)DataContext).OpenCardCommand}" CommandParameter="{Binding}"
+                            ToolTip.Tip="Open the card" AutomationProperties.Name="{Binding Id}">
+                      <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding Id}" Classes="dim small mono" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding Column}" Classes="dim small" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                      </DockPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="tile" IsVisible="{Binding ShowsAgents}">
+            <StackPanel>
+              <TextBlock Classes="tilehead" Text="{Binding AgentsTitle}"/>
+              <TextBlock Classes="dim small" Text="{Binding AgentsEmpty}" IsVisible="{Binding AgentsEmpty, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              <ItemsControl ItemsSource="{Binding Agents}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:AgentViewModel">
+                    <Button Classes="row" Command="{Binding $parent[UserControl].((vm:HomeViewModel)DataContext).OpenAgentCommand}" CommandParameter="{Binding}"
+                            ToolTip.Tip="Open the agent" AutomationProperties.Name="{Binding Name}">
+                      <DockPanel Classes="agentstate" Classes.working="{Binding Working}" Classes.needs="{Binding NeedsYou}"
+                                 Classes.done="{Binding IsDone}" Classes.failed="{Binding IsFailed}">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0" VerticalAlignment="Center">
+                          <Ellipse Classes="dot" Width="7" Height="7" VerticalAlignment="Center"/>
+                          <TextBlock Classes="state small" Text="{Binding StateText}"/>
+                        </StackPanel>
+                        <TextBlock Classes="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                      </DockPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="tile" IsVisible="{Binding ShowsArtifacts}">
+            <StackPanel>
+              <TextBlock Classes="tilehead" Text="Artifacts"/>
+              <TextBlock Classes="dim small" Text="{Binding ArtifactsEmpty}" IsVisible="{Binding ArtifactsEmpty, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              <ItemsControl ItemsSource="{Binding Artifacts}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:HomeArtifact">
+                    <Button Classes="row" Command="{Binding $parent[UserControl].((vm:HomeViewModel)DataContext).OpenArtifactCommand}" CommandParameter="{Binding}"
+                            ToolTip.Tip="{Binding Path}" AutomationProperties.Name="{Binding Title}">
+                      <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding When}" Classes="dim small" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                      </DockPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="tile" IsVisible="{Binding ShowsCommits}">
+            <StackPanel>
+              <TextBlock Classes="tilehead" Text="Recent commits"/>
+              <TextBlock Classes="dim small" Text="{Binding CommitsEmpty}" IsVisible="{Binding CommitsEmpty, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              <ItemsControl ItemsSource="{Binding Commits}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:HomeCommit">
+                    <StackPanel Margin="0,2,0,4" ToolTip.Tip="{Binding Subject}">
+                      <TextBlock Text="{Binding Subject}" TextTrimming="CharacterEllipsis"/>
+                      <TextBlock Text="{Binding Meta}" Classes="dim small" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </WrapPanel>
+
+        <!-- the README, drawn -->
+        <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" IsVisible="{Binding HasReadme}">
+          <DockPanel>
+            <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,6">
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="✎ Edit" Command="{Binding EditReadmeCommand}" ToolTip.Tip="Edit the README (in Docs, if this project has docs)"
+                        AutomationProperties.Name="Edit README"/>
+                <TextBlock Text="{Binding ReadmeName}" Classes="dim small mono" VerticalAlignment="Center" ToolTip.Tip="{Binding ReadmePath}"/>
+              </DockPanel>
+            </Border>
+            <views:MarkdownView x:Name="Readme" Markdown="{Binding ReadmeText}" BaseFolder="{Binding ReadmeFolder}" Margin="28,20" MaxWidth="900" HorizontalAlignment="Left"/>
+          </DockPanel>
+        </Border>
+        <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Padding="20,16" IsVisible="{Binding NoReadme}">
+          <StackPanel Spacing="10">
+            <TextBlock Text="No README yet." FontWeight="SemiBold"/>
+            <TextBlock Classes="dim" TextWrapping="Wrap" Text="This page shows the README at the top of the project's first repo (or its docs folder's README or index.md)."/>
+            <Button Content="✦ Draft one with an agent" Command="{Binding DraftReadmeCommand}" IsVisible="{Binding CanDraft}" HorizontalAlignment="Left"
+                    ToolTip.Tip="An agent reads the code and writes a first README for you to judge"/>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

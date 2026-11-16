@@ -26,7 +26,9 @@ public partial class DocsViewModel : ObservableObject
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Searching), nameof(Browsing))] public partial string Find { get; set; } = "";
     public bool Searching => Find.Trim().Length > 0;
     public bool Browsing => !Searching;
-    [ObservableProperty] public partial DocEntry? Selected { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(DocFolder))] public partial DocEntry? Selected { get; set; }
+    /// <summary>The open doc's folder: where its pictures' relative paths start.</summary>
+    public string? DocFolder => Selected is null ? null : Path.GetDirectoryName(Path.GetFullPath(Path.Combine(Folder, Selected.Path)));
     [ObservableProperty] public partial string Text { get; set; } = "";
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Reading))] public partial bool Editing { get; set; }
     [ObservableProperty] public partial string EditText { get; set; } = "";

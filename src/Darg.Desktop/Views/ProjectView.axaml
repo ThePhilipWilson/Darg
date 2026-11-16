@@ -7,6 +7,10 @@
   <Grid ColumnDefinitions="60,*">
     <Border Background="#111317" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
       <StackPanel Margin="0,8,0,0" HorizontalAlignment="Center">
+        <ToggleButton Classes="rail" IsChecked="{Binding OnHome, Mode=OneWay}"
+                      Command="{Binding OpenCommand}" CommandParameter="Home" ToolTip.Tip="Home: the README and what's going on">
+          <StackPanel><TextBlock Text="⌂" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Home" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
+        </ToggleButton>
         <ToggleButton Classes="rail" IsChecked="{Binding OnBoard, Mode=OneWay}" IsVisible="{Binding Board, Converter={x:Static ObjectConverters.IsNotNull}}"
                       Command="{Binding OpenCommand}" CommandParameter="Board" ToolTip.Tip="Board">
           <StackPanel><TextBlock Text="▦" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Board" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
@@ -51,6 +55,7 @@
     </Border>
 
     <Panel Grid.Column="1">
+      <views:HomeView DataContext="{Binding Home}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnHome}"/>
       <views:BoardView DataContext="{Binding Board}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnBoard}"/>
       <views:NotesView DataContext="{Binding Notes}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnNotes}"/>
       <views:CodeView DataContext="{Binding Code}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnCode}"/>
