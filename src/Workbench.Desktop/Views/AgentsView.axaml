@@ -11,6 +11,9 @@
           <TextBox Text="{Binding NewPrompt}" PlaceholderText="What should a new agent do?" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"/>
           <TextBlock Classes="dim small" Text="{Binding Folder, StringFormat='Runs in {0}'}" TextWrapping="Wrap"/>
           <DockPanel>
+            <Button DockPanel.Dock="Right" Content="◎ Context" Command="{Binding ViewDefaultContextCommand}" Margin="6,0,0,0" Padding="8,4"
+                    ToolTip.Tip="Show what a new agent here starts with by default: the arguments Workbench adds and the CLAUDE.md files Claude Code loads"
+                    AutomationProperties.Name="View default Claude context"/>
             <Button DockPanel.Dock="Right" Content="✎ Profiles" Command="{Binding EditProfilesCommand}" Margin="6,0,0,0" Padding="8,4"
                     ToolTip.Tip="Model profiles: which model and effort a new agent starts on, by rule or picked by Haiku from the task (profiles.md)"
                     AutomationProperties.Name="Edit model profiles"/>
