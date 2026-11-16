@@ -557,7 +557,7 @@ public sealed partial class QuestionItem : TranscriptItem, IPending
             var text = (string?)q?["question"] ?? "";
             var opts = (q?["options"] as JsonArray ?? []).Select(o => new QuestionOption(
                 (string?)o?["label"] ?? "", (string?)o?["description"] ?? "", this, text)).ToList();
-            Questions.Add(new QuestionGroup((string?)q?["header"] ?? "", text, opts));
+            Questions.Add(new QuestionGroup((string?)q?["header"] ?? "", text, opts, this));
         }
     }
 
@@ -574,12 +574,17 @@ public sealed partial class QuestionItem : TranscriptItem, IPending
     }
 }
 
-public sealed partial class QuestionGroup(string header, string question, IReadOnlyList<QuestionOption> options) : ObservableObject
+/// <summary>One question: its option buttons, and a box to type an answer of your own instead (the terminal's "Other").</summary>
+public sealed partial class QuestionGroup(string header, string question, IReadOnlyList<QuestionOption> options, QuestionItem owner) : ObservableObject
 {
     public string Header { get; } = header;
     public string Question { get; } = question;
     public IReadOnlyList<QuestionOption> Options { get; } = options;
     [ObservableProperty] public partial string? Chosen { get; set; }
+    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(SendOwnCommand))] public partial string OwnAnswer { get; set; } = "";
+
+    bool CanSendOwn => !string.IsNullOrWhiteSpace(OwnAnswer);
+    [RelayCommand(CanExecute = nameof(CanSendOwn))] void SendOwn() => owner.Pick(Question, OwnAnswer.Trim());
 }
 
 public sealed class QuestionOption(string label, string description, QuestionItem owner, string question)

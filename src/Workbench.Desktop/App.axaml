@@ -108,7 +108,13 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNotNull}}"
+                <!-- or answer in your own words: Enter sends, Shift+Enter starts a new line -->
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNull}}">
+                  <TextBox Text="{Binding OwnAnswer}" PlaceholderText="Or type your own answer…" AcceptsReturn="True" TextWrapping="Wrap"
+                           MinHeight="60" MaxHeight="200" views:EnterSends.Command="{Binding SendOwnCommand}"/>
+                  <Button Grid.Column="1" Classes="primary" Content="Send" VerticalAlignment="Bottom" Command="{Binding SendOwnCommand}"/>
+                </Grid>
+                <TextBlock IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNotNull}}" TextWrapping="Wrap"
                            Text="{Binding Chosen, StringFormat='You picked: {0}'}" Foreground="{StaticResource Accent}"/>
               </StackPanel>
             </DataTemplate>
