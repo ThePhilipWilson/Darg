@@ -12,6 +12,14 @@
         <Button DockPanel.Dock="Right" Classes="primary" Content="+ Card" Command="{Binding NewCardCommand}" Margin="12,0,0,0"/>
         <CheckBox DockPanel.Dock="Right" Content="Show completed" IsChecked="{Binding ShowCompleted}" Margin="12,0,0,0"/>
         <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
+          <TextBlock Text="{Binding PickedText}" IsVisible="{Binding HasPicked}" VerticalAlignment="Center" Foreground="{StaticResource Accent}"/>
+          <Button Classes="primary" Content="{Binding WorkOnPickedText}" Command="{Binding WorkOnPickedCommand}" IsVisible="{Binding CanWorkOnPicked}"
+                  ToolTip.Tip="Start an agent on each picked card, all at once in the project's folder; each is told which others are running beside it. Cards that already have an agent are skipped."/>
+          <Button Content="Unpick" Command="{Binding ClearPickedCommand}" IsVisible="{Binding HasPicked}" ToolTip.Tip="Unpick every card (Esc)"/>
+          <Button Content="Pick all" Command="{Binding PickAllCommand}"
+                  ToolTip.Tip="Pick every card showing (Ctrl+A). Ctrl- or Shift-click picks one at a time."/>
+        </StackPanel>
         <TextBox Text="{Binding Filter}" PlaceholderText="Filter by ID, title or description…" MaxWidth="460" HorizontalAlignment="Left" MinWidth="280"/>
       </DockPanel>
     </Border>
@@ -47,7 +55,7 @@
                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="7"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CardViewModel">
-                        <Border Classes="card" Cursor="Hand" ToolTip.Tip="{Binding Description}" Tag="{Binding}">
+                        <Border Classes="card" Classes.picked="{Binding IsPicked}" Cursor="Hand" ToolTip.Tip="{Binding Description}" Tag="{Binding}">
                           <Border.ContextMenu>
                             <ContextMenu ItemsSource="{Binding MoveTargets}">
                               <ContextMenu.Styles>

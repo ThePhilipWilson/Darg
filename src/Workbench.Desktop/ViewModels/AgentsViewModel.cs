@@ -118,7 +118,8 @@ public partial class AgentsViewModel : ObservableObject
     }
 
     /// <summary>The prompt for working on a card: the card itself, where its file is, and the house rules.</summary>
-    public static string CardPrompt(string projectName, Card card, string file)
+    /// <param name="alongside">Cards other agents were started on at the same moment, in the same folder.</param>
+    public static string CardPrompt(string projectName, Card card, string file, IReadOnlyList<string>? alongside = null)
     {
         var lines = new List<string> { $"Work on this card from the {projectName} board.", "", $"{card.Id}: {card.Title}" };
         if (card.Labels.Count > 0) lines.Add($"Labels: {string.Join(", ", card.Labels)}");
@@ -128,6 +129,13 @@ public partial class AgentsViewModel : ObservableObject
         lines.Add("");
         lines.Add("Read the project's CLAUDE.md first. Use AskUserQuestion when a choice is mine to make. " +
                   "When you stop, say what is done and what is left. Leave the card's Status alone: I move cards.");
+        if (alongside is { Count: > 0 })
+        {
+            lines.Add("");
+            lines.Add($"Other agents are working on {string.Join(", ", alongside)} in the same folder at the same time. " +
+                      "Change only what this card needs, expect files you didn't touch to change under you, " +
+                      "and stage and commit only the files you changed yourself.");
+        }
         return string.Join(Environment.NewLine, lines);
     }
 }

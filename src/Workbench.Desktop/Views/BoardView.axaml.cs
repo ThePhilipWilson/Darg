@@ -5,7 +5,8 @@ using Workbench.Desktop.ViewModels;
 namespace Workbench.Desktop.Views;
 
 /// <summary>Cards are picked up and carried (DragLift): drop on a list to move there, the line shows
-/// where; a click opens the card.</summary>
+/// where; a click opens the card, Ctrl- or Shift-click picks it (then a plain click picks too). Ctrl+A
+/// picks every card showing, Escape unpicks them; picked cards can each be given an agent in one go.</summary>
 public partial class BoardView : UserControl
 {
     public BoardView()
@@ -18,8 +19,14 @@ public partial class BoardView : UserControl
                 if (DataContext is BoardViewModel board && item is CardViewModel card)
                     board.Move(card, list, (before as CardViewModel)?.Id);
             },
-            click: (item, _) => { if (DataContext is BoardViewModel board && item is CardViewModel card) board.Open(card); });
+            click: (item, keys) => { if (DataContext is BoardViewModel board && item is CardViewModel card) board.Click(card, keys); });
         ChipDoubleClicks(this);
+        KeyDown += (_, e) =>
+        {
+            if (DataContext is not BoardViewModel board || e.Source is TextBox) return;
+            if (e.Key == Avalonia.Input.Key.A && e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control)) { board.PickAllCommand.Execute(null); e.Handled = true; }
+            else if (e.Key == Avalonia.Input.Key.Escape && board.HasPicked) { board.ClearPicked(); e.Handled = true; }
+        };
     }
 
     /// <summary>A double-click on a filter chip makes it "must have" (AND). Seen on the second press (its
