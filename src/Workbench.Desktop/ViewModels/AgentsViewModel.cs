@@ -187,6 +187,19 @@ public partial class AgentsViewModel : ObservableObject
 
     /// <summary>Open profiles.md (written with the starter set if there isn't one) to change which model and
     /// effort new agents start on. It's read again for every new agent, so there's nothing to reload.</summary>
+    /// <summary>Write out what a new agent here starts with by default (the arguments Workbench adds and the
+    /// CLAUDE.md files Claude Code loads for the folder) and open it.</summary>
+    [RelayCommand]
+    void ViewDefaultContext()
+    {
+        try
+        {
+            var path = DefaultContext.Write(project, Folder);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception) { }
+    }
+
     [RelayCommand]
     void EditProfiles()
     {
