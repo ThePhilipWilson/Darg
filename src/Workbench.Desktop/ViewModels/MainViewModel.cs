@@ -20,7 +20,7 @@ public partial class MainViewModel : ObservableObject
         var config = InstanceConfig.Load();
         InstanceFile = InstanceConfig.FilePath();
         foreach (var p in config.Projects) Projects.Add(Make(p));
-        Mascot = new MascotViewModel(config.Projects);
+        Mascot = new MascotViewModel(config.Projects) { Context = Where };
         Mascot.Restore();
         Mascot.Notify += (agent, what, detail) =>
         {
@@ -37,6 +37,45 @@ public partial class MainViewModel : ObservableObject
         if (vm.Agents is { } agents)
             agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
         return vm;
+    }
+
+    /// <summary>What Philip is looking at, in a line Bench reads before each message: the project, the
+    /// section, and what's open there (board and card, docs folder and doc, file, agent).</summary>
+    public string Where()
+    {
+        if (Setup is not null) return "the Setup page";
+        if (ToolsPage is not null) return "the Tools page";
+        if (Selected is not { } p) return "";
+        var s = new System.Text.StringBuilder($"{p.Name} › {p.Section}");
+        switch (p.Section)
+        {
+            case Section.Board when p.Board is not null:
+                s.Append($", board {p.Board.SelectedBoard} in {p.Board.Folder}");
+                if (p.Board.Filter.Length > 0) s.Append($", filtered by \"{p.Board.Filter}\"");
+                if (p.Board.Editor is { IsNew: false } card) s.Append($", card {card.Heading} ({card.Title}) open");
+                break;
+            case Section.Notes when p.Notes is not null:
+                s.Append($", notes wall in {p.Notes.Folder}");
+                break;
+            case Section.Docs when p.Docs is not null:
+                s.Append($", docs folder {p.Docs.Folder}");
+                if (p.Docs.Selected is { } doc) s.Append($", doc {doc.Path} open");
+                break;
+            case Section.Code when p.Code is not null:
+                s.Append($", repos {string.Join(", ", p.Config.Repos)}");
+                if (p.Code.Current is { } f) s.Append($", file {f.FullPath} open");
+                break;
+            case Section.Agents when p.Agents?.Selected is { } a:
+                s.Append($", agent \"{a.Name}\" working in {a.Cwd}");
+                break;
+            case Section.GitHub:
+                s.Append($", repos {string.Join(", ", p.Config.Repos)}");
+                break;
+            case Section.Terminal:
+                s.Append($", consoles in {p.Config.WorkingFolder()}");
+                break;
+        }
+        return s.ToString();
     }
 
     /// <summary>Save every agent (on closing, so nothing since the last turn is lost).</summary>

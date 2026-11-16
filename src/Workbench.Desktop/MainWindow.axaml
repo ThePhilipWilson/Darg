@@ -70,13 +70,23 @@
               BorderThickness="1" CornerRadius="14" BoxShadow="0 14 40 0 #90000000" HorizontalAlignment="Right">
         <DockPanel>
           <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,8">
-            <DockPanel>
-              <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent"/>
-              <Button DockPanel.Dock="Right" Content="New chat" Command="{Binding Mascot.FreshCommand}" Padding="8,0" Background="Transparent"
-                      FontSize="11" IsVisible="{Binding Mascot.HasChat}"/>
-              <TextBlock Classes="dim small" VerticalAlignment="Center"
-                         Text="{Binding Mascot.Agent.StateText, StringFormat='Bench · {0}', FallbackValue='Bench · any project'}"/>
-            </DockPanel>
+            <StackPanel Spacing="6">
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent"
+                        AutomationProperties.Name="Hide Bench"/>
+                <Button DockPanel.Dock="Right" Content="+ New chat" Command="{Binding Mascot.FreshCommand}" Padding="8,0" Background="Transparent"
+                        FontSize="11" IsVisible="{Binding Mascot.HasChat}"/>
+                <TextBlock Classes="dim small" VerticalAlignment="Center"
+                           Text="{Binding Mascot.Agent.StateText, StringFormat='Bench · {0}', FallbackValue='Bench · new chat'}"/>
+              </DockPanel>
+              <!-- earlier chats: pick one to carry on with it -->
+              <DockPanel IsVisible="{Binding Mascot.Chats.Count}">
+                <Button DockPanel.Dock="Right" Content="×" Command="{Binding Mascot.ForgetCommand}" IsVisible="{Binding Mascot.HasChat}"
+                        Padding="6,0" Background="Transparent" ToolTip.Tip="Forget this chat" AutomationProperties.Name="Forget chat"/>
+                <ComboBox ItemsSource="{Binding Mascot.Chats}" SelectedItem="{Binding Mascot.SelectedChat}" HorizontalAlignment="Stretch"
+                          PlaceholderText="Earlier chats…" FontSize="12" AutomationProperties.Name="Bench chats"/>
+              </DockPanel>
+            </StackPanel>
           </Border>
           <DockPanel DockPanel.Dock="Bottom">
             <Button DockPanel.Dock="Right" Content="➤" Command="{Binding Mascot.SendCommand}" Background="Transparent"

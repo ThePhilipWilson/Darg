@@ -129,14 +129,32 @@ public partial class AgentViewModel : ObservableObject
         AgentState.Idle => "idle", AgentState.Saved => "saved · send to carry on", _ => "ended",
     };
 
-    public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null)
+    /// <param name="shown">What the transcript shows for the first message, when what's sent carries more
+    /// (Bench sends a line of context ahead of the person's words).</param>
+    public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null, string? shown = null)
     {
         Cwd = cwd;
         CardId = cardId;
         _args = args?.ToList() ?? [];
-        Name = name ?? (prompt.Length > 40 ? prompt[..40].TrimEnd() + "…" : prompt);
-        Items.Add(new UserItem(prompt));
+        var visible = shown ?? prompt;
+        Name = name ?? (visible.Length > 40 ? visible[..40].TrimEnd() + "…" : visible);
+        Items.Add(new UserItem(visible));
         Begin(prompt, resume: false);
+    }
+
+    /// <summary>Send a message that shows as <paramref name="shown"/> but goes to Claude as <paramref name="sent"/>.</summary>
+    public void Say(string shown, string sent)
+    {
+        Items.Add(new UserItem(shown));
+        if (_session is null)
+        {
+            if (SessionId is null) { Items.Add(new NoteItem("This chat has no session to carry on; start a new one.", true)); return; }
+            Items.Add(new NoteItem("Resuming the session…", false));
+            Begin(sent, resume: true);
+            return;
+        }
+        _session.Send(sent);
+        State = AgentState.Working;
     }
 
     /// <summary>An agent from an earlier run of Workbench: its transcript, and its session to resume.</summary>
