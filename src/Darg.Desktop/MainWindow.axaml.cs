@@ -7,6 +7,11 @@ namespace Darg.Desktop;
 
 public partial class MainWindow : Window
 {
+    void OnMinimize(object? s, Avalonia.Interactivity.RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    void OnMaximize(object? s, Avalonia.Interactivity.RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    void OnClose(object? s, Avalonia.Interactivity.RoutedEventArgs e) => Close();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -29,6 +34,12 @@ public partial class MainWindow : Window
                 vm.Restart.Refresh();
             };
         Closed += (_, _) => Notifier.Clear();
+        // the maximize button shows "restore" while maximized
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == WindowStateProperty)
+                MaxButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
+        };
 
         // the mouse's back and forward buttons walk where you've been (WOR-0052); caught on the way down,
         // so no list or box under the pointer can keep them. A web view is a native window of its own:
