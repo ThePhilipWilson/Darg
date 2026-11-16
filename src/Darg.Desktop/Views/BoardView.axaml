@@ -224,6 +224,8 @@
             <Button Content="Close" Command="{Binding CancelCommand}"/>
             <Button Content="▶ Work on this" Command="{Binding WorkOnCommand}" IsVisible="{Binding CanWorkOn}"/>
           </StackPanel>
+          <Button Content="✦ Improve this card" Command="{Binding ImproveCommand}" IsVisible="{Binding CanWorkOn}"
+                  ToolTip.Tip="An agent reads the card, the note it came from and the code, asks you if the words could mean several things, then fills the description out: what's wanted, where it lives, done when. It doesn't do the work, and the card stays where it is."/>
           <StackPanel Spacing="4" IsVisible="{Binding !!FlowTargets.Count}">
             <TextBlock Classes="dim small" Text="Or run a flow (an agent per role, each handing on to the next):"/>
             <ItemsControl ItemsSource="{Binding FlowTargets}">

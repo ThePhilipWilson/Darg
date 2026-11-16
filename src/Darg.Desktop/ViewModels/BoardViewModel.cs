@@ -34,6 +34,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public Action<AgentViewModel>? OpenAgent { get; set; }
     /// <summary>Set by the project: start an agent and show it. Passed: the prompt, its folder and its name.</summary>
     public Action<string, string, string>? StartAgent { get; set; }
+    /// <summary>Set by the project: start an agent that rounds a thin card out (passed the card's file path).</summary>
+    public Action<Card, string>? Improve { get; set; }
     FileSystemWatcher? _watchBoards;
 
     public ObservableCollection<string> Boards { get; } = [];
@@ -457,6 +459,16 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         else if (reload) Reload();
     }
 
+    /// <summary>Improve a card (WOR-0073): an agent fills its description out, asking first if the words are
+    /// unclear. The card stays where it is and free for Work on once that's done.</summary>
+    public void StartImprove(CardViewModel card)
+    {
+        if (Folder is null || Improve is null) return;
+        // the card's panel, left open, would save its old text over what the agent writes
+        if (Editor?.CardId == card.Id) Editor = null;
+        Improve(card.Card, Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File)));
+    }
+
     /// <summary>Run a flow on a card: like Work on, it goes to the working column if it was waiting.</summary>
     public void StartFlow(CardViewModel card, Flow flow)
     {
@@ -620,6 +632,7 @@ public sealed partial class CardViewModel : ObservableObject
     public bool HasAgent => Agent is not null;
     public IRelayCommand WorkOnCommand { get; }
     public IRelayCommand OpenAgentCommand { get; }
+    public IRelayCommand ImproveCommand { get; }
 
     public CardViewModel(Card card, IEnumerable<(string Id, string Name)> lists, BoardViewModel board, AgentViewModel? agent = null,
         IEnumerable<string>? otherBoards = null)
@@ -628,8 +641,10 @@ public sealed partial class CardViewModel : ObservableObject
         Agent = agent;
         WorkOnCommand = new RelayCommand(() => board.StartWork(this));
         OpenAgentCommand = new RelayCommand(() => { if (Agent is not null) board.OpenAgent?.Invoke(Agent); });
+        ImproveCommand = new RelayCommand(() => board.StartImprove(this));
         MoveTargets = [
             new MoveTarget(agent is null ? "Work on this with an agent" : "Open its agent", agent is null ? WorkOnCommand : OpenAgentCommand),
+            .. agent is null ? [new MoveTarget("✦ Improve this card (an agent fills it out)", ImproveCommand)] : Array.Empty<MoveTarget>(),
             .. (agent is null ? board.FlowList() : []).Select(f => new MoveTarget("Run flow: " + f.Name, new RelayCommand(() => board.StartFlow(this, f)))),
             .. lists.Select(l => new MoveTarget("Move to " + l.Name, new RelayCommand(() => board.Move(this, l.Id)))),
             // a card with a live agent stays put: the agent holds its file's path
@@ -789,6 +804,15 @@ public partial class CardEditor : ObservableObject
         if (_card is null) return;
         _board.Editor = null;
         _board.StartWork(_card);
+    }
+
+    /// <summary>An agent rounds the card out. The panel closes first, so a Save here can't write over what it writes.</summary>
+    [RelayCommand]
+    void Improve()
+    {
+        if (_card is null) return;
+        _board.Editor = null;
+        _board.StartImprove(_card);
     }
 }
 
