@@ -34,7 +34,7 @@ public partial class MainViewModel : ObservableObject
         Mascot.Notify += (agent, what, detail) =>
         {
             Log(MascotId, agent.Id, "Fettle", agent.Name, what, detail);
-            if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, $"Fettle: {what}", "", detail);
+            if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, NotificationEntry.HeaderFor("Fettle", agent.Name, what), "Fettle", detail);
         };
         Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
         Selected = LastProject.Pick(Projects, p => p.Config.Id); // the project that was open last time
@@ -315,7 +315,7 @@ public partial class MainViewModel : ObservableObject
     {
         Log(project.Config.Id, agent.Id, project.Name, agent.Name, what, detail);
         var looking = WindowActive && Selected == project && project.OnAgents && project.Agents?.Shown == agent;
-        if (!looking) Notifier.Show(project.Config.Id, agent.Id, $"{project.Name}: {what}", agent.Name, detail);
+        if (!looking) Notifier.Show(project.Config.Id, agent.Id, NotificationEntry.HeaderFor(project.Name, agent.Name, what), project.Name, detail);
     }
 
     /// <summary>Open a project's agent: its tab, the agents section, that agent, the window to the front.</summary>
@@ -353,8 +353,11 @@ public partial class MainViewModel : ObservableObject
 /// <summary>One notification an agent raised, kept in the list Fettle shows.</summary>
 public record NotificationEntry(string ProjectId, string AgentId, string Project, string Agent, string What, string Detail, DateTime At)
 {
-    public string Title => $"{Project}: {What}";
-    public string Sub => string.IsNullOrWhiteSpace(Agent) ? $"{At:HH:mm}" : $"{Agent} · {At:HH:mm}";
+    /// <summary>The agent's name leads, so headers differ at a glance; the project (or Fettle) follows in Sub.</summary>
+    public static string HeaderFor(string project, string agent, string what) =>
+        string.IsNullOrWhiteSpace(agent) ? $"{project}: {what}" : $"{agent}: {what}";
+    public string Title => HeaderFor(Project, Agent, What);
+    public string Sub => $"{Project} · {At:HH:mm}";
 }
 
 public enum Section { Home, Board, Notes, Docs, Agents, Reports, Artifacts, Mistakes, Code, GitHub, Preview, Terminal }
