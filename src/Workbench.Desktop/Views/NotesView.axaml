@@ -17,6 +17,8 @@
             <Button Content="Unpick" Command="{Binding ClearPickedCommand}" IsVisible="{Binding HasPicked}" ToolTip.Tip="Unpick every note (Esc)"/>
             <Button Content="Pick all" Command="{Binding PickAllCommand}"
                     ToolTip.Tip="Pick every note showing (Ctrl+A). Ctrl- or Shift-click picks one at a time."/>
+            <Button Content="{Binding ArchiveText}" Command="{Binding ToggleArchiveCommand}" IsVisible="{Binding HasArchive}"
+                    ToolTip.Tip="Notes whose ticket is completed move to the archive by themselves, and come back if the ticket is reopened"/>
           </StackPanel>
           <TextBox Text="{Binding Filter}" PlaceholderText="Filter notes…" MaxWidth="460" MinWidth="280" HorizontalAlignment="Left"/>
         </DockPanel>
@@ -58,7 +60,7 @@
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:NoteViewModel">
                           <Border Classes="postit" Classes.picked="{Binding IsPicked}" Tag="{Binding}" Background="{Binding Brush}" CornerRadius="2" Padding="12,12,12,9" MinHeight="90"
-                                  BoxShadow="0 6 14 0 #70000000" Cursor="Hand">
+                                  BoxShadow="0 6 14 0 #70000000" Cursor="Hand" Opacity="{Binding PaperOpacity}">
                             <Border.RenderTransform>
                               <RotateTransform Angle="{Binding Angle}"/>
                             </Border.RenderTransform>

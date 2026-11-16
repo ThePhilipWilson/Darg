@@ -121,5 +121,31 @@ public sealed class NoteStoreTests : IDisposable
         Assert.Equal("T-0099", notes["c"]);
     }
 
+    [Fact]
+    public void A_note_goes_to_the_archive_when_its_ticket_is_completed_and_back_when_it_reopens()
+    {
+        var boards = Directory.CreateDirectory(Path.Combine(_dir, "tasks")).FullName;
+        var board = Directory.CreateDirectory(Path.Combine(boards, "Main")).FullName;
+        File.WriteAllText(Path.Combine(board, "board.json"), """{"columns":[{"id":"c1","name":"In Progress"}],"prefix":"T","nextId":1,"order":{}}""");
+        var notes = Directory.CreateDirectory(Path.Combine(_dir, "notes")).FullName;
+        var n = NoteStore.Save(notes, new Note("n1", "ship it", "Loose", "yellow", [], "", ""));
+        var (_, card) = NoteStore.MakeTicket(notes, n, board);
+        NoteStore.Save(notes, new Note("n2", "lost ticket", "Loose", "yellow", [], "", "T-0099"));
+        NoteStore.Save(notes, new Note("n3", "no ticket", "Loose", "yellow", [], "", ""));
+
+        Assert.Equal((0, 0), NoteStore.SyncArchive(notes, NoteStore.TicketStatuses(boards)));
+        Assert.Equal("Backlog", NoteStore.TicketStatuses(boards)[card.Id]);
+
+        BoardStore.Move(board, card.Id, Board.Completed);
+        Assert.Equal((1, 0), NoteStore.SyncArchive(notes, NoteStore.TicketStatuses(boards)));
+        Assert.Equal(["n2", "n3"], NoteStore.List(notes).Select(x => x.Id).Order());
+        Assert.Equal("n1", NoteStore.Archived(notes).Single().Id);
+
+        BoardStore.Move(board, card.Id, "c1");
+        Assert.Equal((0, 1), NoteStore.SyncArchive(notes, NoteStore.TicketStatuses(boards)));
+        Assert.Empty(NoteStore.Archived(notes));
+        Assert.Equal(3, NoteStore.List(notes).Count);
+    }
+
     public void Dispose() => Directory.Delete(_dir, true);
 }

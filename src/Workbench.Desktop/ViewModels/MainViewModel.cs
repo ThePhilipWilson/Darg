@@ -227,7 +227,7 @@ public partial class ProjectViewModel : ObservableObject
         if (config.Uses(Features.Terminal)) Consoles = new ConsolesViewModel(config);
         if (config.Uses(Features.Docs) && config.Docs is { Length: > 0 } docs) Docs = new DocsViewModel(docs);
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
-            Notes = new NotesViewModel(notes)
+            Notes = new NotesViewModel(notes, config.Boards)
             {
                 TicketBoard = () => Board?.Folder,
                 OpenTicket = id => { if (Board?.OpenById(id) == true) Section = Section.Board; },
