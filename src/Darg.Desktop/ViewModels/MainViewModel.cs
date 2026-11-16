@@ -173,6 +173,9 @@ public partial class MainViewModel : ObservableObject
             case Section.Agents when p.Agents?.Shown is { } a:
                 s.Append($", agent \"{a.Name}\" ({a.StateText}), its folder {a.Cwd}"); // "working in" read as its state
                 break;
+            case Section.Reports when p.Reports is not null:
+                s.Append($", reports folder {p.Reports.Folder}" + (p.Reports.Selected is { } r ? $", report \"{r.Heading}\" ({r.Report.File})" : ""));
+                break;
             case Section.Mistakes when p.Mistakes is not null:
                 s.Append($", mistake log {p.Mistakes.File}");
                 break;
@@ -334,7 +337,7 @@ public record NotificationEntry(string ProjectId, string AgentId, string Project
     public string Sub => string.IsNullOrWhiteSpace(Agent) ? $"{At:HH:mm}" : $"{Agent} · {At:HH:mm}";
 }
 
-public enum Section { Home, Board, Notes, Docs, Agents, Artifacts, Mistakes, Code, GitHub, Preview, Terminal }
+public enum Section { Home, Board, Notes, Docs, Agents, Reports, Artifacts, Mistakes, Code, GitHub, Preview, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -359,9 +362,11 @@ public partial class ProjectViewModel : ObservableObject
     public MistakesViewModel? Mistakes { get; }
     /// <summary>Where a project opens: its README and what's going on (every project has one).</summary>
     public HomeViewModel Home { get; }
+    /// <summary>What card agents filed when they finished (there with the agents feature).</summary>
+    public ReportsViewModel? Reports { get; }
     public bool UsesTerminal => Consoles is not null;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnReports), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -378,6 +383,7 @@ public partial class ProjectViewModel : ObservableObject
     public bool OnAgents => Section == Section.Agents;
     public bool OnArtifacts => Section == Section.Artifacts;
     public bool OnMistakes => Section == Section.Mistakes;
+    public bool OnReports => Section == Section.Reports;
     public bool OnTerminal => Section == Section.Terminal;
 
     static Color Mix(Color a, Color b, double t) => Color.FromRgb(
@@ -397,6 +403,10 @@ public partial class ProjectViewModel : ObservableObject
             Agents = new AgentsViewModel(config);
             Artifacts = new ArtifactsViewModel(config.Id, id => Agents.Find(id)?.Name);
             Mistakes = new MistakesViewModel(MistakeLog.PathFor(config.Id), config.Name);
+            Reports = new ReportsViewModel(ReportStore.FolderFor(config.Id));
+            // an agent that filed a report goes once its turn ends well: the report is what's kept of it
+            Reports.Loaded += Agents.Reported;
+            Agents.Reported(ReportStore.List(Reports.Folder));
         }
         if (config.Uses(Features.Terminal)) Consoles = new ConsolesViewModel(config);
         if (config.Uses(Features.Docs) && config.Docs is { Length: > 0 } docs) Docs = new DocsViewModel(docs);
@@ -418,12 +428,13 @@ public partial class ProjectViewModel : ObservableObject
             // a card agent shows its card's state: "Complete, pending removal" once the card is done
             Agents.CardIsDone = Board.IsDone;
             Board.Reloaded += Agents.RefreshCards;
+            Reports!.OpenCard = id => { if (!Board.OpenById(id)) return false; Section = Section.Board; return true; };
             Agents.RefreshCards();
             // a card looks up its agent only when the board rebuilds: forgetting the agent frees the card now
             Agents.Forgotten += a => { if (a.CardId is { } card) Board.AgentGone(card); };
             Board.OpenAgent = a => { Agents.Selected = a; Section = Section.Agents; };
             Board.StartAgent = (prompt, cwd, name) => { Agents.Start(prompt, cwd, name: name); Section = Section.Agents; };
-            string CardPrompt(Card card, string file, IReadOnlyList<string> alongside)
+            string CardPrompt(Card card, string file, IReadOnlyList<string> alongside, string? agentId = null)
             {
                 // everyone at work in this folder: the batch this card was started with, and agents busy here now
                 var folder = CardFolder(card);
@@ -433,7 +444,9 @@ public partial class ProjectViewModel : ObservableObject
                 var others = alongside.Concat(busy).Where(x => x != card.Id).Distinct().ToList();
                 var repo = Directory.Exists(Path.Combine(folder, ".git")) || File.Exists(Path.Combine(folder, ".git")) ? folder : null;
                 var commits = Core.Commits.For(Config, folder) is { } rule ? Core.Commits.Describe(rule, folder) : null;
-                return AgentsViewModel.CardPrompt(Name, card, file, others, repo, commits);
+                // done and a report when it's sure, the board's QA column when I should look (WOR-0061)
+                var finish = ReportStore.Rules(Reports!.Folder, card, BoardColumns.Qa(Board.Columns), agentId);
+                return AgentsViewModel.CardPrompt(Name, card, file, others, repo, commits, finish);
             }
             // what picks a card agent's model profile: the card's words, type and labels, not the house rules around them
             static AgentJob CardJob(Card card) => new(JobKinds.Card, $"{card.Title}\n\n{card.Description}".Trim(), card.Type, card.Labels);
@@ -442,7 +455,8 @@ public partial class ProjectViewModel : ObservableObject
                 a.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State) && a.State == AgentState.Exited) Board.Reload(); };
             Board.WorkOn = (card, file, alongside, show) =>
             {
-                Watch(Agents.Start(CardPrompt(card, file, alongside), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card)));
+                var id = AgentsViewModel.NewId();
+                Watch(Agents.Start(CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id));
                 if (show) Section = Section.Agents;
             };
             Board.Flows = () => Agents.Flows;
@@ -476,6 +490,7 @@ public partial class ProjectViewModel : ObservableObject
         if (value == Section.GitHub) Hub?.Load();
         if (value == Section.Artifacts) Artifacts?.Refresh();
         if (value == Section.Mistakes) Mistakes?.Reload();
+        if (value == Section.Reports) Reports?.Reload();
         if (value == Section.Preview) _ = Preview?.Open();
     }
 
@@ -490,7 +505,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>Whether this project has a section (its feature ticked and what it needs set up).</summary>
     public bool Has(Section s) => s switch
     {
-        Section.Home => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null,
+        Section.Home => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null, Section.Reports => Reports is not null,
         Section.Code => Code is not null, Section.GitHub => Hub is not null, Section.Preview => Preview is not null, _ => Consoles is not null,
     };
 
@@ -500,6 +515,7 @@ public partial class ProjectViewModel : ObservableObject
         foreach (var a in Agents?.Agents ?? []) a.End();
         Board?.Dispose();
         Mistakes?.Dispose();
+        Reports?.Dispose();
         Preview?.Close();
     }
 }

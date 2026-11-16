@@ -12,12 +12,14 @@ public partial class AgentsViewModel : ObservableObject
 {
     readonly ProjectConfig project;
     readonly string _store;
+    readonly string _reports;
 
     /// <summary>A project's agents, with the ones saved by earlier runs listed (newest first) to carry on.</summary>
     public AgentsViewModel(ProjectConfig project)
     {
         this.project = project;
         _store = AgentStore.Folder(project.Id.Length > 0 ? project.Id : "default");
+        _reports = ReportStore.FolderFor(project.Id);
         SelectedRepo = RepoChoices.FirstOrDefault();
         Agents.CollectionChanged += (_, _) => Resort();
         foreach (var r in AgentStore.List(_store)) Add(new AgentViewModel(r, _store), select: false);
@@ -154,6 +156,34 @@ public partial class AgentsViewModel : ObservableObject
     public bool IsFinished(AgentViewModel a) =>
         a.IsDone || (a.State == AgentState.Saved && a.CardDone && a.FinishedTurn);
 
+    // ---- Finished agent reports (WOR-0061): an agent that filed a report is forgotten once its turn ends well.
+
+    readonly HashSet<string> _reported = [];
+
+    /// <summary>The reports in the project's folder: every agent that wrote one is forgotten when it's finished, at once if it
+    /// is already, else when its turn ends well (one that fails or asks something stays, for the person to see).
+    /// A report that doesn't name its agent stands for the agents on its card that were started before it was written.</summary>
+    public void Reported(IEnumerable<AgentReport> reports)
+    {
+        foreach (var r in reports)
+            foreach (var a in Agents.Where(a => Wrote(a, r)).ToList())
+            {
+                _reported.Add(a.Id);
+                if (Finished(a)) Forget(a);
+            }
+    }
+
+    static bool Wrote(AgentViewModel a, AgentReport r)
+    {
+        if (r.Agent.Length > 0) return a.Id == r.Agent;
+        if (r.Card.Length == 0 || a.CardId != r.Card) return false;
+        try { return a.Created <= File.GetCreationTime(r.File); } // not the write time: marking it read rewrites the file
+        catch (IOException) { return false; }
+    }
+
+    /// <summary>Done with its turn, well: idle and not failed, or saved after a turn that ended normally.</summary>
+    static bool Finished(AgentViewModel a) => a.IsDone || (a.State == AgentState.Saved && a.FinishedTurn);
+
     /// <summary>True while an agent here has run out of usage and isn't yet set to carry on.</summary>
     [ObservableProperty] public partial bool AnyOutOfUsage { get; set; }
 
@@ -175,6 +205,8 @@ public partial class AgentsViewModel : ObservableObject
             if (e.PropertyName == nameof(AgentViewModel.CanContinueAfterReset)) AnyOutOfUsage = Agents.Any(a => a.CanContinueAfterReset);
             if (e.PropertyName is nameof(AgentViewModel.State) or nameof(AgentViewModel.TurnFailed) && SortByStatus) Resort();
             if (e.PropertyName != nameof(AgentViewModel.State)) return;
+            // it filed a report and its turn has now ended well: it goes (after this change has been handled)
+            if (_reported.Contains(agent.Id) && Finished(agent)) Dispatcher.UIThread.Post(() => { if (Agents.Contains(agent) && Finished(agent)) Forget(agent); });
             NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
             if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
             // news from an agent that isn't the one open here stays marked in the list until it's looked at
@@ -294,9 +326,10 @@ public partial class AgentsViewModel : ObservableObject
     }
 
     /// <param name="job">What it's for, which picks its model profile; a chat with the prompt when not given.</param>
-    public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null, AgentJob? job = null)
+    /// <param name="id">The agent's id, when its prompt has to name it (a card agent's report does); a new one otherwise.</param>
+    public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null, AgentJob? job = null, string? id = null)
     {
-        var id = Guid.NewGuid().ToString("N")[..10];
+        id ??= NewId();
         job ??= new AgentJob(JobKinds.Chat, prompt);
         var profile = ModelProfiles.Pick(ModelProfiles.Load(), job with { Project = job.Project ?? project.Id });
         var folder = string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd;
@@ -307,6 +340,8 @@ public partial class AgentsViewModel : ObservableObject
         if (name is null) _ = Retitle(agent, prompt); // a card's agent is already named for the card
         return agent;
     }
+
+    public static string NewId() => Guid.NewGuid().ToString("N")[..10];
 
     /// <summary>The project's other repos, so an agent started in one can work in the rest (Site and Workspace).
     /// Kept in its saved args like the artifacts folder.</summary>
@@ -327,9 +362,13 @@ public partial class AgentsViewModel : ObservableObject
             string? log = null;
             try { log = MistakeLog.Ensure(MistakeLog.PathFor(project.Id), project.Name); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // no log; artifacts still work
+            // so is the reports folder: a card agent files its report there when it's done (WOR-0061)
+            List<string> reports = [];
+            try { Directory.CreateDirectory(_reports); reports = ["--add-dir", _reports]; }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             return log is null
-                ? ["--add-dir", dir, "--append-system-prompt", ArtifactStore.Briefing(dir)]
-                : ["--add-dir", dir, "--add-dir", Path.GetDirectoryName(log)!, "--append-system-prompt", ArtifactStore.Briefing(dir) + " " + MistakeLog.Briefing(log)];
+                ? ["--add-dir", dir, .. reports, "--append-system-prompt", ArtifactStore.Briefing(dir)]
+                : ["--add-dir", dir, "--add-dir", Path.GetDirectoryName(log)!, .. reports, "--append-system-prompt", ArtifactStore.Briefing(dir) + " " + MistakeLog.Briefing(log)];
         }
         catch (Exception) { return []; } // no folder, no artifacts; the agent still runs
     }
@@ -339,7 +378,10 @@ public partial class AgentsViewModel : ObservableObject
     /// agents already busy there.</param>
     /// <param name="repo">The folder, when it is a git repository: then the agent is told which branch to work on
     /// (<see cref="CardBranch"/>) and how to decide on, and use, a worktree of its own.</param>
-    public static string CardPrompt(string projectName, Card card, string file, IReadOnlyList<string>? alongside = null, string? repo = null, string? commits = null)
+    /// <param name="finish">What to do when the work is finished (<see cref="ReportStore.Rules"/>: QA or done and a report);
+    /// null: move the card to done.</param>
+    public static string CardPrompt(string projectName, Card card, string file, IReadOnlyList<string>? alongside = null, string? repo = null, string? commits = null,
+        string? finish = null)
     {
         var lines = new List<string> { $"Work on this card from the {projectName} board.", "", $"{card.Id}: {card.Title}" };
         if (card.IsBug) lines.Add("Type: Bug. Find the cause before changing anything, and add a test that fails without the fix where one can be written.");
@@ -350,9 +392,10 @@ public partial class AgentsViewModel : ObservableObject
         if (card.Description.Length > 0) { lines.Add(""); lines.Add(card.Description); }
         lines.Add("");
         lines.Add("Read the project's CLAUDE.md first. Use AskUserQuestion when a choice is mine to make. " +
-                  "When you stop, say what is done and what is left. When the work is finished and pushed, move the card to done yourself: " +
+                  "When you stop, say what is done and what is left. " + (finish ??
+                  "When the work is finished and pushed, move the card to done yourself: " +
                   "set its Status to the board's last column (Completed if the board has no done column), add a Done line with today's date, " +
-                  "and move its id into that column in board.json's order. Leave the card where it is while work is left.");
+                  "and move its id into that column in board.json's order. Leave the card where it is while work is left."));
         if (commits is not null) lines.Add(commits + " This is Darg's rule for that folder and wins over any general one.");
         if (alongside is { Count: > 0 })
         {
@@ -397,6 +440,7 @@ public partial class AgentViewModel : ObservableObject
     public string? Project { get; set; }
     readonly List<string> _args;
     DateTime _created = DateTime.Now;
+    public DateTime Created => _created;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou), nameof(Open), nameof(IsDone), nameof(IsFailed))]
     public partial AgentState State { get; set; }
     /// <summary>The last turn ended in an error: shown as failed rather than done.</summary>

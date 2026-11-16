@@ -403,6 +403,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             .ToList();
     }
 
+    /// <summary>The shown board's columns (none before it loads).</summary>
+    public IReadOnlyList<Column> Columns => _board?.Columns ?? [];
+
     /// <summary>A card is done when it's in Completed or the board's last column (its done column).</summary>
     public bool IsDone(string cardId)
     {

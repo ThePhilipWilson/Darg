@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:views="using:Darg.Desktop.Views"
+             x:Class="Darg.Desktop.Views.ReportsView"
+             x:DataType="vm:ReportsViewModel">
+  <Grid ColumnDefinitions="340,*" RowDefinitions="*,Auto">
+    <!-- the reports, newest first; an unread one is bold with a dot -->
+    <Border Grid.RowSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel>
+        <DockPanel DockPanel.Dock="Top" Margin="12,8,8,4">
+          <Button DockPanel.Dock="Right" Content="Mark all read" Command="{Binding MarkAllReadCommand}" IsEnabled="{Binding HasUnread}"/>
+          <CheckBox Content="Unread only" IsChecked="{Binding UnreadOnly}" VerticalAlignment="Center"/>
+        </DockPanel>
+        <ListBox ItemsSource="{Binding Reports}" SelectedItem="{Binding Selected}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ReportRow">
+              <DockPanel AutomationProperties.Name="{Binding Heading}" Margin="0,2">
+                <Ellipse DockPanel.Dock="Left" Width="8" Height="8" Margin="0,5,8,0" VerticalAlignment="Top" Fill="{StaticResource Accent}"
+                         IsVisible="{Binding !Read}" ToolTip.Tip="Unread"/>
+                <Border DockPanel.Dock="Left" Width="8" Margin="0,0,8,0" IsVisible="{Binding Read}"/>
+                <StackPanel>
+                  <TextBlock Text="{Binding Heading}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" Classes.unread="{Binding !Read}"/>
+                  <TextBlock Text="{Binding Meta}" Classes="dim small"/>
+                </StackPanel>
+              </DockPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+          <ListBox.Styles>
+            <Style Selector="TextBlock.unread">
+              <Setter Property="FontWeight" Value="SemiBold"/>
+            </Style>
+          </ListBox.Styles>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <Panel Grid.Column="1">
+      <DockPanel IsVisible="{Binding HasSelected}">
+        <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Button Content="Show card" Command="{Binding ShowCardCommand}" IsVisible="{Binding Selected.HasCard, FallbackValue=False}"
+                      ToolTip.Tip="Open this report's card on the board"/>
+              <Button Content="{Binding Selected.ReadLabel, FallbackValue=''}" Command="{Binding ToggleReadCommand}"/>
+              <Button Content="Open file" Command="{Binding OpenFileCommand}" ToolTip.Tip="{Binding Selected.Report.File, FallbackValue=''}"/>
+            </StackPanel>
+            <StackPanel VerticalAlignment="Center" Spacing="2">
+              <SelectableTextBlock Text="{Binding Selected.Heading, FallbackValue=''}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+              <WrapPanel>
+                <TextBlock Text="{Binding Selected.Report.Date, FallbackValue=''}" Classes="dim small" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock Text="Commits:" Classes="dim small" VerticalAlignment="Center" Margin="0,0,4,0" IsVisible="{Binding Selected.HasCommits, FallbackValue=False}"/>
+                <ItemsControl ItemsSource="{Binding Selected.Commits, FallbackValue={x:Null}}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                      <Button Content="{Binding}" Classes="chip" Padding="5,1" Margin="0,0,4,0" FontFamily="Consolas,Menlo,monospace" FontSize="12"
+                              Command="{Binding $parent[views:ReportsView].((vm:ReportsViewModel)DataContext).OpenCommitCommand}" CommandParameter="{Binding}"
+                              ToolTip.Tip="Open this commit on GitHub"/>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </WrapPanel>
+            </StackPanel>
+          </DockPanel>
+        </Border>
+        <ScrollViewer>
+          <views:MarkdownView Markdown="{Binding Selected.Body, FallbackValue=''}" Margin="18,14" MaxWidth="980" HorizontalAlignment="Left"/>
+        </ScrollViewer>
+      </DockPanel>
+      <TextBlock Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" MaxWidth="480" TextWrapping="Wrap"
+                 IsVisible="{Binding !HasSelected}"
+                 Text="{Binding EmptyText}"/>
+    </Panel>
+
+    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+      <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}"/>
+    </Border>
+  </Grid>
+</UserControl>

@@ -25,6 +25,7 @@ public static class DefaultContext
             sb.AppendLine($"- `--add-dir {r}`: the project's {ProjectConfig.RepoName(r)} repo, so it can work there too.");
         var mistakes = MistakeLog.PathFor(project.Id, instanceFolder).Replace('\\', '/');
         sb.AppendLine($"- `--add-dir {Path.GetDirectoryName(mistakes)!.Replace('\\', '/')}`: the project's mistake log folder, so it can append to the log.");
+        sb.AppendLine($"- `--add-dir {ReportStore.FolderFor(project.Id, instanceFolder).Replace('\\', '/')}`: the project's reports folder, where a card agent files its report when it finishes.");
         sb.AppendLine("- `--append-system-prompt`, with this text:");
         sb.AppendLine();
         sb.AppendLine("```text");
