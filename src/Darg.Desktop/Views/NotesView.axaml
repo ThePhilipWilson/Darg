@@ -23,6 +23,8 @@
           <Button DockPanel.Dock="Right" Classes="primary" Content="+ Post-it" Command="{Binding NewNoteCommand}" Margin="12,0,0,0"/>
           <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0"/>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
+            <Slider Minimum="160" Maximum="560" Value="{Binding ColumnWidth}" Width="110" VerticalAlignment="Center"
+                    AutomationProperties.Name="Post-it width" ToolTip.Tip="How wide the columns and their post-its are"/>
             <TextBlock Text="{Binding PickedText}" IsVisible="{Binding HasPicked}" VerticalAlignment="Center" Foreground="{StaticResource Accent}"/>
             <Button Classes="primary" Content="{Binding MakeTicketsText}" Command="{Binding MakeTicketsCommand}" IsVisible="{Binding CanMakeTickets}"
                     ToolTip.Tip="Each picked note becomes a card on the board's backlog: first line as the title, tags as labels. Notes that already have a ticket are skipped."/>
@@ -66,7 +68,7 @@
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="18"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:NoteColumn">
-              <Border Width="250" Classes="wallcol" Tag="{Binding Name}" Background="Transparent">
+              <Border Width="{Binding $parent[UserControl].((vm:NotesViewModel)DataContext).ColumnWidth}" Classes="wallcol" Tag="{Binding Name}" Background="Transparent">
                 <DockPanel>
                   <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="2,0,0,10">
                     <DockPanel IsVisible="{Binding IsHeaderPlain}">

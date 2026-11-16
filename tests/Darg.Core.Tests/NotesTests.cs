@@ -227,6 +227,20 @@ public sealed class WallColumnTests : IDisposable
     Note Put(string id, string column, string ticket = "") => NoteStore.Save(_dir, new Note(id, "text " + id, column, "yellow", [], "2026-11-16 10:00", ticket));
 
     [Fact]
+    public void Column_width_defaults_clamps_and_survives_column_edits()
+    {
+        Assert.Equal(NoteStore.DefaultWidth, NoteStore.ColumnWidth(_dir));
+        NoteStore.SetColumnWidth(_dir, 400);
+        Assert.Equal(400, NoteStore.ColumnWidth(_dir));
+        NoteStore.AddColumn(_dir);
+        Assert.Equal(400, NoteStore.ColumnWidth(_dir));
+        NoteStore.SetColumnWidth(_dir, 5000);
+        Assert.Equal(NoteStore.MaxWidth, NoteStore.ColumnWidth(_dir));
+        File.WriteAllText(Path.Combine(_dir, "wall.json"), "{\"width\":\"wide\"}");
+        Assert.Equal(NoteStore.DefaultWidth, NoteStore.ColumnWidth(_dir));
+    }
+
+    [Fact]
     public void Adding_starts_from_the_default_columns_and_numbers_new_ones()
     {
         Assert.Equal("New column", NoteStore.AddColumn(_dir));

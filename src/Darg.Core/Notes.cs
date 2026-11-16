@@ -19,6 +19,33 @@ public static class NoteStore
     public static readonly string[] DefaultColumns = ["Loose", "Thinking about", "Parked"];
     public static readonly string[] Colours = ["yellow", "pink", "blue", "green", "orange"];
 
+    public const double DefaultWidth = 250, MinWidth = 160, MaxWidth = 560;
+
+    /// <summary>How wide a wall column (and so its post-its) is, from wall.json's "width"; the default when absent or silly.</summary>
+    public static double ColumnWidth(string folder)
+    {
+        try
+        {
+            var path = Path.Combine(folder, "wall.json");
+            if (File.Exists(path) && JsonNode.Parse(File.ReadAllText(path))?["width"] is JsonValue v && v.TryGetValue<double>(out var w))
+                return Math.Clamp(w, MinWidth, MaxWidth);
+        }
+        catch (Exception e) when (e is JsonException or IOException or FormatException or InvalidOperationException) { }
+        return DefaultWidth;
+    }
+
+    /// <summary>Write the column width to wall.json, keeping everything else in it.</summary>
+    public static void SetColumnWidth(string folder, double width)
+    {
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "wall.json");
+        JsonObject json;
+        try { json = File.Exists(path) ? JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? new() : new(); }
+        catch (JsonException) { json = new(); }
+        json["width"] = Math.Round(Math.Clamp(width, MinWidth, MaxWidth));
+        File.WriteAllText(path, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
+    }
+
     public static IReadOnlyList<string> Columns(string folder)
     {
         var path = Path.Combine(folder, "wall.json");
