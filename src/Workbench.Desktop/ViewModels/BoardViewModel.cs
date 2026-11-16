@@ -43,7 +43,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     partial void OnFilterChanged(string value) => Apply();
     partial void OnShowCompletedChanged(bool value) => Apply();
 
-    string? Folder => SelectedBoard is null || _project.Boards is null ? null : Path.Combine(_project.Boards, SelectedBoard);
+    public string? Folder => SelectedBoard is null || _project.Boards is null ? null : Path.Combine(_project.Boards, SelectedBoard);
 
     public void Reload()
     {

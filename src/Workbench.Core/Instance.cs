@@ -61,7 +61,11 @@ public sealed class ProjectConfig
     public string Color { get; set; } = "#e0a84a";
     /// <summary>The folder holding the project's boards, one subfolder per board.</summary>
     public string? Boards { get; set; }
+    /// <summary>The notes wall's folder; by default "notes" beside the boards folder.</summary>
+    public string? Notes { get; set; }
     public List<string> Repos { get; set; } = [];
+
+    public string? NotesFolder() => Notes ?? (Boards is null ? null : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(Boards))!, "notes"));
     /// <summary>Features this project uses; an empty list means all of them.</summary>
     public List<string> Features { get; set; } = [];
 
@@ -75,5 +79,5 @@ public sealed class ProjectConfig
 
 public static class Features
 {
-    public const string Board = "board", Agents = "agents", Terminal = "terminal";
+    public const string Board = "board", Notes = "notes", Agents = "agents", Terminal = "terminal";
 }

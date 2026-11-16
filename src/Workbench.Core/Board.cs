@@ -156,6 +156,48 @@ public static class BoardStore
         File.WriteAllText(boardPath, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
     }
 
+    /// <summary>Add a card to the backlog: the next ID (past board.json's count and every ID in use), a
+    /// file named as Tatty names them, and its place at the end of the backlog. Returns the card.</summary>
+    public static Card Create(string folder, string title, string description = "", IEnumerable<string>? labels = null,
+        string priority = "", string type = "Task")
+    {
+        title = Regex.Replace(title.Replace('\n', ' ').Replace('\r', ' '), @"\s+", " ").Trim();
+        if (title.Length == 0) throw new ArgumentException("A card needs a title.", nameof(title));
+        var boardPath = Path.Combine(folder, "board.json");
+        var json = JsonNode.Parse(File.ReadAllText(boardPath))!.AsObject();
+        var prefix = (string?)json["prefix"] is { Length: > 0 } p ? p : "T";
+        var used = ReadCards(folder).Select(c => c.Number).Where(n => n != int.MaxValue).DefaultIfEmpty(0).Max();
+        var next = Math.Max((int?)json["nextId"] ?? 1, used + 1);
+        var id = $"{prefix}-{next:0000}";
+        var labelText = string.Join(", ", (labels ?? []).Select(l => l.Trim()).Where(l => l.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase));
+        var text = $"# {id}: {title}\n\n- **Status:** Backlog\n- **Priority:**{(priority.Length > 0 ? " " + priority : "")}\n" +
+                   $"- **Type:** {type}\n- **Labels:**{(labelText.Length > 0 ? " " + labelText : "")}\n" +
+                   $"- **Created:** {DateTime.Now:yyyy-MM-dd}\n- **Done:**\n\n## Description\n\n{description.Trim()}\n";
+        var items = Path.Combine(folder, "items");
+        Directory.CreateDirectory(items);
+        var file = $"{id} - {FileTitle(title)}.md";
+        File.WriteAllText(Path.Combine(items, file), text, new UTF8Encoding(false));
+
+        json["nextId"] = next + 1;
+        var order = json["order"] as JsonObject ?? new JsonObject();
+        json["order"] = order;
+        if (order[Board.Backlog] is not JsonArray backlog) order[Board.Backlog] = backlog = new JsonArray();
+        backlog.Add(id);
+        File.WriteAllText(boardPath, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
+        return Parse(text, file)!;
+    }
+
+    /// <summary>A title as it goes in a file name, as Tatty does it: slashes become spaces, characters a
+    /// file name can't hold go, and it's cut to 60 characters.</summary>
+    public static string FileTitle(string title)
+    {
+        var s = title.Replace('/', ' ').Replace('\\', ' ');
+        s = Regex.Replace(s, @"[<>:""|?*\x00-\x1f]", "");
+        s = Regex.Replace(s, @"\s+", " ").Trim();
+        if (s.Length > 60) s = s[..60];
+        return s.TrimEnd(' ', '.');
+    }
+
     static string SetField(string text, string name, string value)
     {
         var line = new Regex($@"^- \*\*{Regex.Escape(name)}:\*\*[^\n]*$", RegexOptions.Multiline);

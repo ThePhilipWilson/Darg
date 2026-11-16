@@ -1,0 +1,109 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Workbench.Desktop.ViewModels"
+             x:Class="Workbench.Desktop.Views.NotesView"
+             x:DataType="vm:NotesViewModel">
+  <Grid ColumnDefinitions="*,Auto">
+    <Grid RowDefinitions="Auto,Auto,*">
+      <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Classes="primary" Content="+ Post-it" Command="{Binding NewNoteCommand}" Margin="12,0,0,0"/>
+          <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+          <TextBox Text="{Binding Filter}" PlaceholderText="Filter notes…" MaxWidth="460" MinWidth="280" HorizontalAlignment="Left"/>
+        </DockPanel>
+      </Border>
+
+      <Border Grid.Row="1" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8,14,3">
+        <WrapPanel>
+          <ItemsControl ItemsSource="{Binding Tags}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:LabelChip">
+                <ToggleButton Classes="chip" Content="{Binding Name, StringFormat='#{0}'}" IsChecked="{Binding IsOn}"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <ItemsControl ItemsSource="{Binding Colours}" Margin="10,0,0,0">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:LabelChip">
+                <ToggleButton Classes="chip" Content="{Binding Name}" IsChecked="{Binding IsOn}"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </WrapPanel>
+      </Border>
+
+      <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Background="#16181c">
+        <ItemsControl ItemsSource="{Binding Columns}" Margin="16">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="18"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:NoteColumn">
+              <Border Width="250" Classes="wallcol" Tag="{Binding Name}" DragDrop.AllowDrop="True" Background="Transparent">
+                <DockPanel>
+                  <TextBlock DockPanel.Dock="Top" Text="{Binding Name}" Classes="dim" FontSize="11" FontWeight="SemiBold" Margin="2,0,0,10"/>
+                  <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Notes}" Padding="4,4,8,4">
+                      <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="14"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NoteViewModel">
+                          <Border Classes="postit" Tag="{Binding}" Background="{Binding Brush}" CornerRadius="2" Padding="12,12,12,9" MinHeight="90"
+                                  BoxShadow="0 6 14 0 #70000000" Cursor="Hand">
+                            <Border.RenderTransform>
+                              <RotateTransform Angle="{Binding Angle}"/>
+                            </Border.RenderTransform>
+                            <StackPanel Spacing="8">
+                              <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="#2a2620" FontSize="15"
+                                         FontFamily="Segoe Print, Comic Sans MS, Chalkboard, cursive"/>
+                              <DockPanel Opacity="0.65">
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Ticket}" Foreground="#2a2620" FontSize="10" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding Meta}" Foreground="#2a2620" FontSize="10" TextWrapping="Wrap"/>
+                              </DockPanel>
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Grid>
+
+    <!-- editor -->
+    <Border Grid.Column="1" Width="320" IsVisible="{Binding IsEditing}" Background="{StaticResource Panel}"
+            BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+      <StackPanel DataContext="{Binding Editor}" x:DataType="vm:NoteEditor" Margin="14" Spacing="10">
+        <TextBlock Text="{Binding Heading}" FontWeight="SemiBold"/>
+        <Border Background="{Binding Brush}" CornerRadius="2" Padding="8">
+          <TextBox Text="{Binding Text}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="140" Foreground="#2a2620"
+                   Background="Transparent" BorderThickness="0" FontSize="15" FontFamily="Segoe Print, Comic Sans MS, Chalkboard, cursive"
+                   PlaceholderText="Write it down…"/>
+        </Border>
+        <ItemsControl ItemsSource="{Binding $parent[UserControl].((vm:NotesViewModel)DataContext).ColourChoices}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ColourChoice">
+              <Button Width="26" Height="26" CornerRadius="13" Background="{Binding Brush}" Command="{Binding Command}" ToolTip.Tip="{Binding Name}"/>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBox Text="{Binding TagsText}" PlaceholderText="Tags, comma separated"/>
+        <ComboBox ItemsSource="{Binding ColumnNames}" SelectedItem="{Binding Column}" HorizontalAlignment="Stretch"/>
+        <TextBlock Classes="bad" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Classes="primary" Content="Save" Command="{Binding SaveCommand}"/>
+          <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+        </StackPanel>
+        <Button Content="Make it a ticket" Command="{Binding MakeTicketCommand}" IsVisible="{Binding CanMakeTicket}"
+                ToolTip.Tip="Saves this note as a card on the board's backlog: first line as the title, tags as labels"/>
+        <TextBlock Classes="dim small" Text="{Binding Ticket, StringFormat='Already a ticket: {0}'}"
+                   IsVisible="{Binding Ticket, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        <Button Content="Delete" Command="{Binding DeleteCommand}" IsVisible="{Binding !IsNew}" Foreground="{StaticResource Bad}"/>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

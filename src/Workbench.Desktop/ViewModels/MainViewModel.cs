@@ -71,7 +71,7 @@ public partial class MainViewModel : ObservableObject
     }
 }
 
-public enum Section { Board, Agents, Terminal }
+public enum Section { Board, Notes, Agents, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -79,12 +79,13 @@ public partial class ProjectViewModel : ObservableObject
     public string Name => Config.Name;
     public IBrush Brush { get; }
     public BoardViewModel? Board { get; }
+    public NotesViewModel? Notes { get; }
     public AgentsViewModel? Agents { get; }
     public string TerminalFolder => Config.WorkingFolder();
     public string Shell => OperatingSystem.IsWindows() ? "pwsh.exe" : Environment.GetEnvironmentVariable("SHELL") ?? "/bin/zsh";
     public bool UsesTerminal => Config.Uses(Features.Terminal);
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnAgents), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnAgents), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -92,6 +93,7 @@ public partial class ProjectViewModel : ObservableObject
     public string StatusLine => $"{Name} · {Config.WorkingFolder()}" + (Board?.SelectedBoard is { } b ? $" · board {b}" : "");
 
     public bool OnBoard => Section == Section.Board;
+    public bool OnNotes => Section == Section.Notes;
     public bool OnAgents => Section == Section.Agents;
     public bool OnTerminal => Section == Section.Terminal;
 
@@ -101,6 +103,8 @@ public partial class ProjectViewModel : ObservableObject
         Brush = Color.TryParse(config.Color, out var c) ? new SolidColorBrush(c) : Brushes.Orange;
         if (config.Uses(Features.Board)) Board = new BoardViewModel(config);
         if (config.Uses(Features.Agents)) Agents = new AgentsViewModel(config);
+        if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
+            Notes = new NotesViewModel(notes) { TicketBoard = () => Board?.Folder };
         Section = Board is not null ? Section.Board : Agents is not null ? Section.Agents : Section.Terminal;
         if (Board is not null && Agents is not null)
         {
