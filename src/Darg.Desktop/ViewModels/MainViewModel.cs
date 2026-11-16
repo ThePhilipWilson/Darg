@@ -41,7 +41,7 @@ public partial class MainViewModel : ObservableObject
         if (ArtifactHost.Server is { } artifacts)
         {
             artifacts.Reply += r => Avalonia.Threading.Dispatcher.UIThread.Post(() => FromArtifact(r));
-            artifacts.ListAgents = () => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(ListAgents).GetTask();
+            artifacts.ListAgents = () => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ListAgents()).GetTask();
             artifacts.CloseAgents = ids => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => CloseAgents(ids)).GetTask();
             RegisterApi(artifacts.Api);
         }
@@ -78,10 +78,11 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Every project's agents, for Fettle: which project, id, name, state, card, and whether a session is open.</summary>
-    string ListAgents()
+    /// <summary>The agents as JSON: every project's, or only <paramref name="only"/>'s.</summary>
+    string ListAgents(ProjectViewModel? only = null)
     {
         var list = new System.Text.Json.Nodes.JsonArray();
-        foreach (var p in Projects)
+        foreach (var p in Projects.Where(p => only is null || p == only))
             foreach (var a in p.Agents?.Agents ?? [])
                 list.Add(new System.Text.Json.Nodes.JsonObject
                 {
