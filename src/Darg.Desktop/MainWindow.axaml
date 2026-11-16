@@ -5,7 +5,7 @@
         xmlns:chrome="using:Avalonia.Controls.Chrome"
         x:Class="Darg.Desktop.MainWindow"
         x:DataType="vm:MainViewModel"
-        WindowDecorations="BorderOnly" ExtendClientAreaToDecorationsHint="True" Icon="/darg.png" Title="Darg" Width="1500" Height="920" MinWidth="900" MinHeight="560">
+        WindowDecorations="BorderOnly" ExtendClientAreaToDecorationsHint="True" Icon="/darg.ico" Title="Darg" Width="1500" Height="920" MinWidth="900" MinHeight="560">
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- project tabs -->
     <Border Grid.Row="0" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
@@ -21,7 +21,9 @@
           <Button Classes="caption" x:Name="MaxButton" Content="&#x25A1;" Click="OnMaximize" AutomationProperties.Name="Maximize" ToolTip.Tip="Maximize"/>
           <Button Classes="caption close" Content="&#x2715;" Click="OnClose" AutomationProperties.Name="Close" ToolTip.Tip="Close"/>
         </StackPanel>
+        <!-- the wordmark is drawn about 9x smaller than its PNG: without HighQuality (mipmapped) sampling its edges go jagged -->
         <Image DockPanel.Dock="Left" Source="/wordmark.png" Height="34" VerticalAlignment="Center" Margin="14,0,16,0"
+               RenderOptions.BitmapInterpolationMode="HighQuality"
                ToolTip.Tip="Darg" AutomationProperties.Name="Darg"/>
         <Button DockPanel.Dock="Right" Content="🎨 Settings" Command="{Binding OpenSettingsCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Darg's own settings: the theme (dark, light, girlypop)"
