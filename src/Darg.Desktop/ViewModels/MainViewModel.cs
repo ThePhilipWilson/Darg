@@ -160,6 +160,9 @@ public partial class MainViewModel : ObservableObject
             case Section.Agents when p.Agents?.Shown is { } a:
                 s.Append($", agent \"{a.Name}\" ({a.StateText}), its folder {a.Cwd}"); // "working in" read as its state
                 break;
+            case Section.Mistakes when p.Mistakes is not null:
+                s.Append($", mistake log {p.Mistakes.File}");
+                break;
             case Section.GitHub:
                 s.Append($", repos {string.Join(", ", p.Config.Repos)}");
                 break;
@@ -291,7 +294,7 @@ public partial class MainViewModel : ObservableObject
     }
 }
 
-public enum Section { Board, Notes, Docs, Agents, Artifacts, Code, GitHub, Preview, Terminal }
+public enum Section { Board, Notes, Docs, Agents, Artifacts, Mistakes, Code, GitHub, Preview, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -308,9 +311,11 @@ public partial class ProjectViewModel : ObservableObject
     public ConsolesViewModel? Consoles { get; }
     /// <summary>Pages the project's agents made (there with the agents feature).</summary>
     public ArtifactsViewModel? Artifacts { get; }
+    /// <summary>The project's mistake log, read and counted (there with the agents feature, which writes it).</summary>
+    public MistakesViewModel? Mistakes { get; }
     public bool UsesTerminal => Consoles is not null;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnArtifacts), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -325,6 +330,7 @@ public partial class ProjectViewModel : ObservableObject
     public bool OnPreview => Section == Section.Preview;
     public bool OnAgents => Section == Section.Agents;
     public bool OnArtifacts => Section == Section.Artifacts;
+    public bool OnMistakes => Section == Section.Mistakes;
     public bool OnTerminal => Section == Section.Terminal;
 
     public ProjectViewModel(ProjectConfig config)
@@ -336,6 +342,7 @@ public partial class ProjectViewModel : ObservableObject
         {
             Agents = new AgentsViewModel(config);
             Artifacts = new ArtifactsViewModel(config.Id, id => Agents.Find(id)?.Name);
+            Mistakes = new MistakesViewModel(MistakeLog.PathFor(config.Id), config.Name);
         }
         if (config.Uses(Features.Terminal)) Consoles = new ConsolesViewModel(config);
         if (config.Uses(Features.Docs) && config.Docs is { Length: > 0 } docs) Docs = new DocsViewModel(docs);
@@ -408,6 +415,7 @@ public partial class ProjectViewModel : ObservableObject
         if (value == Section.Code) Code?.Load();
         if (value == Section.GitHub) Hub?.Load();
         if (value == Section.Artifacts) Artifacts?.Refresh();
+        if (value == Section.Mistakes) Mistakes?.Reload();
         if (value == Section.Preview) _ = Preview?.Open();
     }
 
@@ -422,7 +430,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>Whether this project has a section (its feature ticked and what it needs set up).</summary>
     public bool Has(Section s) => s switch
     {
-        Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Artifacts => Artifacts is not null,
+        Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null,
         Section.Code => Code is not null, Section.GitHub => Hub is not null, Section.Preview => Preview is not null, _ => Consoles is not null,
     };
 
@@ -431,6 +439,7 @@ public partial class ProjectViewModel : ObservableObject
     {
         foreach (var a in Agents?.Agents ?? []) a.End();
         Board?.Dispose();
+        Mistakes?.Dispose();
         Preview?.Close();
     }
 }

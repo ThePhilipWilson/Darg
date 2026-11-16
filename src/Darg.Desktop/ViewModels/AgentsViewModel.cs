@@ -167,6 +167,8 @@ public partial class AgentsViewModel : ObservableObject
     void Add(AgentViewModel agent, bool select)
     {
         agent.StoreFolder ??= _store;
+        agent.MistakeLogFile ??= MistakeLog.PathFor(project.Id);
+        agent.ProjectName ??= project.Name;
         agent.CardDone = IsCardDone(agent.CardId);
         agent.PropertyChanged += (_, e) =>
         {
@@ -321,7 +323,13 @@ public partial class AgentsViewModel : ObservableObject
         try
         {
             var dir = ArtifactStore.AgentFolder(project.Id.Length > 0 ? project.Id : "default", agentId);
-            return ["--add-dir", dir, "--append-system-prompt", ArtifactStore.Briefing(dir)];
+            // the mistake log has a folder of its own: --add-dir so the agent can append without a prompt
+            string? log = null;
+            try { log = MistakeLog.Ensure(MistakeLog.PathFor(project.Id), project.Name); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // no log; artifacts still work
+            return log is null
+                ? ["--add-dir", dir, "--append-system-prompt", ArtifactStore.Briefing(dir)]
+                : ["--add-dir", dir, "--add-dir", Path.GetDirectoryName(log)!, "--append-system-prompt", ArtifactStore.Briefing(dir) + " " + MistakeLog.Briefing(log)];
         }
         catch (Exception) { return []; } // no folder, no artifacts; the agent still runs
     }
@@ -877,6 +885,28 @@ public partial class AgentViewModel : ObservableObject
         Compose = "";
         var sent = ClaudeDraw.AskToDraw(about);
         Say(about.Length == 0 ? "✎ I want to draw something for you" : $"✎ I want to draw something for you: {about}", Wrap is null ? sent : Wrap(sent));
+    }
+
+    /// <summary>The project's mistake log (set by its owner); null hides ✗ Mistake.</summary>
+    public string? MistakeLogFile { get; set; }
+    public string? ProjectName { get; set; }
+
+    /// <summary>✗ Mistake: the agent logs its last reply as a mistake in the project's log. Whatever is in the
+    /// compose box says what was wrong; with nothing typed it works that out, or asks.</summary>
+    [RelayCommand]
+    void Mistake()
+    {
+        if (MistakeLogFile is null) return;
+        try { MistakeLog.Ensure(MistakeLogFile, ProjectName ?? "This project"); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Items.Add(new NoteItem($"Couldn't make the mistake log: {e.Message}", true));
+            return;
+        }
+        var what = Compose.Trim();
+        Compose = "";
+        var sent = MistakeLog.AskToLog(MistakeLogFile, what);
+        Say(what.Length == 0 ? "✗ That was a mistake: log it" : $"✗ That was a mistake: {what}", Wrap is null ? sent : Wrap(sent));
     }
 
     [RelayCommand]

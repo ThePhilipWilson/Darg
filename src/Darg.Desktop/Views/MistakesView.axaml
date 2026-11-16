@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:views="using:Darg.Desktop.Views"
+             x:Class="Darg.Desktop.Views.MistakesView"
+             x:DataType="vm:MistakesViewModel">
+  <Grid ColumnDefinitions="240,*" RowDefinitions="*,Auto">
+    <!-- each category counted; one that has come up often enough for a gate is red -->
+    <Border Grid.RowSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="By category" Classes="dim small" Margin="12,10,12,4"/>
+        <ListBox ItemsSource="{Binding Tally}" SelectedItem="{Binding SelectedCategory}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:MistakeCategory">
+              <DockPanel ToolTip.Tip="{Binding Tip}" AutomationProperties.Name="{Binding Label}">
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" Margin="8,0,0,0" VerticalAlignment="Center"
+                           Classes="dim" Classes.due="{Binding Due}"/>
+                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Classes.due="{Binding Due}"/>
+              </DockPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+          <ListBox.Styles>
+            <Style Selector="TextBlock.due">
+              <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+              <Setter Property="FontWeight" Value="SemiBold"/>
+            </Style>
+          </ListBox.Styles>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <DockPanel Grid.Column="1">
+      <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Open log" Command="{Binding OpenFileCommand}" ToolTip.Tip="{Binding File}"
+                  AutomationProperties.Name="Open mistake log"/>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="Mistake log" FontWeight="SemiBold"/>
+            <TextBlock Classes="dim small" Text="Agents add an entry when you correct them, or when you press ✗ Mistake under an agent's reply." TextWrapping="Wrap"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+      <Panel>
+        <ScrollViewer IsVisible="{Binding HasEntries}">
+          <ItemsControl ItemsSource="{Binding Entries}" Margin="18,14" MaxWidth="980" HorizontalAlignment="Left">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="12"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:MistakeEntry">
+                <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="12,9">
+                  <StackPanel Spacing="4">
+                    <SelectableTextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Meta}" Classes="dim small" TextWrapping="Wrap"/>
+                    <views:MarkdownView Markdown="{Binding Body}" Margin="0,4,0,0"/>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+        <TextBlock Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" MaxWidth="480" TextWrapping="Wrap"
+                   IsVisible="{Binding !HasEntries}"
+                   Text="No mistakes logged yet. When an agent gets something wrong, press ✗ Mistake beside its message box (type what was wrong first, or leave it to the agent) and it writes an entry here."/>
+      </Panel>
+    </DockPanel>
+
+    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+      <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}"/>
+    </Border>
+  </Grid>
+</UserControl>
