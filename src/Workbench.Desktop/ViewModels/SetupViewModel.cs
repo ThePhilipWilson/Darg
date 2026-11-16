@@ -37,6 +37,30 @@ public partial class SetupViewModel : ObservableObject
         Selected = p;
     }
 
+    /// <summary>A project from a folder that already exists: repos, boards, docs, account and a Git
+    /// command worked out from what's there (ProjectDetect), shown with what was found, to check and save.</summary>
+    public void AddFolder(string folder)
+    {
+        var existing = Projects.Select(p => p.ToConfig()).ToList();
+        var already = existing.FirstOrDefault(c => c.Repos.Any(r => Path.GetFullPath(r).TrimEnd('\\', '/')
+            .Equals(Path.GetFullPath(folder).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)));
+        if (already is not null)
+        {
+            Selected = Projects.FirstOrDefault(p => p.Name == already.Name);
+            Error = $"{already.Name} already has that folder.";
+            return;
+        }
+        try
+        {
+            var (config, found) = ProjectDetect.FromFolder(folder, existing, GitHub.Accounts(), InstanceConfig.Folder());
+            var p = new ProjectSetup(this, config) { Found = string.Join(Environment.NewLine, found) };
+            Projects.Add(p);
+            Selected = p;
+            Error = "";
+        }
+        catch (Exception e) { Error = $"Couldn't read that folder: {e.Message}"; }
+    }
+
     internal void Remove(ProjectSetup p)
     {
         var i = Projects.IndexOf(p);
@@ -92,6 +116,9 @@ public partial class ProjectSetup : ObservableObject
     [ObservableProperty] public partial string ReposText { get; set; }
     [ObservableProperty] public partial string GitHubAccount { get; set; }
     [ObservableProperty] public partial string CommandsText { get; set; }
+    /// <summary>What was worked out from the folder, for a project just added from one.</summary>
+    public string Found { get; init; } = "";
+    public bool HasFound => Found.Length > 0;
     /// <summary>The gh accounts this machine is logged in to, as a hint under the box.</summary>
     public string AccountsHint { get; } = GitHub.Accounts() is { Count: > 0 } a ? "Logged in to gh: " + string.Join(", ", a) : "gh isn't logged in to any account.";
     public ObservableCollection<FeatureTick> Features { get; } = [];
@@ -135,7 +162,7 @@ public partial class ProjectSetup : ObservableObject
 public partial class FeatureTick(string name, bool on) : ObservableObject
 {
     public string Name { get; } = name;
-    public string Label { get; } = char.ToUpperInvariant(name[0]) + name[1..];
+    public string Label { get; } = name == Core.Features.GitHub ? "GitHub / GitLab" : char.ToUpperInvariant(name[0]) + name[1..];
     [ObservableProperty] public partial bool On { get; set; } = on;
 }
 

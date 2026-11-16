@@ -123,6 +123,12 @@ public partial class MainViewModel : ObservableObject
     /// WORKBENCH_AGENT_CWD if set.</summary>
     void DevHooks()
     {
+        // WORKBENCH_ADD_FOLDER: open Setup and add that folder as a project (unsaved), as the folder picker would
+        if (Environment.GetEnvironmentVariable("WORKBENCH_ADD_FOLDER") is { Length: > 0 } add)
+        {
+            OpenSetupCommand.Execute(null);
+            Setup?.AddFolder(add);
+        }
         if (Selected is null) return;
         if (Enum.TryParse<Section>(Environment.GetEnvironmentVariable("WORKBENCH_SECTION"), true, out var s)) Selected.OpenCommand.Execute(s.ToString());
         var prompt = Environment.GetEnvironmentVariable("WORKBENCH_AGENT");

@@ -19,8 +19,11 @@
     <Border Grid.Row="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
         <TextBlock DockPanel.Dock="Top" Text="Projects in this instance" Classes="dim small" Margin="14,12,14,6"/>
-        <Button DockPanel.Dock="Bottom" Content="+ Add a project" Command="{Binding AddCommand}" HorizontalAlignment="Stretch"
-                HorizontalContentAlignment="Center" Margin="12"/>
+        <StackPanel DockPanel.Dock="Bottom" Margin="12" Spacing="6">
+          <Button x:Name="AddFolder" Classes="primary" Content="+ Add a project folder…" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                  ToolTip.Tip="Pick an existing project's root folder; its repos, boards and docs are found for you"/>
+          <Button Content="or start a blank one" Command="{Binding AddCommand}" HorizontalAlignment="Center" Background="Transparent" FontSize="11"/>
+        </StackPanel>
         <ListBox ItemsSource="{Binding Projects}" SelectedItem="{Binding Selected}" Background="Transparent">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ProjectSetup">
@@ -38,6 +41,12 @@
     <ScrollViewer Grid.Row="1" Grid.Column="1">
       <StackPanel DataContext="{Binding Selected}" x:DataType="vm:ProjectSetup" Margin="24,18" Spacing="14" MaxWidth="760" HorizontalAlignment="Left"
                   IsVisible="{Binding $parent[UserControl].((vm:SetupViewModel)DataContext).Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <Border IsVisible="{Binding HasFound}" Background="#1f2a22" BorderBrush="#2f5e3f" BorderThickness="1" CornerRadius="6" Padding="12,8">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Found in the folder (check, change anything, then Save)" FontWeight="SemiBold" FontSize="12"/>
+            <TextBlock Text="{Binding Found}" TextWrapping="Wrap" FontSize="12"/>
+          </StackPanel>
+        </Border>
         <StackPanel Spacing="4">
           <TextBlock Text="Name" Classes="dim small"/>
           <TextBox Text="{Binding Name}" Width="320" HorizontalAlignment="Left"/>
