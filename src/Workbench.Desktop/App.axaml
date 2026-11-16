@@ -1,6 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Workbench.Desktop.ViewModels"
+             xmlns:views="using:Workbench.Desktop.Views"
              x:Class="Workbench.Desktop.App"
              RequestedThemeVariant="Dark">
   <Application.Resources>
@@ -27,7 +28,7 @@
       </Border>
     </DataTemplate>
     <DataTemplate DataType="vm:TextItem">
-      <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" LineHeight="21"/>
+      <views:MarkdownView Markdown="{Binding Text}"/>
     </DataTemplate>
     <DataTemplate DataType="vm:NoteItem">
       <TextBlock Text="{Binding Text}" Classes="dim small" TextWrapping="Wrap" Classes.bad="{Binding Bad}"/>
