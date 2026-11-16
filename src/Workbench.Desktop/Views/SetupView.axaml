@@ -78,6 +78,13 @@
           <TextBox Text="{Binding ReposText}" Classes="mono" AcceptsReturn="True" MinHeight="70"/>
         </StackPanel>
 
+        <TextBlock Text="Accounts" FontWeight="SemiBold" Margin="0,8,0,0"/>
+        <StackPanel Spacing="4">
+          <TextBlock Text="GitHub account for this project (empty: gh's active account)" Classes="dim small"/>
+          <TextBox Text="{Binding GitHubAccount}" Width="320" HorizontalAlignment="Left"/>
+          <TextBlock Text="{Binding AccountsHint}" Classes="dim small"/>
+        </StackPanel>
+
         <Button Content="Remove from this instance" Command="{Binding RemoveCommand}" Foreground="{StaticResource Bad}" Margin="0,8,0,0"
                 ToolTip.Tip="Takes the project out of this instance only. Its boards, notes and repos stay as they are."/>
       </StackPanel>

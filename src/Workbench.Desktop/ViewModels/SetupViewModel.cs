@@ -88,6 +88,9 @@ public partial class ProjectSetup : ObservableObject
     [ObservableProperty] public partial string Boards { get; set; }
     [ObservableProperty] public partial string Notes { get; set; }
     [ObservableProperty] public partial string ReposText { get; set; }
+    [ObservableProperty] public partial string GitHubAccount { get; set; }
+    /// <summary>The gh accounts this machine is logged in to, as a hint under the box.</summary>
+    public string AccountsHint { get; } = GitHub.Accounts() is { Count: > 0 } a ? "Logged in to gh: " + string.Join(", ", a) : "gh isn't logged in to any account.";
     public ObservableCollection<FeatureTick> Features { get; } = [];
     public IReadOnlyList<SwatchChoice> Swatches { get; }
     public IBrush Brush => Avalonia.Media.Color.TryParse(Color, out var c) ? new SolidColorBrush(c) : Brushes.Gray;
@@ -99,6 +102,7 @@ public partial class ProjectSetup : ObservableObject
         _id = p.Id;
         Name = p.Name; Color = p.Color; Boards = p.Boards ?? ""; Notes = p.Notes ?? "";
         ReposText = string.Join(Environment.NewLine, p.Repos);
+        GitHubAccount = p.GitHub ?? "";
         foreach (var f in Core.Features.All) Features.Add(new FeatureTick(f, p.Uses(f)));
         Swatches = SetupViewModel.Palette.Select(c => new SwatchChoice(new SolidColorBrush(Avalonia.Media.Color.Parse(c)), new RelayCommand(() => Color = c))).ToList();
         RemoveCommand = new RelayCommand(() => _setup.Remove(this));
@@ -113,6 +117,7 @@ public partial class ProjectSetup : ObservableObject
             Boards = Boards.Trim().Length > 0 ? Boards.Trim() : null,
             Notes = Notes.Trim().Length > 0 ? Notes.Trim() : null,
             Repos = ReposText.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList(),
+            GitHub = GitHubAccount.Trim().Length > 0 ? GitHubAccount.Trim() : null,
             // every feature ticked is stored as "all", so features added later are on by default
             Features = on.Count == Core.Features.All.Length ? [] : on,
         };

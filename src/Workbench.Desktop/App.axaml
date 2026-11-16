@@ -116,6 +116,9 @@
     <Style Selector="TextBlock.dim, SelectableTextBlock.dim">
       <Setter Property="Foreground" Value="{StaticResource Dim}"/>
     </Style>
+    <Style Selector="TextBlock.good">
+      <Setter Property="Foreground" Value="{StaticResource Ok}"/>
+    </Style>
     <Style Selector="TextBlock.bad">
       <Setter Property="Foreground" Value="{StaticResource Bad}"/>
     </Style>

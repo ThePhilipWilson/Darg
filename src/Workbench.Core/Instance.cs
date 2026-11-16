@@ -13,6 +13,7 @@ public sealed class InstanceConfig
     static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true,
+        PropertyNameCaseInsensitive = true, // a hand-edited "github" or "GitHub" reads the same
         ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
@@ -64,6 +65,8 @@ public sealed class ProjectConfig
     /// <summary>The notes wall's folder; by default "notes" beside the boards folder.</summary>
     public string? Notes { get; set; }
     public List<string> Repos { get; set; } = [];
+    /// <summary>The gh account this project's GitHub calls sign in as (null: gh's active account).</summary>
+    public string? GitHub { get; set; }
 
     public string? NotesFolder() => Notes ?? (Boards is null ? null : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(Boards))!, "notes"));
     /// <summary>Features this project uses; an empty list means all of them.</summary>
@@ -79,7 +82,7 @@ public sealed class ProjectConfig
 
 public static class Features
 {
-    public const string Board = "board", Notes = "notes", Agents = "agents", Code = "code", Terminal = "terminal";
+    public const string Board = "board", Notes = "notes", Agents = "agents", Code = "code", GitHub = "github", Terminal = "terminal";
     /// <summary>Every feature, in the order the rail shows them (the Setup view's tick boxes).</summary>
-    public static readonly string[] All = [Board, Notes, Agents, Code, Terminal];
+    public static readonly string[] All = [Board, Notes, Agents, Code, GitHub, Terminal];
 }

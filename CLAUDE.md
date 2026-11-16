@@ -16,7 +16,8 @@ Philip's one app for everything: per-project boards, notes, docs, code, agents, 
 
 ## Building and checking
 
-- `NUGET_PACKAGES=D:/nuget/packages` (C: is small). `dotnet build`, `dotnet test`.
+- `NUGET_PACKAGES=D:/nuget/packages` (C: is small). `dotnet build`, `dotnet test`. `dotnet test` rebuilds only Core and the tests, not the app: run `dotnet build` before launching the exe to check a change, or you're looking at the old build.
+- GitHub calls go through `gh` with the project's account's token (`gh auth token --user <account>`) in `GH_TOKEN` for that call only; the active gh account is never switched. A private repo seen with the wrong account answers 404.
 - See it without clicking: `WORKBENCH_SECTION=Board|Agents|Terminal` opens that section of the first project; `WORKBENCH_AGENT="prompt"` starts an agent there (in `WORKBENCH_AGENT_CWD` if set). `tools/shot.ps1 -ProcessId <pid> -Out x.png` captures only the app's window (PrintWindow, works when covered). UI Automation can press its buttons (Avalonia exposes them by name).
 - Scratch output goes in `.shots/` (ignored). For anything that writes cards or notes, point the app at a throwaway instance (`WORKBENCH_HOME=.shots/home`, with its own `instance.json` and board), never at the real vault boards.
 - The exe is `src/Workbench.Desktop/bin/Debug/net10.0-windows10.0.19041.0/Workbench.Desktop.exe` on Windows.

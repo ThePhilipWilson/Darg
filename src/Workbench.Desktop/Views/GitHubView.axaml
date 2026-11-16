@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Workbench.Desktop.ViewModels"
+             x:Class="Workbench.Desktop.Views.GitHubView"
+             x:DataType="vm:GitHubViewModel">
+  <UserControl.DataTemplates>
+    <DataTemplate DataType="vm:HubRow">
+      <Border Classes="card" Margin="0,0,0,6">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Button Content="→ card" Command="{Binding ToCardCommand}" IsVisible="{Binding CanCard}" Classes="workon" Opacity="1"/>
+            <Button Content="Open ↗" Command="{Binding OpenCommand}" Classes="workon" Opacity="1"/>
+          </StackPanel>
+          <TextBlock DockPanel.Dock="Left" Text="{Binding Tag}" Classes="mono dim" MinWidth="70" VerticalAlignment="Top" Margin="0,1,10,0"
+                     Classes.good="{Binding Good}" Classes.bad="{Binding Bad}"/>
+          <StackPanel Spacing="2">
+            <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding Meta}" Classes="dim small"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="↻ Refresh" Command="{Binding RefreshCommand}"/>
+        <TextBlock Text="GitHub" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+        <TextBlock Classes="dim" Text="{Binding Status}" VerticalAlignment="Center"/>
+      </DockPanel>
+    </Border>
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Repos}" Margin="16">
+        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="22"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:HubRepoView">
+            <StackPanel Spacing="10">
+              <StackPanel Orientation="Horizontal" Spacing="12">
+                <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Classes="mono"/>
+                <TextBlock Text="{Binding Counts}" Classes="dim" VerticalAlignment="Center"/>
+              </StackPanel>
+              <TextBlock Text="{Binding Error}" Classes="bad" IsVisible="{Binding HasError}" TextWrapping="Wrap"/>
+              <Grid ColumnDefinitions="*,16,*,16,*">
+                <StackPanel>
+                  <TextBlock Text="Pull requests" Classes="dim small" Margin="0,0,0,6"/>
+                  <ItemsControl ItemsSource="{Binding Pulls}"/>
+                  <TextBlock Text="None open" Classes="dim small" IsVisible="{Binding !Pulls.Count}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Text="Issues" Classes="dim small" Margin="0,0,0,6"/>
+                  <ItemsControl ItemsSource="{Binding Issues}"/>
+                  <TextBlock Text="None open" Classes="dim small" IsVisible="{Binding !Issues.Count}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="4">
+                  <TextBlock Text="Recent CI runs" Classes="dim small" Margin="0,0,0,6"/>
+                  <ItemsControl ItemsSource="{Binding Runs}"/>
+                  <TextBlock Text="No runs" Classes="dim small" IsVisible="{Binding !Runs.Count}"/>
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

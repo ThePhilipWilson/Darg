@@ -23,6 +23,10 @@
                       Command="{Binding OpenCommand}" CommandParameter="Code" ToolTip.Tip="Code">
           <StackPanel><TextBlock Text="{}{ }" FontSize="15" HorizontalAlignment="Center"/><TextBlock Text="Code" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
         </ToggleButton>
+        <ToggleButton Classes="rail" IsChecked="{Binding OnHub, Mode=OneWay}" IsVisible="{Binding Hub, Converter={x:Static ObjectConverters.IsNotNull}}"
+                      Command="{Binding OpenCommand}" CommandParameter="GitHub" ToolTip.Tip="GitHub: pull requests, issues, CI">
+          <StackPanel><TextBlock Text="⎇" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="GitHub" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
+        </ToggleButton>
         <ToggleButton Classes="rail" IsChecked="{Binding OnTerminal, Mode=OneWay}" IsVisible="{Binding UsesTerminal}"
                       Command="{Binding OpenCommand}" CommandParameter="Terminal" ToolTip.Tip="Terminal">
           <StackPanel><TextBlock Text="▶" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Term" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
@@ -34,6 +38,7 @@
       <views:BoardView DataContext="{Binding Board}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnBoard}"/>
       <views:NotesView DataContext="{Binding Notes}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnNotes}"/>
       <views:CodeView DataContext="{Binding Code}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnCode}"/>
+      <views:GitHubView DataContext="{Binding Hub}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnHub}"/>
       <views:AgentsView DataContext="{Binding Agents}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnAgents}"/>
       <Border x:Name="TerminalHost" IsVisible="{Binding OnTerminal}" Background="Black" Padding="6"/>
     </Panel>

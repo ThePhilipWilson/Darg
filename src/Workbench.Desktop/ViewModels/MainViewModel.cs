@@ -105,7 +105,7 @@ public partial class MainViewModel : ObservableObject
     }
 }
 
-public enum Section { Board, Notes, Agents, Code, Terminal }
+public enum Section { Board, Notes, Agents, Code, GitHub, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -115,12 +115,13 @@ public partial class ProjectViewModel : ObservableObject
     public BoardViewModel? Board { get; }
     public NotesViewModel? Notes { get; }
     public CodeViewModel? Code { get; }
+    public GitHubViewModel? Hub { get; }
     public AgentsViewModel? Agents { get; }
     public string TerminalFolder => Config.WorkingFolder();
     public string Shell => OperatingSystem.IsWindows() ? "pwsh.exe" : Environment.GetEnvironmentVariable("SHELL") ?? "/bin/zsh";
     public bool UsesTerminal => Config.Uses(Features.Terminal);
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnAgents), nameof(OnCode), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnAgents), nameof(OnCode), nameof(OnHub), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -130,6 +131,7 @@ public partial class ProjectViewModel : ObservableObject
     public bool OnBoard => Section == Section.Board;
     public bool OnNotes => Section == Section.Notes;
     public bool OnCode => Section == Section.Code;
+    public bool OnHub => Section == Section.GitHub;
     public bool OnAgents => Section == Section.Agents;
     public bool OnTerminal => Section == Section.Terminal;
 
@@ -142,6 +144,7 @@ public partial class ProjectViewModel : ObservableObject
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
             Notes = new NotesViewModel(notes) { TicketBoard = () => Board?.Folder };
         if (config.Uses(Features.Code) && config.Repos.Count > 0) Code = new CodeViewModel(config);
+        if (config.Uses(Features.GitHub) && config.Repos.Count > 0) Hub = new GitHubViewModel(config, () => Board?.Folder);
         Section = Board is not null ? Section.Board : Agents is not null ? Section.Agents : Section.Terminal;
         if (Board is not null && Agents is not null)
         {
@@ -161,6 +164,7 @@ public partial class ProjectViewModel : ObservableObject
     {
         if (value == Section.Terminal) TerminalStarted = true;
         if (value == Section.Code) Code?.Load();
+        if (value == Section.GitHub) Hub?.Load();
     }
 
     [RelayCommand] void Open(string section) => Section = Enum.Parse<Section>(section);
