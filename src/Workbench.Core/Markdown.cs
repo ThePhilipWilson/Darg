@@ -41,7 +41,8 @@ public static class Markdown
         var para = new List<string>();
         void Flush()
         {
-            if (para.Count > 0) blocks.Add(new MdParagraph(Inline(string.Join(" ", para.Select(l => l.Trim())))));
+            // a line break inside a paragraph stays a line break (as chat and GitHub comments show it), not a space
+            if (para.Count > 0) blocks.Add(new MdParagraph(Inline(string.Join("\n", para.Select(l => l.Trim())))));
             para.Clear();
         }
 
