@@ -4,7 +4,7 @@
         xmlns:views="using:Darg.Desktop.Views"
         x:Class="Darg.Desktop.MainWindow"
         x:DataType="vm:MainViewModel"
-        Title="Darg" Width="1500" Height="920" MinWidth="900" MinHeight="560">
+        Icon="/darg.png" Title="Darg" Width="1500" Height="920" MinWidth="900" MinHeight="560">
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- project tabs -->
     <Border Grid.Row="0" Background="{StaticResource Chrome}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
