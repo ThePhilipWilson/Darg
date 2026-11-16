@@ -94,6 +94,46 @@ public sealed class ProjectConfig
     public string WorkingFolder() =>
         Repos.FirstOrDefault(Directory.Exists) ?? (Boards is not null && Directory.Exists(Boards) ? Boards
             : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+    /// <summary>The repos that are on this machine, in the order set.</summary>
+    public List<string> ExistingRepos() => Repos.Where(Directory.Exists).ToList();
+
+    /// <summary>A repo's short name: its folder's name ("Site", "Workspace").</summary>
+    public static string RepoName(string repo) => Path.GetFileName(repo.TrimEnd('\\', '/'));
+
+    /// <summary>The repo with this folder name, or this full path; null when there isn't one here.</summary>
+    public string? RepoNamed(string name)
+    {
+        name = name.Trim().Trim('`', '"', '\'').TrimEnd('\\', '/');
+        if (name.Length == 0) return null;
+        return ExistingRepos().FirstOrDefault(r => string.Equals(RepoName(r), name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(Path.GetFullPath(r).TrimEnd('\\', '/'), Path.IsPathRooted(name) ? Path.GetFullPath(name).TrimEnd('\\', '/') : null,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The repo a card names, for its agent to start in: a label "repo:Workspace" (or "repo/Workspace",
+    /// "repo = Workspace"), or a "Repo: Workspace" line in its description ("- **Repo:** Workspace" too).
+    /// Null when it names none, or one this project doesn't have.</summary>
+    public string? RepoFor(IEnumerable<string> labels, string description)
+    {
+        foreach (var l in labels)
+            if (System.Text.RegularExpressions.Regex.Match(l.Trim(), @"^repo\s*[:/=]\s*(.+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) is { Success: true } m
+                && RepoNamed(m.Groups[1].Value) is { } r) return r;
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(description,
+                     @"^[\s>*-]*\**repo\**\s*:\s*\**\s*(.+?)\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Multiline))
+            if (RepoNamed(m.Groups[1].Value.Trim('*', ' ')) is { } r) return r;
+        return null;
+    }
+
+    /// <summary>The project's repos other than the one an agent starts in: each given to it with --add-dir, so
+    /// an agent in Site can read and edit Workspace too.</summary>
+    public List<string> OtherRepos(string cwd)
+    {
+        static string Norm(string p) => Path.GetFullPath(p).TrimEnd('\\', '/');
+        var here = Norm(cwd);
+        return ExistingRepos().Where(r => !string.Equals(Norm(r), here, StringComparison.OrdinalIgnoreCase)
+            && !here.StartsWith(Norm(r) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
 }
 
 /// <summary>A command a project runs often. Cwd is relative to the project's first repo unless rooted.</summary>

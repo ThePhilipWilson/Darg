@@ -18,6 +18,7 @@ public partial class AgentsViewModel : ObservableObject
     {
         this.project = project;
         _store = AgentStore.Folder(project.Id.Length > 0 ? project.Id : "default");
+        SelectedRepo = RepoChoices.FirstOrDefault();
         Agents.CollectionChanged += (_, _) => Resort();
         foreach (var r in AgentStore.List(_store)) Add(new AgentViewModel(r, _store), select: false);
         Selected = Agents.FirstOrDefault();
@@ -192,7 +193,13 @@ public partial class AgentsViewModel : ObservableObject
     public void RefreshCards() { foreach (var a in Agents) if (a.CardId is not null) a.CardDone = IsCardDone(a.CardId); }
     [ObservableProperty] public partial AgentViewModel? Selected { get; set; }
     [ObservableProperty] public partial string NewPrompt { get; set; } = "";
-    public string Folder => project.WorkingFolder();
+    /// <summary>Where a new agent from the box starts: the project's first repo unless another is picked.</summary>
+    public string Folder => SelectedRepo?.Path ?? project.WorkingFolder();
+    /// <summary>The project's repos, for the box's folder picker (shown when there's more than one).</summary>
+    public IReadOnlyList<RepoChoice> RepoChoices => _repoChoices ??= project.ExistingRepos().Select(r => new RepoChoice(r)).ToList();
+    IReadOnlyList<RepoChoice>? _repoChoices;
+    public bool HasRepoChoice => RepoChoices.Count > 1;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Folder))] public partial RepoChoice? SelectedRepo { get; set; }
     /// <summary>True while any agent here waits on the person (shown on the project's tab).</summary>
     [ObservableProperty] public partial bool NeedingYou { get; set; }
     public event Action<AgentViewModel>? AgentNeedsYou;
@@ -250,7 +257,7 @@ public partial class AgentsViewModel : ObservableObject
     {
         var task = NewPrompt.Trim();
         if (task.Length == 0 || SelectedFlow is null) return;
-        RunFlow(SelectedFlow, task, name: ChatTitle.Guess(task));
+        RunFlow(SelectedFlow, task, name: ChatTitle.Guess(task), cwd: Folder);
         NewPrompt = "";
     }
 
@@ -280,7 +287,7 @@ public partial class AgentsViewModel : ObservableObject
     {
         var prompt = NewPrompt.Trim();
         if (prompt.Length == 0) return;
-        Start(prompt);
+        Start(prompt, Folder);
         NewPrompt = "";
     }
 
@@ -290,12 +297,21 @@ public partial class AgentsViewModel : ObservableObject
         var id = Guid.NewGuid().ToString("N")[..10];
         job ??= new AgentJob(JobKinds.Chat, prompt);
         var profile = ModelProfiles.Pick(ModelProfiles.Load(), job with { Project = job.Project ?? project.Id });
-        var agent = new AgentViewModel(string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd, prompt, cardId, name ?? ChatTitle.Guess(prompt),
-            args: ArtifactArgs(id), id: id, profile: profile) { StoreFolder = _store };
+        var folder = string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd;
+        var agent = new AgentViewModel(folder, prompt, cardId, name ?? ChatTitle.Guess(prompt),
+            args: [.. ArtifactArgs(id), .. RepoArgs(folder)], id: id, profile: profile) { StoreFolder = _store };
         Add(agent, select: true);
         agent.Save();
         if (name is null) _ = Retitle(agent, prompt); // a card's agent is already named for the card
         return agent;
+    }
+
+    /// <summary>The project's other repos, so an agent started in one can work in the rest (Site and Workspace).
+    /// Kept in its saved args like the artifacts folder.</summary>
+    List<string> RepoArgs(string cwd)
+    {
+        try { return project.OtherRepos(cwd).SelectMany(r => new[] { "--add-dir", r }).ToList(); }
+        catch (Exception) { return []; }
     }
 
     /// <summary>Every agent gets a folder for its artifacts (local HTML pages it can show and hear back
