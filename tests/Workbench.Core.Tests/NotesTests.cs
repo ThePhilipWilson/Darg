@@ -147,5 +147,11 @@ public sealed class NoteStoreTests : IDisposable
         Assert.Equal(3, NoteStore.List(notes).Count);
     }
 
+    [Theory] // a board that ends in its own Done column never uses Completed
+    [InlineData("Completed", true)] [InlineData("completed", true)] [InlineData("Done", true)] [InlineData(" done ", true)]
+    [InlineData("In Progress", false)] [InlineData("", false)] [InlineData("Backlog", false)] [InlineData("Done-ish", false)]
+    public void Completed_means_the_completed_list_or_a_done_column(string status, bool done) =>
+        Assert.Equal(done, NoteStore.IsCompleted(status));
+
     public void Dispose() => Directory.Delete(_dir, true);
 }
