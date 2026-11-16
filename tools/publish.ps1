@@ -8,7 +8,7 @@ if (-not $env:NUGET_PACKAGES) { $env:NUGET_PACKAGES = 'D:\nuget\packages' }
 
 # a copy running from the install folder holds its files: close it (its agents are saved after every turn)
 $running = @(Get-CimInstance Win32_Process -Filter "Name='Workbench.Desktop.exe'" |
-    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($To, [StringComparison]::OrdinalIgnoreCase) })
+    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($To.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) })
 
 # ...unless this script was started from inside that copy (an agent in Workbench running it): closing it
 # would kill the agent mid-publish and leave the old build in place. Walk up the parent processes to check.
