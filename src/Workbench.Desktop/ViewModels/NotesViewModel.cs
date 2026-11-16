@@ -25,6 +25,8 @@ public partial class NotesViewModel : ObservableObject
     public string Folder { get; }
     /// <summary>Set by the project: the board folder a note's ticket goes to (null when there's none).</summary>
     public Func<string?>? TicketBoard { get; set; }
+    /// <summary>Set by the project: show a card on the board by its ID.</summary>
+    public Action<string>? OpenTicket { get; set; }
     public ObservableCollection<NoteColumn> Columns { get; } = [];
     public ObservableCollection<LabelChip> Tags { get; } = [];
     public ObservableCollection<LabelChip> Colours { get; } = [];
@@ -129,6 +131,8 @@ public sealed class NoteViewModel(Note note, NotesViewModel wall)
     public IBrush Brush { get; } = NotesViewModel.BrushFor(note.Colour);
     public string Meta => string.Join(" ", Note.Tags.Select(t => "#" + t));
     public string Ticket => Note.Ticket.Length > 0 ? "→ " + Note.Ticket : "";
+    public bool HasTicket => Note.Ticket.Length > 0;
+    public IRelayCommand GoToTicketCommand { get; } = new RelayCommand(() => wall.OpenTicket?.Invoke(note.Ticket));
     /// <summary>A small tilt, the same for a note every time it is drawn.</summary>
     public double Angle { get; } = (Math.Abs(note.Id.GetHashCode() % 7) - 3) * 0.55;
     public void Edit() => wall.Edit(Note);
@@ -150,6 +154,15 @@ public partial class NoteEditor : ObservableObject
     public IBrush Brush => NotesViewModel.BrushFor(Colour);
     public string Ticket => _note?.Ticket ?? "";
     public bool CanMakeTicket => _note is not null && _note.Ticket.Length == 0;
+    public bool HasTicket => Ticket.Length > 0;
+
+    [RelayCommand]
+    void GoToTicket()
+    {
+        if (Ticket.Length == 0) return;
+        _wall.Editor = null;
+        _wall.OpenTicket?.Invoke(Ticket);
+    }
 
     public NoteEditor(NotesViewModel wall, Note? note)
     {

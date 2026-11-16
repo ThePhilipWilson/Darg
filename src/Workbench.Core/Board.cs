@@ -187,6 +187,24 @@ public static class BoardStore
         return Parse(text, file)!;
     }
 
+    /// <summary>Delete a card the way Tatty does: its file moves into the board's .deleted folder (out of
+    /// the way, never gone; Obsidian ignores dot folders) and it leaves board.json's order.</summary>
+    public static void Delete(string folder, string cardId)
+    {
+        var card = ReadCards(folder).FirstOrDefault(c => c.Id == cardId)
+                   ?? throw new ArgumentException($"No card {cardId} on this board.", nameof(cardId));
+        var bin = Path.Combine(folder, ".deleted");
+        Directory.CreateDirectory(bin);
+        File.Move(Path.Combine(folder, "items", card.File), Path.Combine(bin, card.File), overwrite: true);
+        var boardPath = Path.Combine(folder, "board.json");
+        var json = JsonNode.Parse(File.ReadAllText(boardPath))!.AsObject();
+        if (json["order"] is JsonObject order)
+            foreach (var (_, ids) in order)
+                if (ids is JsonArray a)
+                    foreach (var n in a.Where(x => (string?)x == cardId).ToList()) a.Remove(n);
+        File.WriteAllText(boardPath, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
+    }
+
     /// <summary>Change a card's title, description, labels or priority (null leaves one as it is). The
     /// rest of the file, sections Workbench doesn't edit included, stays as written. A new title renames
     /// the file to match, as Tatty does. Returns the card as saved.</summary>

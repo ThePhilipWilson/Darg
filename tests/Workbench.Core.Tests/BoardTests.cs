@@ -56,6 +56,16 @@ public sealed class BoardTests : IDisposable
     }
 
     [Fact]
+    public void Delete_moves_the_file_aside_and_drops_it_from_the_order()
+    {
+        BoardStore.Delete(_dir, "T-0002");
+        var b = BoardStore.Load(_dir);
+        Assert.DoesNotContain(b.AllCards, c => c.Id == "T-0002");
+        Assert.True(File.Exists(Path.Combine(_dir, ".deleted", "T-0002 - Second.md")));
+        Assert.DoesNotContain("T-0002", File.ReadAllText(Path.Combine(_dir, "board.json")));
+    }
+
+    [Fact]
     public void Moving_to_an_unknown_list_is_refused() =>
         Assert.Throws<ArgumentException>(() => BoardStore.Move(_dir, "T-0001", "c9"));
 

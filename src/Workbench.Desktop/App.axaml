@@ -142,6 +142,43 @@
       <Setter Property="CornerRadius" Value="6"/>
       <Setter Property="Padding" Value="9,7"/>
     </Style>
+    <!-- a text box written on paper (the post-it editor): the paper shows through when focused or hovered,
+         and the ink stays dark; Fluent's own focus look is a dark box with light text -->
+    <Style Selector="TextBox.paper /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="TextBox.paper:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="TextBox.paper:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="TextBox.paper, TextBox.paper:focus, TextBox.paper:pointerover">
+      <Setter Property="Foreground" Value="#2a2620"/>
+      <Setter Property="CaretBrush" Value="#2a2620"/>
+      <Setter Property="SelectionBrush" Value="#55000000"/>
+      <Setter Property="SelectionForegroundBrush" Value="#2a2620"/>
+    </Style>
+    <Style Selector="Button.onpaper">
+      <Setter Property="Background" Value="#22000000"/>
+      <Setter Property="Foreground" Value="#2a2620"/>
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Padding" Value="6,1"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+
+    <!-- where a dragged card or post-it would land -->
+    <Style Selector="Border.list.droptarget">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+      <Setter Property="Background" Value="#20242c"/>
+    </Style>
+    <Style Selector="Border.wallcol.droptarget">
+      <Setter Property="Background" Value="#22e0a84a"/>
+      <Setter Property="CornerRadius" Value="8"/>
+    </Style>
     <Style Selector="Border.card:pointerover">
       <Setter Property="BorderBrush" Value="#4a5160"/>
     </Style>

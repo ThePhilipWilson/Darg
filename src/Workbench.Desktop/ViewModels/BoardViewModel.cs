@@ -35,6 +35,32 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     [RelayCommand] void NewCard() { if (Folder is not null) Editor = new CardEditor(this, null); }
     public void Open(CardViewModel card) => Editor = new CardEditor(this, card);
 
+    /// <summary>Open a card by its ID, on whichever board holds it (clearing filters that hide it).</summary>
+    public bool OpenById(string id)
+    {
+        foreach (var b in Boards.ToList())
+        {
+            if (_project.Boards is null) break;
+            if (!BoardStore.ReadCards(Path.Combine(_project.Boards, b)).Any(c => c.Id == id)) continue;
+            if (SelectedBoard != b) SelectedBoard = b;
+            Filter = "";
+            foreach (var l in Labels) l.IsOn = false;
+            if (!ShowCompleted && _board?.Lists[Board.Completed].Any(c => c.Id == id) == true) ShowCompleted = true;
+            var card = Lists.SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == id);
+            if (card is null) return false;
+            Open(card);
+            return true;
+        }
+        Status = $"No card {id} on this project's boards.";
+        return false;
+    }
+
+    public void MarkDone(CardViewModel card)
+    {
+        if (_board is null) return;
+        Move(card, _board.Columns.LastOrDefault()?.Id ?? Board.Completed);
+    }
+
     public BoardViewModel(ProjectConfig project)
     {
         _project = project;
@@ -216,6 +242,33 @@ public partial class CardEditor : ObservableObject
     }
 
     [RelayCommand] void Cancel() => _board.Editor = null;
+
+    public bool CanDone => _card is not null;
+    [ObservableProperty] public partial bool ConfirmingDelete { get; set; }
+    public string DeleteLabel => ConfirmingDelete ? "Click again to delete" : "Delete";
+    partial void OnConfirmingDeleteChanged(bool value) => OnPropertyChanged(nameof(DeleteLabel));
+
+    /// <summary>Finish the card: to the board's last column (its done column), or Completed if it has none.</summary>
+    [RelayCommand]
+    void Done()
+    {
+        if (_card is null) return;
+        _board.Editor = null;
+        _board.MarkDone(_card);
+    }
+
+    /// <summary>Delete, after a second click (the file goes to the board's .deleted folder, so it can come back).</summary>
+    [RelayCommand]
+    void Delete()
+    {
+        if (_card is null || _board.Folder is null) return;
+        if (!ConfirmingDelete) { ConfirmingDelete = true; return; }
+        try { BoardStore.Delete(_board.Folder, _card.Id); }
+        catch (Exception e) { Error = e.Message; return; }
+        _board.Editor = null;
+        _board.Reload();
+        _board.Status = $"Deleted {_card.Id} (it's in the board's .deleted folder)";
+    }
 
     [RelayCommand]
     void WorkOn()

@@ -3,6 +3,7 @@
              xmlns:vm="using:Workbench.Desktop.ViewModels"
              x:Class="Workbench.Desktop.Views.BoardView"
              x:DataType="vm:BoardViewModel">
+  <Panel>
   <Grid ColumnDefinitions="*,Auto">
   <Grid RowDefinitions="Auto,Auto,*">
     <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
@@ -32,7 +33,7 @@
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:ListViewModel">
             <Border Width="290" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8"
-                    DragDrop.AllowDrop="True" Tag="{Binding Id}" Classes="list">
+                    Tag="{Binding Id}" Classes="list">
               <DockPanel>
                 <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="10,8">
                   <DockPanel>
@@ -114,8 +115,16 @@
             <Button Content="Close" Command="{Binding CancelCommand}"/>
             <Button Content="▶ Work on this" Command="{Binding WorkOnCommand}" IsVisible="{Binding CanWorkOn}"/>
           </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanDone}" Margin="0,6,0,0">
+            <Button Content="✓ Mark done" Command="{Binding DoneCommand}" ToolTip.Tip="Moves it to the board's last column"/>
+            <Button Content="{Binding DeleteLabel}" Command="{Binding DeleteCommand}" Foreground="{StaticResource Bad}"
+                    ToolTip.Tip="Moves its file into the board's .deleted folder (recoverable)"/>
+          </StackPanel>
         </StackPanel>
       </ScrollViewer>
     </Border>
   </Grid>
+    <!-- what is being dragged, drawn over everything, taking no hits -->
+    <Canvas x:Name="Overlay" IsHitTestVisible="False"/>
+  </Panel>
 </UserControl>

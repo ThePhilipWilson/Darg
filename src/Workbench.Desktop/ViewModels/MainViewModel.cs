@@ -158,7 +158,11 @@ public partial class ProjectViewModel : ObservableObject
         if (config.Uses(Features.Terminal)) Consoles = new ConsolesViewModel(config);
         if (config.Uses(Features.Docs) && config.Docs is { Length: > 0 } docs) Docs = new DocsViewModel(docs);
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
-            Notes = new NotesViewModel(notes) { TicketBoard = () => Board?.Folder };
+            Notes = new NotesViewModel(notes)
+            {
+                TicketBoard = () => Board?.Folder,
+                OpenTicket = id => { if (Board?.OpenById(id) == true) Section = Section.Board; },
+            };
         if (config.Uses(Features.Code) && config.Repos.Count > 0) Code = new CodeViewModel(config);
         if (config.Uses(Features.GitHub) && config.Repos.Count > 0) Hub = new GitHubViewModel(config, () => Board?.Folder);
         Section = Board is not null ? Section.Board : Agents is not null ? Section.Agents : Section.Terminal;
