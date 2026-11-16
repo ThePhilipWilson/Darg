@@ -25,6 +25,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var p in Projects) if (p.Agents is { } a) a.Mascot = Mascot;
         Mascot.Notify += (agent, what, detail) =>
         {
+            Log(MascotId, agent.Id, "Fettle", agent.Name, what, detail);
             if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, $"Fettle: {what}", "", detail);
         };
         Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
@@ -257,9 +258,27 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Raised when the window should come to the front (a notification was clicked).</summary>
     public event Action? BringToFront;
 
+    /// <summary>Every notification agents have raised this run, newest first: the popups come and go, this stays.</summary>
+    public System.Collections.ObjectModel.ObservableCollection<NotificationEntry> Notifications { get; } = [];
+    [ObservableProperty] public partial bool ShowNotifications { get; set; }
+    [RelayCommand] void ToggleNotifications() => ShowNotifications = !ShowNotifications;
+    [RelayCommand] void ClearNotifications() => Notifications.Clear();
+    [RelayCommand] void OpenNotification(NotificationEntry? n) { if (n is not null) OpenAgent(n.ProjectId, n.AgentId); }
+
+    void Log(string projectId, string agentId, string project, string agent, string what, string detail)
+    {
+        void Add()
+        {
+            Notifications.Insert(0, new NotificationEntry(projectId, agentId, project, agent, what, detail, DateTime.Now));
+            while (Notifications.Count > 100) Notifications.RemoveAt(Notifications.Count - 1);
+        }
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) Add(); else Avalonia.Threading.Dispatcher.UIThread.Post(Add);
+    }
+
     /// <summary>A notification, unless the person is already looking at that agent.</summary>
     void Tell(ProjectViewModel project, AgentViewModel agent, string what, string detail)
     {
+        Log(project.Config.Id, agent.Id, project.Name, agent.Name, what, detail);
         var looking = WindowActive && Selected == project && project.OnAgents && project.Agents?.Shown == agent;
         if (!looking) Notifier.Show(project.Config.Id, agent.Id, $"{project.Name}: {what}", agent.Name, detail);
     }
@@ -292,6 +311,13 @@ public partial class MainViewModel : ObservableObject
         LastProject.Write(value?.Config.Id);
         NavMoved();
     }
+}
+
+/// <summary>One notification an agent raised, kept in the list Fettle shows.</summary>
+public record NotificationEntry(string ProjectId, string AgentId, string Project, string Agent, string What, string Detail, DateTime At)
+{
+    public string Title => $"{Project}: {What}";
+    public string Sub => string.IsNullOrWhiteSpace(Agent) ? $"{At:HH:mm}" : $"{Agent} · {At:HH:mm}";
 }
 
 public enum Section { Board, Notes, Docs, Agents, Artifacts, Mistakes, Code, GitHub, Preview, Terminal }
