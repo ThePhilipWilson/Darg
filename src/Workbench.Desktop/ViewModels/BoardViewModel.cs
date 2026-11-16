@@ -563,6 +563,10 @@ public sealed partial class CardViewModel : ObservableObject
     public string Title => Card.Title;
     public string Priority => Card.Priority;
     public bool HasPriority => Card.Priority.Length > 0;
+    /// <summary>Its type, shown on the card unless it's a plain Task (most cards are).</summary>
+    public string Kind => Card.Kind;
+    public bool IsBug => Card.IsBug;
+    public bool ShowsKind => !Card.Kind.Equals(CardTypes.Task, StringComparison.OrdinalIgnoreCase);
     public IReadOnlyList<string> Labels => Card.Labels;
     public string Description => Card.Description;
     public IReadOnlyList<MoveTarget> MoveTargets { get; }
@@ -623,6 +627,9 @@ public partial class CardEditor : ObservableObject
     public string Heading => _card is null ? "New card" : _card.Id;
     public string Status => _card?.Card.Status is { Length: > 0 } s ? s : "Backlog";
     public IReadOnlyList<string> PriorityChoices => Priorities;
+    /// <summary>Task and Bug, plus the card's own type if its file names another.</summary>
+    public IReadOnlyList<string> TypeChoices { get; }
+    [ObservableProperty] public partial string Type { get; set; }
     [ObservableProperty] public partial string Title { get; set; }
     [ObservableProperty] public partial string Description { get; set; }
     [ObservableProperty] public partial string LabelsText { get; set; }
@@ -639,6 +646,8 @@ public partial class CardEditor : ObservableObject
         Description = card?.Description ?? "";
         LabelsText = card is null ? "" : string.Join(", ", card.Labels);
         Priority = card?.Priority ?? "";
+        Type = CardTypes.All.FirstOrDefault(t => t.Equals(card?.Card.Kind, StringComparison.OrdinalIgnoreCase)) ?? card?.Card.Kind ?? CardTypes.Task;
+        TypeChoices = CardTypes.All.Contains(Type) ? CardTypes.All : [.. CardTypes.All, Type];
         FlowTargets = card is null || card.HasAgent ? [] : board.FlowList().Select(f => new MoveTarget("▶ " + f.Name, new RelayCommand(() =>
         {
             board.Editor = null;
@@ -655,8 +664,10 @@ public partial class CardEditor : ObservableObject
         if (Title.Trim().Length == 0) { Error = "A card needs a title."; return; }
         try
         {
-            if (_card is null) BoardStore.Create(_board.Folder, Title, Description, LabelList(), Priority);
-            else BoardStore.Update(_board.Folder, _card.Id, Title, Description, LabelList(), Priority);
+            if (_card is null) BoardStore.Create(_board.Folder, Title, Description, LabelList(), Priority, Type);
+            else BoardStore.Update(_board.Folder, _card.Id, Title, Description, LabelList(), Priority,
+                // a blank Type stays blank unless it was changed (blank already reads as Task)
+                _card.Card.Type.Length == 0 && Type == CardTypes.Task ? null : Type);
         }
         catch (Exception e) { Error = e.Message; return; }
         _board.Editor = null;

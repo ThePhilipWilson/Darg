@@ -25,6 +25,11 @@
       <Setter Property="VerticalContentAlignment" Value="Top"/>
       <Setter Property="Padding" Value="0,10"/>
     </Style>
+    <!-- a card's type: a red Bug pill; another type a file names, grey -->
+    <Style Selector="Border.kind"><Setter Property="Background" Value="#2c3038"/></Style>
+    <Style Selector="Border.kind TextBlock"><Setter Property="Foreground" Value="#c6ccd6"/></Style>
+    <Style Selector="Border.kind.bug"><Setter Property="Background" Value="#4a2226"/></Style>
+    <Style Selector="Border.kind.bug TextBlock"><Setter Property="Foreground" Value="#ff8a8a"/></Style>
   </UserControl.Styles>
   <Panel>
   <Grid ColumnDefinitions="*,Auto">
@@ -143,6 +148,10 @@
                               <Border DockPanel.Dock="Right" IsVisible="{Binding HasPriority}" Background="#3a3020" CornerRadius="8" Padding="6,0" Margin="0,0,6,0">
                                 <TextBlock Text="{Binding Priority}" FontSize="10" Foreground="{StaticResource Accent}"/>
                               </Border>
+                              <Border DockPanel.Dock="Right" IsVisible="{Binding ShowsKind}" Classes="kind" Classes.bug="{Binding IsBug}"
+                                      CornerRadius="8" Padding="6,0" Margin="0,0,6,0" ToolTip.Tip="Its type">
+                                <TextBlock Text="{Binding Kind}" FontSize="10"/>
+                              </Border>
                               <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}" VerticalAlignment="Center"/>
                             </DockPanel>
                             <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
@@ -197,7 +206,10 @@
           <TextBox Text="{Binding Title}" PlaceholderText="Title" FontSize="15" TextWrapping="Wrap"/>
           <TextBox Text="{Binding Description}" PlaceholderText="Description (markdown)" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="220"/>
           <TextBox Text="{Binding LabelsText}" PlaceholderText="Labels, comma separated"/>
-          <ComboBox ItemsSource="{Binding PriorityChoices}" SelectedItem="{Binding Priority}" PlaceholderText="Priority" HorizontalAlignment="Stretch"/>
+          <Grid ColumnDefinitions="*,8,*">
+            <ComboBox Grid.Column="0" ItemsSource="{Binding TypeChoices}" SelectedItem="{Binding Type}" HorizontalAlignment="Stretch" ToolTip.Tip="Type"/>
+            <ComboBox Grid.Column="2" ItemsSource="{Binding PriorityChoices}" SelectedItem="{Binding Priority}" PlaceholderText="Priority" HorizontalAlignment="Stretch"/>
+          </Grid>
           <TextBlock Classes="bad" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
           <StackPanel Orientation="Horizontal" Spacing="8">
             <Button Classes="primary" Content="{Binding IsNew, Converter={x:Static vm:Bools.CreateOrSave}}" Command="{Binding SaveCommand}"/>

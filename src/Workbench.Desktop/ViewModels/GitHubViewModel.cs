@@ -40,7 +40,7 @@ public partial class GitHubViewModel(ProjectConfig project, Func<string?> boardF
         var board = boardFolder();
         if (board is null) { Status = "This project has no board to put a card on."; return; }
         var desc = (issue.Body.Trim().Length > 0 ? issue.Body.Trim() + "\n\n" : "") + $"From GitHub issue {repo.Full}#{issue.Number}: {issue.Url}";
-        var card = BoardStore.Create(board, issue.Title, desc, issue.Labels);
+        var card = BoardStore.Create(board, issue.Title, desc, issue.Labels, type: CardTypes.Guess(issue.Title, issue.Labels));
         Status = $"Made {card.Id} from #{issue.Number}";
     }
 }
