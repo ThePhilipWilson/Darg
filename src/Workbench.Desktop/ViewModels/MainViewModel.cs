@@ -34,6 +34,7 @@ public partial class MainViewModel : ObservableObject
             artifacts.Reply += r => Avalonia.Threading.Dispatcher.UIThread.Post(() => FromArtifact(r));
             artifacts.ListAgents = () => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(ListAgents).GetTask();
             artifacts.CloseAgents = ids => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => CloseAgents(ids)).GetTask();
+            RegisterApi(artifacts.Api);
         }
         ArtifactHost.OpenRequested += file => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenArtifact(file));
         Restart = new RestartViewModel(BusyAgents, SaveAll);
@@ -75,8 +76,8 @@ public partial class MainViewModel : ObservableObject
             foreach (var a in p.Agents?.Agents ?? [])
                 list.Add(new System.Text.Json.Nodes.JsonObject
                 {
-                    ["project"] = p.Config.Name, ["id"] = a.Id, ["name"] = a.Name, ["state"] = a.State.ToString().ToLowerInvariant(),
-                    ["open"] = a.Open, ["card"] = a.CardId,
+                    ["project"] = p.Config.Name, ["projectId"] = p.Config.Id, ["id"] = a.Id, ["name"] = a.Name, ["state"] = a.State.ToString().ToLowerInvariant(),
+                    ["doing"] = a.Activity, ["open"] = a.Open, ["card"] = a.CardId, ["flow"] = a.Flow?.Status,
                 });
         return list.ToJsonString();
     }
@@ -139,7 +140,7 @@ public partial class MainViewModel : ObservableObject
                 if (p.Code.Current is { } f) s.Append($", file {f.FullPath} open");
                 break;
             case Section.Agents when p.Agents?.Shown is { } a:
-                s.Append($", agent \"{a.Name}\" working in {a.Cwd}");
+                s.Append($", agent \"{a.Name}\" ({a.StateText}), its folder {a.Cwd}"); // "working in" read as its state
                 break;
             case Section.GitHub:
                 s.Append($", repos {string.Join(", ", p.Config.Repos)}");
@@ -381,13 +382,15 @@ public partial class ProjectViewModel : ObservableObject
     void Open(string section)
     {
         var s = Enum.Parse<Section>(section);
-        var has = s switch
-        {
-            Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Artifacts => Artifacts is not null,
-            Section.Code => Code is not null, Section.GitHub => Hub is not null, Section.Preview => Preview is not null, _ => Consoles is not null,
-        };
-        if (has) Section = s;
+        if (Has(s)) Section = s;
     }
+
+    /// <summary>Whether this project has a section (its feature ticked and what it needs set up).</summary>
+    public bool Has(Section s) => s switch
+    {
+        Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Artifacts => Artifacts is not null,
+        Section.Code => Code is not null, Section.GitHub => Hub is not null, Section.Preview => Preview is not null, _ => Consoles is not null,
+    };
 
     /// <summary>The project is leaving the app (removed or changed in Setup): stop its agents and its watcher.</summary>
     public void Close()
