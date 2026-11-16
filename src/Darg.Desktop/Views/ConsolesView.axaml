@@ -4,7 +4,7 @@
              x:Class="Darg.Desktop.Views.ConsolesView"
              x:DataType="vm:ConsolesViewModel">
   <DockPanel>
-    <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
+    <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
       <DockPanel>
         <!-- saved commands: one click opens a console running it -->
         <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding Commands}">

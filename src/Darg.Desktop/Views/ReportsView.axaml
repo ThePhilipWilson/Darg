@@ -6,7 +6,7 @@
              x:DataType="vm:ReportsViewModel">
   <Grid ColumnDefinitions="340,*" RowDefinitions="*,Auto">
     <!-- the reports, newest first; an unread one is bold with a dot -->
-    <Border Grid.RowSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+    <Border Grid.RowSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
         <DockPanel DockPanel.Dock="Top" Margin="12,8,8,4">
           <Button DockPanel.Dock="Right" Content="Mark all read" Command="{Binding MarkAllReadCommand}" IsEnabled="{Binding HasUnread}"/>
@@ -16,7 +16,7 @@
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ReportRow">
               <DockPanel AutomationProperties.Name="{Binding Heading}" Margin="0,2">
-                <Ellipse DockPanel.Dock="Left" Width="8" Height="8" Margin="0,5,8,0" VerticalAlignment="Top" Fill="{StaticResource Accent}"
+                <Ellipse DockPanel.Dock="Left" Width="8" Height="8" Margin="0,5,8,0" VerticalAlignment="Top" Fill="{DynamicResource Accent}"
                          IsVisible="{Binding !Read}" ToolTip.Tip="Unread"/>
                 <Border DockPanel.Dock="Left" Width="8" Margin="0,0,8,0" IsVisible="{Binding Read}"/>
                 <StackPanel>
@@ -37,7 +37,7 @@
 
     <Panel Grid.Column="1">
       <DockPanel IsVisible="{Binding HasSelected}">
-        <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
           <DockPanel>
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
               <Button Content="Show card" Command="{Binding ShowCardCommand}" IsVisible="{Binding Selected.HasCard, FallbackValue=False}"
@@ -73,7 +73,7 @@
                  Text="{Binding EmptyText}"/>
     </Panel>
 
-    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+    <Border Grid.Row="1" Grid.Column="1" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
       <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}"/>
     </Border>
   </Grid>

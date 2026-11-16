@@ -4,9 +4,9 @@
              xmlns:views="using:Darg.Desktop.Views"
              x:Class="Darg.Desktop.Views.ToolsView"
              x:DataType="vm:ToolsViewModel"
-             Background="{StaticResource Bg}">
+             Background="{DynamicResource Bg}">
   <DockPanel>
-    <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
+    <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
       <DockPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
           <Button Content="↻ Check again" Command="{Binding RefreshCommand}"/>
@@ -20,7 +20,7 @@
         <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:ToolCard">
-            <Border Width="560" Margin="0,0,16,16" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="10" Padding="14">
+            <Border Width="560" Margin="0,0,16,16" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="10" Padding="14">
               <StackPanel Spacing="10">
                 <DockPanel>
                   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">

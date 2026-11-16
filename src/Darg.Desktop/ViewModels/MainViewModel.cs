@@ -135,7 +135,7 @@ public partial class MainViewModel : ObservableObject
             .OrderByDescending(x => x.p.Docs!.Folder.Length)
             .Select(x => x.p).FirstOrDefault();
         if (owner is null) return false;
-        Setup = null; ToolsPage = null;
+        Setup = null; ToolsPage = null; SettingsPage = null;
         Selected = owner;
         owner.OpenCommand.Execute(nameof(Section.Docs));
         return owner.Docs!.Show(full);
@@ -147,6 +147,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (Setup is not null) return "the Setup page";
         if (ToolsPage is not null) return "the Tools page";
+        if (SettingsPage is not null) return "the Settings page";
         if (Selected is not { } p) return "";
         var s = new System.Text.StringBuilder($"{p.Name} › {p.Section}");
         switch (p.Section)
@@ -208,6 +209,24 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial ToolsViewModel? ToolsPage { get; set; }
     [RelayCommand] void OpenTools() => ToolsPage = new ToolsViewModel(this, InstanceConfig.Load().ToolsOrDefaults());
     public void CloseTools() => ToolsPage = null;
+
+    // ---------------------------------------------------------------- Settings
+    [ObservableProperty] public partial SettingsViewModel? SettingsPage { get; set; }
+    [RelayCommand] void OpenSettings() => SettingsPage = new SettingsViewModel(this);
+    public void CloseSettings() => SettingsPage = null;
+
+    /// <summary>The glyph before the app's name in the header: the theme's (girlypop's is a heart).</summary>
+    public string Mark => ThemeManager.Current.Mark + " Darg";
+
+    /// <summary>Shows a theme at once and saves it as the instance's; null when saved, else why it wasn't.</summary>
+    public string? SetTheme(Theme theme)
+    {
+        ThemeManager.Apply(theme);
+        OnPropertyChanged(nameof(Mark));
+        var settings = AppSettings.Load();
+        settings.Theme = theme.Id;
+        return settings.Save() is { } why ? $"Showing {theme.Name}, but couldn't save it: {why}" : null;
+    }
 
     /// <summary>A project tab dragged to a new place: the order is saved, so it opens that way next time.</summary>
     public void MoveProject(int from, int to)

@@ -43,6 +43,29 @@ public partial class CodeView : UserControl
     bool _loading;
     OpenFile? _shown;
 
+    // TextMate's colours follow the app's theme: Dark+ on a dark one, Light+ on a light one
+    protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        ThemeManager.Changed += Retheme;
+        Retheme();
+    }
+
+    protected override void OnDetachedFromVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        ThemeManager.Changed -= Retheme;
+    }
+
+    bool? _light;
+    void Retheme()
+    {
+        var light = ThemeManager.Current.IsLight;
+        if (_light == light) return;
+        _light = light;
+        _textMate.SetTheme(Grammars.LoadTheme(light ? ThemeName.LightPlus : ThemeName.DarkPlus));
+    }
+
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);

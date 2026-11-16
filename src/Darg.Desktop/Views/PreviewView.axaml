@@ -4,7 +4,7 @@
              x:Class="Darg.Desktop.Views.PreviewView"
              x:DataType="vm:PreviewViewModel">
   <DockPanel>
-    <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
+    <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
       <DockPanel>
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="4" Margin="0,0,8,0">
           <Button Content="←" Click="Back" ToolTip.Tip="Back" AutomationProperties.Name="Back"/>
@@ -19,12 +19,12 @@
         <TextBox x:Name="AddressBox" Text="{Binding Address}" Classes="mono" VerticalAlignment="Center" KeyDown="AddressKey"/>
       </DockPanel>
     </Border>
-    <Border DockPanel.Dock="Bottom" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="10,3">
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="10,3">
       <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
     </Border>
-    <Border DockPanel.Dock="Bottom" Height="220" Background="Black" IsVisible="{Binding ShowLog}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
+    <Border DockPanel.Dock="Bottom" Height="220" Background="Black" IsVisible="{Binding ShowLog}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0">
       <ScrollViewer x:Name="LogScroll">
-        <SelectableTextBlock Classes="mono" Text="{Binding Log}" Margin="8,6" TextWrapping="Wrap" Foreground="#cfcfcf"/>
+        <SelectableTextBlock Classes="mono" Text="{Binding Log}" Margin="8,6" TextWrapping="Wrap" Foreground="{DynamicResource LogInk}"/>
       </ScrollViewer>
     </Border>
     <Panel>

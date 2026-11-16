@@ -3,10 +3,10 @@
              xmlns:vm="using:Darg.Desktop.ViewModels"
              x:Class="Darg.Desktop.Views.SetupView"
              x:DataType="vm:SetupViewModel"
-             Background="{StaticResource Bg}">
+             Background="{DynamicResource Bg}">
   <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="280,*">
     <!-- the instance -->
-    <Border Grid.ColumnSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
+    <Border Grid.ColumnSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
       <DockPanel>
         <TextBlock DockPanel.Dock="Left" Text="Setup" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,20,0"/>
         <TextBlock DockPanel.Dock="Left" Text="This instance:" Classes="dim" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -16,7 +16,7 @@
     </Border>
 
     <!-- its projects -->
-    <Border Grid.Row="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+    <Border Grid.Row="1" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
         <TextBlock DockPanel.Dock="Top" Text="Projects in this instance" Classes="dim small" Margin="14,12,14,6"/>
         <StackPanel DockPanel.Dock="Bottom" Margin="12" Spacing="6">
@@ -41,7 +41,7 @@
     <ScrollViewer Grid.Row="1" Grid.Column="1">
       <StackPanel DataContext="{Binding Selected}" x:DataType="vm:ProjectSetup" Margin="24,18" Spacing="14" MaxWidth="760" HorizontalAlignment="Left"
                   IsVisible="{Binding $parent[UserControl].((vm:SetupViewModel)DataContext).Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
-        <Border IsVisible="{Binding HasFound}" Background="#1f2a22" BorderBrush="#2f5e3f" BorderThickness="1" CornerRadius="6" Padding="12,8">
+        <Border IsVisible="{Binding HasFound}" Background="{DynamicResource OkBg}" BorderBrush="{DynamicResource OkLine}" BorderThickness="1" CornerRadius="6" Padding="12,8">
           <StackPanel Spacing="4">
             <TextBlock Text="Found in the folder (check, change anything, then Save)" FontWeight="SemiBold" FontSize="12"/>
             <TextBlock Text="{Binding Found}" TextWrapping="Wrap" FontSize="12"/>
@@ -110,12 +110,12 @@
           <TextBlock Text="{Binding AccountsHint}" Classes="dim small"/>
         </StackPanel>
 
-        <Button Content="Remove from this instance" Command="{Binding RemoveCommand}" Foreground="{StaticResource Bad}" Margin="0,8,0,0"
+        <Button Content="Remove from this instance" Command="{Binding RemoveCommand}" Foreground="{DynamicResource Bad}" Margin="0,8,0,0"
                 ToolTip.Tip="Takes the project out of this instance only. Its boards, notes and repos stay as they are."/>
       </StackPanel>
     </ScrollViewer>
 
-    <Border Grid.Row="2" Grid.ColumnSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="16,10">
+    <Border Grid.Row="2" Grid.ColumnSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="16,10">
       <DockPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
           <Button Content="Cancel" Command="{Binding CloseCommand}"/>

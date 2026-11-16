@@ -31,10 +31,22 @@ public partial class MainViewModel
                              "(Claude Code keeps its history). Not one mid-turn. Only when Philip asks, or for agents whose card is done.", a => ForgetAgents(a.List("ids")));
         Add("flows", "the flows on file: name, max rounds, and the roles in order.", _ => Json(FlowList()));
         Add("run-flow", "run a flow: {project, flow, card} on a board card, or {project, flow, task} on a task in words. Only when Philip asks.", RunFlow);
+        Add("theme", "the app's colours: {theme} switches to that theme (" + string.Join(", ", Themes.All.Select(t => t.Id)) + ") and saves it; " +
+                     "{} says which is on. Only when Philip asks.", SetThemeApi);
         Add("run-command", "run one of a project's saved commands in its Terminal section: {project, command} (the command's name).", RunCommand);
     }
 
     static string Json(JsonNode n) => DargApi.Json(n);
+
+    string SetThemeApi(ApiArgs a)
+    {
+        var names = string.Join(", ", Themes.All.Select(t => t.Id));
+        if (a.Get("theme") is not { } name) return $"{ThemeManager.Current.Name} is on. Themes: {names}.";
+        var theme = Themes.Find(name) ?? throw new ApiError($"No theme \"{name}\". Themes: {names}.");
+        var why = SetTheme(theme);
+        SettingsPage?.Refresh();
+        return why ?? $"{theme.Name} is on.";
+    }
 
     ProjectViewModel FindProject(ApiArgs a)
     {

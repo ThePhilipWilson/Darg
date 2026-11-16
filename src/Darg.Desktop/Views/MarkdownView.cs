@@ -24,12 +24,14 @@ public sealed class MarkdownView : StackPanel
     public string? BaseFolder { get => GetValue(BaseFolderProperty); set => SetValue(BaseFolderProperty, value); }
 
     static readonly FontFamily Mono = new("Cascadia Mono, Consolas, Menlo, monospace");
-    static readonly IBrush CodeBg = new SolidColorBrush(Color.Parse("#101215"));
-    static readonly IBrush InlineCodeBg = new SolidColorBrush(Color.Parse("#2a2f39"));
-    static readonly IBrush Line = new SolidColorBrush(Color.Parse("#2e333d"));
-    static readonly IBrush Dim = new SolidColorBrush(Color.Parse("#a9b0bc"));
-    static readonly IBrush Link = new SolidColorBrush(Color.Parse("#6aa5e8"));
-    static readonly IBrush Accent = new SolidColorBrush(Color.Parse("#e0a84a"));
+    // the theme's colours, read as the blocks are built; a theme switch rebuilds them (Retheme)
+    static IBrush CodeBg => ThemeManager.Brush("Sunk");
+    static IBrush InlineCodeBg => ThemeManager.Brush("LabelBg");
+    static IBrush Line => ThemeManager.Brush("Line");
+    static IBrush Dim => ThemeManager.Brush("MdDim");
+    static IBrush Link => ThemeManager.Brush("Info");
+    static IBrush Accent => ThemeManager.Brush("Accent");
+    static IBrush HeaderRow => ThemeManager.Brush("Panel2");
 
     /// <summary>A link was clicked: its target ("wiki:Name" for an Obsidian [[link]], else the URL).</summary>
     public event Action<string>? LinkClicked;
@@ -42,8 +44,29 @@ public sealed class MarkdownView : StackPanel
         if (change.Property == MarkdownProperty || change.Property == BaseFolderProperty) Build();
     }
 
+    Theme? _builtIn;
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        ThemeManager.Changed += Retheme;
+        Retheme();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        ThemeManager.Changed -= Retheme;
+    }
+
+    void Retheme()
+    {
+        if (_builtIn is not null && _builtIn != ThemeManager.Current) Build();
+    }
+
     void Build()
     {
+        _builtIn = ThemeManager.Current;
         Children.Clear();
         foreach (var block in Core.Markdown.Parse(Markdown ?? "")) Children.Add(Draw(block));
     }
@@ -297,7 +320,7 @@ public sealed class MarkdownView : StackPanel
                 var cell = new Border
                 {
                     BorderBrush = Line, BorderThickness = new Thickness(0, 0, 1, 1), Padding = new Thickness(8, 4),
-                    Background = r == 0 ? new SolidColorBrush(Color.Parse("#22262e")) : null,
+                    Background = r == 0 ? HeaderRow : null,
                     Child = Text(t.Rows[r][c], bold: r == 0),
                 };
                 Grid.SetRow(cell, r); Grid.SetColumn(cell, c);

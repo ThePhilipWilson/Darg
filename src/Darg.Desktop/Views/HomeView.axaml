@@ -6,8 +6,8 @@
              x:DataType="vm:HomeViewModel">
   <UserControl.Styles>
     <Style Selector="Border.tile">
-      <Setter Property="Background" Value="{StaticResource Panel}"/>
-      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="Background" Value="{DynamicResource Panel}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="CornerRadius" Value="8"/>
       <Setter Property="Padding" Value="14,10"/>
@@ -28,7 +28,7 @@
     </Style>
   </UserControl.Styles>
   <DockPanel>
-    <Border DockPanel.Dock="Bottom" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
       <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
     </Border>
     <ScrollViewer>
@@ -130,9 +130,9 @@
         </WrapPanel>
 
         <!-- the README, drawn -->
-        <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" IsVisible="{Binding HasReadme}">
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8" IsVisible="{Binding HasReadme}">
           <DockPanel>
-            <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,6">
+            <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,6">
               <DockPanel>
                 <Button DockPanel.Dock="Right" Content="✎ Edit" Command="{Binding EditReadmeCommand}" ToolTip.Tip="Edit the README (in Docs, if this project has docs)"
                         AutomationProperties.Name="Edit README"/>
@@ -142,7 +142,7 @@
             <views:MarkdownView x:Name="Readme" Markdown="{Binding ReadmeText}" BaseFolder="{Binding ReadmeFolder}" Margin="28,20" MaxWidth="900" HorizontalAlignment="Left"/>
           </DockPanel>
         </Border>
-        <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Padding="20,16" IsVisible="{Binding NoReadme}">
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8" Padding="20,16" IsVisible="{Binding NoReadme}">
           <StackPanel Spacing="10">
             <TextBlock Text="No README yet." FontWeight="SemiBold"/>
             <TextBlock Classes="dim" TextWrapping="Wrap" Text="This page shows the README at the top of the project's first repo (or its docs folder's README or index.md)."/>

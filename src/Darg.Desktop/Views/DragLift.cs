@@ -120,7 +120,7 @@ public sealed class DragLift
             grid.Children.Add(new Border
             {
                 Width = size.Width, Height = size.Height, Margin = new Thickness(8, 8, 0, 0), CornerRadius = new CornerRadius(6),
-                Background = new SolidColorBrush(Color.Parse("#3a3d44")), BorderBrush = new SolidColorBrush(Color.Parse("#60ffffff")), BorderThickness = new Thickness(1),
+                Background = ThemeManager.Brush("Lift"), BorderBrush = ThemeManager.Brush("LiftLine"), BorderThickness = new Thickness(1),
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
                 BoxShadow = BoxShadows.Parse("0 12 28 0 #A0000000"),
             });
@@ -128,14 +128,14 @@ public sealed class DragLift
             grid.Children.Add(picture);
             grid.Children.Add(new Border
             {
-                Background = new SolidColorBrush(Color.Parse("#e0a84a")), CornerRadius = new CornerRadius(10), Padding = new Thickness(7, 1),
+                Background = ThemeManager.Brush("Accent"), CornerRadius = new CornerRadius(10), Padding = new Thickness(7, 1),
                 HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, -8, -8, 0),
-                Child = new TextBlock { Text = _carry.Count.ToString(), Foreground = Brushes.Black, FontWeight = FontWeight.Bold, FontSize = 12 },
+                Child = new TextBlock { Text = _carry.Count.ToString(), Foreground = ThemeManager.Brush("OnAccent"), FontWeight = FontWeight.Bold, FontSize = 12 },
             });
             _ghost = grid;
         }
         _overlay.Children.Add(_ghost);
-        _line = new Rectangle { Height = 3, Fill = new SolidColorBrush(Color.Parse("#e0a84a")), RadiusX = 2, RadiusY = 2, IsVisible = false, IsHitTestVisible = false };
+        _line = new Rectangle { Height = 3, Fill = ThemeManager.Brush("Accent"), RadiusX = 2, RadiusY = 2, IsVisible = false, IsHitTestVisible = false };
         _overlay.Children.Add(_line);
         _dimmed.Clear();
         _dimmed.AddRange(_host.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains(_itemClass) && b.Tag is not null && _carry.Contains(b.Tag)));
