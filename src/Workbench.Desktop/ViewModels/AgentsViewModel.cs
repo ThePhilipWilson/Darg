@@ -73,6 +73,7 @@ public partial class AgentsViewModel : ObservableObject
         a.End();
         AgentStore.Delete(_store, a.Id);
         Agents.Remove(a);
+        AnyOutOfUsage = Agents.Any(x => x.CanContinueAfterReset);
         if (Selected == a) Selected = Agents.FirstOrDefault();
         if (Shown == a) Shown = Selected;
     }
@@ -84,11 +85,22 @@ public partial class AgentsViewModel : ObservableObject
         foreach (var a in Agents.Where(a => a.State == AgentState.Idle).ToList()) a.CloseSession();
     }
 
+    /// <summary>True while an agent here has run out of usage and isn't yet set to carry on.</summary>
+    [ObservableProperty] public partial bool AnyOutOfUsage { get; set; }
+
+    /// <summary>Continue all after reset: every agent here that ran out of usage carries on when its limit resets.</summary>
+    [RelayCommand]
+    void ContinueAll()
+    {
+        foreach (var a in Agents.Where(a => a.CanContinueAfterReset).ToList()) a.ContinueAfterReset();
+    }
+
     void Add(AgentViewModel agent, bool select)
     {
         agent.StoreFolder ??= _store;
         agent.PropertyChanged += (_, e) =>
         {
+            if (e.PropertyName == nameof(AgentViewModel.CanContinueAfterReset)) AnyOutOfUsage = Agents.Any(a => a.CanContinueAfterReset);
             if (e.PropertyName != nameof(AgentViewModel.State)) return;
             NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
             if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
@@ -364,6 +376,8 @@ public partial class AgentViewModel : ObservableObject
         AgentState.Starting => "starting",
         AgentState.Working => Steps switch { 0 => "working", 1 => "working · 1 step", _ => $"working · {Steps} steps" },
         AgentState.NeedsYou => "needs you",
+        AgentState.Idle or AgentState.Saved when ContinueAt is { } at => $"out of usage · carries on {When(at)}",
+        AgentState.Idle when LimitHit => "out of usage",
         AgentState.Idle => TurnFailed ? "stopped with an error" : "done",
         AgentState.Saved => "saved · send to carry on", _ => "ended",
     };
@@ -374,6 +388,85 @@ public partial class AgentViewModel : ObservableObject
         Steps = 0;
         TurnFailed = false;
         Activity = what;
+        // any message, the person's or the one sent at the reset, ends the wait: a new limit starts a new one
+        _continuing = _carryingOn;
+        _carryingOn = false;
+        _rejected = null;
+        StopWaiting();
+        LimitHit = false;
+    }
+
+    // ---- Out of usage: carry on when the limit resets (WOR-0031). Workbench keeps the time and sends the
+    // message itself, so nothing of Claude's runs while it waits.
+
+    /// <summary>The last turn stopped because the usage limit was hit.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(CanContinueAfterReset))] public partial bool LimitHit { get; set; }
+    /// <summary>When it will carry on by itself (the limit's reset and a minute); null: not waiting.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(WaitingForReset), nameof(CanContinueAfterReset), nameof(LimitLine))]
+    public partial DateTimeOffset? ContinueAt { get; set; }
+    /// <summary>When the limit that stopped the last turn resets (null if Claude didn't say).</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(LimitLine))] public partial DateTimeOffset? LimitResets { get; set; }
+    public bool WaitingForReset => ContinueAt is not null;
+    public bool CanContinueAfterReset => LimitHit && ContinueAt is null;
+    public string LimitLine => ContinueAt is { } at ? $"Out of usage. Carries on by itself {When(at)}."
+        : LimitResets is { } r ? $"Out of usage until {When(r)}." : "Out of usage; Claude didn't say when it resets.";
+    /// <summary>What the agent is sent when the limit has reset.</summary>
+    public const string CarryOnMessage = "Your usage limit has reset. Carry on with what you were doing where you left off.";
+
+    UsageLimited? _rejected;          // a rate_limit_event this turn that said the limit is hit
+    bool _carryingOn, _continuing;    // the next turn / this turn was sent at the reset (so a new limit re-arms by itself)
+    DispatcherTimer? _waitTimer;
+
+    /// <summary>Continue after reset: wait for the limit to reset, then send the agent a message to carry on.</summary>
+    [RelayCommand]
+    public void ContinueAfterReset()
+    {
+        if (CanContinueAfterReset) WaitFor(UsageLimit.ContinueAt(LimitResets, null, DateTimeOffset.Now));
+    }
+
+    /// <summary>Don't carry on by itself after all.</summary>
+    [RelayCommand]
+    void CancelContinue()
+    {
+        StopWaiting();
+        Items.Add(new NoteItem("Won't carry on by itself. Send a message when you want it to.", false));
+        Activity = LimitLine;
+        Save();
+    }
+
+    void WaitFor(DateTimeOffset at)
+    {
+        ContinueAt = at;
+        Activity = LimitLine;
+        // a tick every 20s against the clock rather than one long timer: a PC that sleeps through the
+        // reset still carries on soon after it wakes
+        _waitTimer ??= new DispatcherTimer(TimeSpan.FromSeconds(20), DispatcherPriority.Background, (_, _) => CheckWait());
+        _waitTimer.Start();
+        Save();
+    }
+
+    void StopWaiting()
+    {
+        _waitTimer?.Stop();
+        ContinueAt = null;
+    }
+
+    void CheckWait()
+    {
+        if (ContinueAt is not { } at || DateTimeOffset.Now < at) return;
+        StopWaiting();
+        if (Working || NeedsYou) return; // it's been given something else to do meanwhile
+        _carryingOn = true;
+        Say("↻ Carry on (the usage limit has reset)", CarryOnMessage);
+    }
+
+    /// <summary>A time, said as the person reads a clock: "at 6:21pm", "tomorrow 5am", "Thu 20 Nov 5:01pm".</summary>
+    public static string When(DateTimeOffset t)
+    {
+        var local = t.ToLocalTime().DateTime;
+        var clock = local.ToString(local.Minute == 0 ? "htt" : "h:mmtt", System.Globalization.CultureInfo.InvariantCulture).ToLowerInvariant();
+        var days = (local.Date - DateTime.Today).Days;
+        return days switch { 0 => $"at {clock}", 1 => $"tomorrow {clock}", _ => $"{local:ddd d MMM} {clock}" };
     }
 
     /// <param name="shown">What the transcript shows for the first message, when what's sent carries more
@@ -460,6 +553,8 @@ public partial class AgentViewModel : ObservableObject
         foreach (var i in r.Items) Items.Add(FromRecord(i));
         Activity = OneLine(Items.OfType<TextItem>().LastOrDefault()?.Text);
         State = AgentState.Saved;
+        // it was waiting for the usage limit to reset when Workbench closed: it still is (or carries on now)
+        if (r.ContinueAt is { } at) { LimitHit = true; WaitFor(at); }
     }
 
     /// <summary>Start (or resume) the Claude session and send it a message.</summary>
@@ -494,7 +589,7 @@ public partial class AgentViewModel : ObservableObject
             AgentStore.Save(StoreFolder, new AgentRecord
             {
                 Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Project = Project, SessionId = SessionId, Args = _args,
-                Model = _model, Effort = _effort, Mode = _mode,
+                Model = _model, Effort = _effort, Mode = _mode, ContinueAt = ContinueAt,
                 Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
             });
         }
@@ -574,6 +669,12 @@ public partial class AgentViewModel : ObservableObject
                 State = AgentState.NeedsYou;
                 Notify?.Invoke($"wants to use {p.ToolName}", perm.Summary);
                 break;
+            case UsageLimited u when u.Rejected:
+                _rejected = u;
+                break;
+            case TurnFinished f when IsLimit(f):
+                OutOfUsage(f);
+                break;
             case TurnFinished f:
                 if (f.IsError) Items.Add(new NoteItem(f.Text, true));
                 // Claude Code reports a cost on every turn, priced as if on the API; on a subscription
@@ -597,6 +698,31 @@ public partial class AgentViewModel : ObservableObject
                 TurnEnded?.Invoke(true);
                 break;
         }
+    }
+
+    /// <summary>Whether a turn stopped because the usage limit was hit (the error text says so, or it failed after
+    /// Claude Code said the limit was hit).</summary>
+    bool IsLimit(TurnFinished f) =>
+        UsageLimit.IsLimit(f.Text) || (f.IsError && (_rejected is not null || UsageLimit.IsLimit(Items.OfType<TextItem>().LastOrDefault()?.Text)));
+
+    void OutOfUsage(TurnFinished f)
+    {
+        var text = f.Text.Length > 0 ? f.Text : Items.OfType<TextItem>().LastOrDefault()?.Text ?? "";
+        var now = DateTimeOffset.Now;
+        LimitResets = _rejected?.ResetsAt is { } r && r > now.AddDays(-1) ? r : UsageLimit.ResetFrom(text, now);
+        // Claude Code says it as a reply too: shown once is enough
+        if (Items.LastOrDefault() is not TextItem said || said.Text != text.Trim()) Items.Add(new NoteItem(text.Length > 0 ? text : "Out of usage", true));
+        TurnFailed = true;
+        LimitHit = true;
+        State = AgentState.Idle;
+        // a flow runs on its own, and a turn sent at the reset that hits a limit again (a weekly one, say)
+        // was already asked to carry on: both wait again without asking
+        var again = _continuing || InFlow;
+        if (again) WaitFor(UsageLimit.ContinueAt(LimitResets, text, now));
+        Activity = LimitLine;
+        Save();
+        if (!again) TurnEnded?.Invoke(true); // a flow that waits on this agent keeps waiting while it does
+        Notify?.Invoke("is out of usage", LimitLine);
     }
 
     /// <summary>The first non-empty line of some text, without markdown heading marks, cut to fit a list row.</summary>
@@ -668,7 +794,7 @@ public partial class AgentViewModel : ObservableObject
     {
         if (_session is null) return false;
         var mid = Working || NeedsYou;
-        End();
+        End(stopWaiting: false); // closed while waiting for the reset, it resumes its session then
         var who = by is null ? "Session closed" : $"Session closed by {by}";
         Items.Add(new NoteItem(SessionId is null ? $"{who} before it began; start a new agent to carry on."
             : mid ? $"{who} mid-turn. Send a message to carry on." : $"{who}. Send a message to carry on.", false));
@@ -678,9 +804,12 @@ public partial class AgentViewModel : ObservableObject
 
     /// <summary>End the session (closed on request, forgotten, or its project is closing). What it was
     /// doing stops; the conversation can be resumed later if it has a session id.</summary>
-    public void End()
+    /// <param name="stopWaiting">False: keep waiting to carry on after a usage limit (only Close keeps it: the
+    /// agent is still listed, and sending it a message resumes the session).</param>
+    public void End(bool stopWaiting = true)
     {
         _ended = true;
+        if (stopWaiting) _waitTimer?.Stop(); // ContinueAt stays saved: shown again, it waits again
         var s = _session;
         if (s is null) return;
         _session = null;

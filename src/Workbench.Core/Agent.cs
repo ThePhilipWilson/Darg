@@ -126,6 +126,12 @@ public sealed record ToolResult(string ToolUseId, string Text, bool IsError, IRe
 public sealed record PermissionAsked(string RequestId, string ToolName, JsonObject Input, bool RequiresUser) : AgentEvent;
 public sealed record TurnFinished(bool IsError, string Text, double? CostUsd) : AgentEvent;
 public sealed record SessionExited(int ExitCode, string Stderr) : AgentEvent;
+/// <summary>Claude Code's word on the usage limit (a rate_limit_event). Rejected: out of usage until ResetsAt
+/// (the turn then fails); otherwise allowed, perhaps with a warning that it's close.</summary>
+public sealed record UsageLimited(string Status, DateTimeOffset? ResetsAt, string? Kind) : AgentEvent
+{
+    public bool Rejected => Status == "rejected";
+}
 
 /// <summary>Turns one line of stream-json into events (none for lines the host doesn't show).</summary>
 public static class StreamParser
@@ -177,6 +183,12 @@ public static class StreamParser
                 var r = m["request"]!;
                 yield return new PermissionAsked((string?)m["request_id"] ?? "", (string?)r["tool_name"] ?? "",
                     r["input"] as JsonObject ?? new JsonObject(), (bool?)r["requires_user_interaction"] ?? false);
+                break;
+            case "rate_limit_event" when m["rate_limit_info"] is JsonObject info:
+                DateTimeOffset? resets = null;
+                try { if ((double?)info["resetsAt"] is { } at and > 0) resets = DateTimeOffset.FromUnixTimeSeconds((long)at); }
+                catch (Exception e) when (e is InvalidOperationException or FormatException or ArgumentOutOfRangeException) { }
+                yield return new UsageLimited((string?)info["status"] ?? "", resets, (string?)info["rateLimitType"]);
                 break;
             case "result":
                 yield return new TurnFinished((bool?)m["is_error"] ?? false, (string?)m["result"] ?? "", (double?)m["total_cost_usd"]);

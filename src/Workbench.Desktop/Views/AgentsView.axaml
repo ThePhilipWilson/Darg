@@ -30,6 +30,9 @@
         <DockPanel Margin="12,6,8,0">
           <Button DockPanel.Dock="Right" Content="Close idle" FontSize="11" Padding="6,1" MinHeight="0" Background="Transparent"
                   Command="{Binding CloseIdleCommand}" ToolTip.Tip="Close the session of every idle agent here. They stay listed; send one a message to carry on."/>
+          <Button DockPanel.Dock="Right" Content="↻ Continue all" FontSize="11" Padding="6,1" MinHeight="0" Background="Transparent"
+                  Command="{Binding ContinueAllCommand}" IsVisible="{Binding AnyOutOfUsage}" Margin="0,0,4,0"
+                  ToolTip.Tip="Continue all after reset: every agent here that ran out of usage carries on when the limit resets."/>
           <TextBlock Text="This project" Classes="dim small" VerticalAlignment="Center"/>
         </DockPanel>
         <ListBox ItemsSource="{Binding Agents}" SelectedItem="{Binding Selected}" Background="Transparent"
@@ -88,6 +91,15 @@
           <Button DockPanel.Dock="Right" Content="Stop flow" Command="{Binding Flow.StopFlowCommand, FallbackValue={x:Null}}" Padding="8,2"
                   IsVisible="{Binding Flow.Running, FallbackValue=False}" ToolTip.Tip="Nothing more is handed on; the agent at work finishes its turn"/>
           <TextBlock Classes="dim small" Foreground="{StaticResource Accent}" Text="{Binding Flow.Status, StringFormat='Flow · {0}', FallbackValue=''}" VerticalAlignment="Center"/>
+        </DockPanel>
+        <!-- out of usage: Workbench waits for the limit to reset and then tells the agent to carry on (no AI runs meanwhile) -->
+        <DockPanel IsVisible="{Binding LimitHit}">
+          <Button DockPanel.Dock="Right" Classes="primary" Content="↻ Continue after reset" Command="{Binding ContinueAfterResetCommand}" Padding="8,2"
+                  IsVisible="{Binding CanContinueAfterReset}" AutomationProperties.Name="Continue after reset"
+                  ToolTip.Tip="When the usage limit resets, send this agent a message to carry on where it left off. Workbench must be running then (it carries on when it next opens if not)."/>
+          <Button DockPanel.Dock="Right" Content="Don't continue" Command="{Binding CancelContinueCommand}" Padding="8,2"
+                  IsVisible="{Binding WaitingForReset}" AutomationProperties.Name="Don't continue"/>
+          <TextBlock Classes="small" Foreground="{StaticResource Accent}" Text="{Binding LimitLine}" VerticalAlignment="Center"/>
         </DockPanel>
         <DockPanel>
           <Button DockPanel.Dock="Right" Content="Close" Command="{Binding CloseCommand}" IsEnabled="{Binding Open}" Margin="6,0,0,0"
