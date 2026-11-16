@@ -60,12 +60,14 @@ public partial class MainWindow : Window
             if (e.PropertyName == nameof(ViewModels.MascotViewModel.Items)) follow.Reset();
         };
         MoveByHeader(MascotBubble, MascotHeader);
+        // Fettle himself moves too: drag the critter (a click still opens the box) and the box goes with it
+        MoveByHeader(MascotStack, MascotCritter, dragFrom: 6);
     }
 
     /// <summary>Drag <paramref name="handle"/> to move <paramref name="box"/> anywhere in the window (its
     /// buttons and lists still work as before); a double-click on the handle puts it back where it started.
     /// The box stays wholly inside the window, also when it or the window changes size.</summary>
-    void MoveByHeader(Control box, Control handle)
+    void MoveByHeader(Control box, Control handle, double dragFrom = 0)
     {
         var shift = new Avalonia.Media.TranslateTransform();
         box.RenderTransform = shift;
@@ -86,23 +88,48 @@ public partial class MainWindow : Window
             (v as Control ?? v.FindAncestorOfType<Control>()) is { } c &&
             (c is Button or ComboBox || c.FindAncestorOfType<Button>() is not null || c.FindAncestorOfType<ComboBox>() is not null);
 
-        handle.PointerPressed += (_, e) =>
+        bool dragging = dragFrom <= 0, moved = false;
+        Avalonia.Point? pressedAt = null;
+        handle.AddHandler(PointerPressedEvent, (_, e) =>
         {
-            if (OnControl(e.Source) || !e.GetCurrentPoint(handle).Properties.IsLeftButtonPressed) return;
+            if (dragFrom <= 0 && OnControl(e.Source) || !e.GetCurrentPoint(handle).Properties.IsLeftButtonPressed) return;
+            moved = false;
+            if (dragFrom > 0)
+            {
+                // a button as the handle: a press may still be a click, so it is a drag only once it travels
+                pressedAt = e.GetPosition(root);
+                grabbed = pressedAt - new Avalonia.Point(shift.X, shift.Y);
+                dragging = false;
+                return;
+            }
             if (e.ClickCount == 2) { shift.X = shift.Y = 0; grabbed = null; e.Handled = true; return; }
             grabbed = e.GetPosition(root) - new Avalonia.Point(shift.X, shift.Y);
             e.Pointer.Capture(handle);
             e.Handled = true;
-        };
-        handle.PointerMoved += (_, e) =>
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        handle.AddHandler(PointerMovedEvent, (_, e) =>
         {
             if (grabbed is not { } g) return;
+            if (!dragging)
+            {
+                var d = e.GetPosition(root) - pressedAt!.Value;
+                if (Math.Abs(d.X) + Math.Abs(d.Y) < dragFrom) return;
+                dragging = moved = true;
+                e.Pointer.Capture(handle);
+            }
             var at = e.GetPosition(root) - g;
             shift.X = at.X; shift.Y = at.Y;
             Clamp();
-        };
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         void Drop() => grabbed = null;
-        handle.PointerReleased += (_, e) => { if (grabbed is null) return; Drop(); e.Pointer.Capture(null); };
+        handle.AddHandler(PointerReleasedEvent, (_, e) =>
+        {
+            if (grabbed is null) return;
+            Drop();
+            if (moved) { e.Pointer.Capture(null); e.Handled = true; } // a drag is not a click
+            else if (dragFrom <= 0) e.Pointer.Capture(null);
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         handle.PointerCaptureLost += (_, _) => Drop();
         // after a resize, wait for layout to settle: mid-layout the box's place is still the old one
         // (opening the box widens its panel, which moved it 300px left before this waited)
