@@ -34,6 +34,52 @@ public static class Updater
         catch (IOException) { return null; }
     }
 
+    /// <summary>Written beside the exe by every build: the newest source change it was built from, in ticks.</summary>
+    public const string StampFile = "built-from.txt";
+
+    static readonly HashSet<string> SkipDirs = new(StringComparer.OrdinalIgnoreCase) { "bin", "obj", ".git", ".shots", ".claude", "node_modules" };
+
+    /// <summary>When anything under the repo's src/ (bar build output) last changed, in UTC ticks: what a
+    /// build is made from. Committing, switching branch or merging all touch the files, so they count.</summary>
+    public static long SourceStamp(string repo)
+    {
+        long newest = 0;
+        void Walk(string dir)
+        {
+            try
+            {
+                foreach (var f in Directory.EnumerateFiles(dir))
+                    newest = Math.Max(newest, File.GetLastWriteTimeUtc(f).Ticks);
+                foreach (var d in Directory.EnumerateDirectories(dir))
+                    if (!SkipDirs.Contains(Path.GetFileName(d))) Walk(d);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+        Walk(Path.Combine(repo, "src"));
+        foreach (var f in new[] { "Directory.Build.props", "Directory.Packages.props", "global.json" })
+        {
+            var path = Path.Combine(repo, f);
+            if (File.Exists(path)) newest = Math.Max(newest, File.GetLastWriteTimeUtc(path).Ticks);
+        }
+        return newest;
+    }
+
+    public static void WriteStamp(string folder, long stamp) =>
+        File.WriteAllText(Path.Combine(folder, StampFile), stamp.ToString());
+
+    /// <summary>Is there anything in the repo this install doesn't have? Null when it can't be told (an install
+    /// from before builds were stamped), so the caller offers the update without claiming either way.</summary>
+    public static bool? HasChanges(string repo, string installFolder)
+    {
+        try
+        {
+            var file = Path.Combine(installFolder, StampFile);
+            if (!File.Exists(file) || !long.TryParse(File.ReadAllText(file).Trim(), out var built)) return null;
+            return SourceStamp(repo) > built;
+        }
+        catch (IOException) { return null; }
+    }
+
     /// <summary>Where an update is built before it replaces the install.</summary>
     public static string StagingFolder(string installFolder) => Path.TrimEndingDirectorySeparator(installFolder) + ".next";
 
@@ -65,6 +111,7 @@ public static class Updater
         try { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return $"Couldn't clear {staging}: {e.Message}"; }
 
+        var stamp = SourceStamp(repo); // before the build, so an edit made during it still counts as new
         var output = new List<string>();
         using var p = new Process { StartInfo = PublishCommand(repo, staging) };
         void Line(string? l)
@@ -80,7 +127,11 @@ public static class Updater
         p.BeginOutputReadLine(); p.BeginErrorReadLine();
         try { await p.WaitForExitAsync(ct); }
         catch (OperationCanceledException) { try { p.Kill(entireProcessTree: true); } catch (Exception) { } throw; }
-        if (p.ExitCode == 0 && File.Exists(Path.Combine(staging, ExeName))) return null;
+        if (p.ExitCode == 0 && File.Exists(Path.Combine(staging, ExeName)))
+        {
+            try { WriteStamp(staging, stamp); } catch (IOException) { }
+            return null;
+        }
         lock (output) return Failure(output, p.ExitCode);
     }
 
