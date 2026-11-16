@@ -65,33 +65,35 @@ public static class Themes
         ["LiftLine"] = "its border",
     };
 
-    public static readonly Theme Dark = new("dark", "Dark", "The workshop at night: charcoal, amber.", false, "◆", new Dictionary<string, string>
+    public static readonly Theme Dark = new("dark", "Dark", "Ink-black with a violet cast, the logo's hot pink and teal.", false, "◆", new Dictionary<string, string>
     {
-        ["Bg"] = "#14161a", ["Chrome"] = "#0f1114", ["Rail"] = "#111317", ["Panel"] = "#1b1e24", ["Panel2"] = "#22262e", ["Line"] = "#2e333d",
-        ["Ink"] = "#ffffff", ["Dim"] = "#8b93a1", ["MdDim"] = "#a9b0bc",
-        ["Accent"] = "#e0a84a", ["AccentHover"] = "#f0bc5e", ["OnAccent"] = "#1a1408", ["AccentSoft"] = "#3a3020", ["AccentWash"] = "#2a2416",
-        ["Ok"] = "#5fbf7f", ["OkBg"] = "#1f2a22", ["OkLine"] = "#2f5e3f", ["Bad"] = "#e06464", ["Info"] = "#6aa5e8", ["StatusOff"] = "#5a606c",
-        ["AddBg"] = "#1f3a27", ["AddInk"] = "#a8e6b8", ["DelBg"] = "#3a1f22", ["DelInk"] = "#f0a0a0",
-        ["Sunk"] = "#101215", ["Sunk2"] = "#15171b", ["LogInk"] = "#cfcfcf", ["DirInk"] = "#c9a86a",
-        ["UserBubble"] = "#2b2a22", ["UserBubbleLine"] = "#4a4330",
-        ["LabelBg"] = "#2a2f39", ["LabelInk"] = "#c6ccd6", ["BugBg"] = "#4a2226", ["BugInk"] = "#ff8a8a",
-        ["CardHoverLine"] = "#4a5160", ["Picked"] = "#f4f4f4", ["DropBg"] = "#20242c", ["WallDrop"] = "#22e0a84a", ["Wall"] = "#16181c",
-        ["Lift"] = "#3a3d44", ["LiftLine"] = "#60ffffff",
-    });
+        ["Bg"] = "#12111a", ["Chrome"] = "#0c0b12", ["Rail"] = "#0f0e16", ["Panel"] = "#1a1824", ["Panel2"] = "#232031", ["Line"] = "#332f45",
+        ["Ink"] = "#ffffff", ["Dim"] = "#9a95b0", ["MdDim"] = "#b5b0c8",
+        ["Accent"] = "#e83e9f", ["AccentHover"] = "#f45cb4", ["OnAccent"] = "#14040d", ["AccentSoft"] = "#3a1a30", ["AccentWash"] = "#2a1523",
+        ["Ok"] = "#22d6d0", ["OkBg"] = "#12302f", ["OkLine"] = "#1d6b68", ["Bad"] = "#ff6b4a", ["Info"] = "#8aa8ff", ["StatusOff"] = "#5b5770",
+        ["AddBg"] = "#123a38", ["AddInk"] = "#8ef0ea", ["DelBg"] = "#3a1426", ["DelInk"] = "#ff9fc4",
+        ["Sunk"] = "#0d0c14", ["Sunk2"] = "#121019", ["LogInk"] = "#d6d2e6", ["DirInk"] = "#6fe3de",
+        ["UserBubble"] = "#2c1727", ["UserBubbleLine"] = "#5a2a49",
+        ["LabelBg"] = "#2a2638", ["LabelInk"] = "#cfc9e6", ["BugBg"] = "#4a1a2f", ["BugInk"] = "#ff8fb8",
+        ["CardHoverLine"] = "#5a4f7a", ["Picked"] = "#22d6d0", ["DropBg"] = "#1e1b2b", ["WallDrop"] = "#33e83e9f", ["Wall"] = "#151320",
+        ["Lift"] = "#2f2b40", ["LiftLine"] = "#60ffffff",
+    })
+    { FluentAccent = "#e83e9f" };
 
-    public static readonly Theme Light = new("light", "Light", "Daylight: paper white, ink, a darker amber.", true, "◆", new Dictionary<string, string>
+    public static readonly Theme Light = new("light", "Light", "Paper with a blush, ink-violet text, a deeper pink and teal.", true, "◆", new Dictionary<string, string>
     {
-        ["Bg"] = "#f6f7f9", ["Chrome"] = "#e9ecf0", ["Rail"] = "#eceff3", ["Panel"] = "#ffffff", ["Panel2"] = "#f0f2f5", ["Line"] = "#d5dae1",
-        ["Ink"] = "#1b1e24", ["Dim"] = "#5f6773", ["MdDim"] = "#535b67",
-        ["Accent"] = "#b8761a", ["AccentHover"] = "#9e6512", ["OnAccent"] = "#ffffff", ["AccentSoft"] = "#f7ead2", ["AccentWash"] = "#fbf3e4",
-        ["Ok"] = "#2e8b57", ["OkBg"] = "#e2f4e8", ["OkLine"] = "#9fd3b0", ["Bad"] = "#c83c3c", ["Info"] = "#2f6fc0", ["StatusOff"] = "#a5acb8",
-        ["AddBg"] = "#ddf3e3", ["AddInk"] = "#1e6b39", ["DelBg"] = "#fbe0e0", ["DelInk"] = "#a3262b",
-        ["Sunk"] = "#eef0f3", ["Sunk2"] = "#f2f3f6", ["LogInk"] = "#2a2f38", ["DirInk"] = "#8a6420",
-        ["UserBubble"] = "#f7efd9", ["UserBubbleLine"] = "#e2d3a8",
-        ["LabelBg"] = "#e3e7ed", ["LabelInk"] = "#3a414d", ["BugBg"] = "#fbdcdc", ["BugInk"] = "#b3262d",
-        ["CardHoverLine"] = "#a9b2c0", ["Picked"] = "#1b1e24", ["DropBg"] = "#e6ebf2", ["WallDrop"] = "#33b8761a", ["Wall"] = "#e4e7ec",
+        ["Bg"] = "#fbf6fa", ["Chrome"] = "#f1e6ef", ["Rail"] = "#f4eaf2", ["Panel"] = "#ffffff", ["Panel2"] = "#f7eef5", ["Line"] = "#e2d3df",
+        ["Ink"] = "#1a1220", ["Dim"] = "#6b5d72", ["MdDim"] = "#5a4c62",
+        ["Accent"] = "#d92e8f", ["AccentHover"] = "#bd2178", ["OnAccent"] = "#ffffff", ["AccentSoft"] = "#fbdcee", ["AccentWash"] = "#fdeef7",
+        ["Ok"] = "#0b8b86", ["OkBg"] = "#dcf6f4", ["OkLine"] = "#8fdcd7", ["Bad"] = "#d6402a", ["Info"] = "#4a5fd0", ["StatusOff"] = "#b6a9bd",
+        ["AddBg"] = "#d8f4f1", ["AddInk"] = "#0a6b67", ["DelBg"] = "#fde0ea", ["DelInk"] = "#a3194f",
+        ["Sunk"] = "#f1e8ef", ["Sunk2"] = "#f6eef4", ["LogInk"] = "#2a1f31", ["DirInk"] = "#0b8b86",
+        ["UserBubble"] = "#fbe6f2", ["UserBubbleLine"] = "#efbcd9",
+        ["LabelBg"] = "#eadfe8", ["LabelInk"] = "#43364b", ["BugBg"] = "#fddbe6", ["BugInk"] = "#b01a4a",
+        ["CardHoverLine"] = "#c5a9bd", ["Picked"] = "#12b8b2", ["DropBg"] = "#f2e4ef", ["WallDrop"] = "#33d92e8f", ["Wall"] = "#efe3ec",
         ["Lift"] = "#ffffff", ["LiftLine"] = "#40000000",
-    });
+    })
+    { FluentAccent = "#d92e8f" };
 
     public static readonly Theme Girlypop = new("girlypop", "Girlypop", "Bubblegum, lavender, hot pink, hearts.", true, "♡", new Dictionary<string, string>
     {
