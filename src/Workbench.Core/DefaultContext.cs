@@ -21,6 +21,8 @@ public static class DefaultContext
         sb.AppendLine("## Command-line arguments");
         sb.AppendLine();
         sb.AppendLine($"- `--add-dir {artifactsDir}`: the agent's own artifacts folder, so it can write pages there.");
+        foreach (var r in project.OtherRepos(folder))
+            sb.AppendLine($"- `--add-dir {r}`: the project's {ProjectConfig.RepoName(r)} repo, so it can work there too.");
         sb.AppendLine("- `--append-system-prompt`, with this text:");
         sb.AppendLine();
         sb.AppendLine("```text");

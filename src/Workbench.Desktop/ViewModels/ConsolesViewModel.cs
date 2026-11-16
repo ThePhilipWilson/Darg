@@ -28,7 +28,8 @@ public partial class ConsolesViewModel : ObservableObject
     public ConsolesViewModel(ProjectConfig project)
     {
         _project = project;
-        Commands = project.Commands.Select(c => new CommandButton(c)).ToList();
+        SelectedRepo = RepoChoices.FirstOrDefault();
+        Commands =project.Commands.Select(c => new CommandButton(c)).ToList();
         // WSL's distro list is slow to ask for: have the shells ready before the section opens
         _ = Task.Run(() =>
         {
@@ -55,8 +56,18 @@ public partial class ConsolesViewModel : ObservableObject
     void OpenShell(ShellInfo sh)
     {
         DefaultShell = sh.Name;
-        Open(new ConsoleTab(this, sh.Name, _project.WorkingFolder(), sh.Path, sh.Args));
+        var folder = SelectedRepo?.Path ?? _project.WorkingFolder();
+        // in a project with several repos the tab says which one it's in
+        var name = HasRepoChoice && SelectedRepo is { } r ? $"{sh.Name} · {r.Name}" : sh.Name;
+        Open(new ConsoleTab(this, name, folder, sh.Path, sh.Args));
     }
+
+    /// <summary>The project's repos, for the picker beside + Shell (shown when there's more than one).</summary>
+    public IReadOnlyList<RepoChoice> RepoChoices => _repoChoices ??= _project.ExistingRepos().Select(r => new RepoChoice(r)).ToList();
+    IReadOnlyList<RepoChoice>? _repoChoices;
+    public bool HasRepoChoice => RepoChoices.Count > 1;
+    /// <summary>Where + Shell and the ▾ shells open; the first repo until another is picked.</summary>
+    [ObservableProperty] public partial RepoChoice? SelectedRepo { get; set; }
 
     /// <summary>A shell picked from the menu opens and becomes what + Shell opens from now on.</summary>
     internal void Pick(ShellInfo sh)

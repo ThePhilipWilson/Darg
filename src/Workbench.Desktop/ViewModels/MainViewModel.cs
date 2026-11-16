@@ -361,7 +361,7 @@ public partial class ProjectViewModel : ObservableObject
             string CardPrompt(Card card, string file, IReadOnlyList<string> alongside)
             {
                 // everyone at work in this folder: the batch this card was started with, and agents busy here now
-                var folder = Config.WorkingFolder();
+                var folder = CardFolder(card);
                 var busy = Agents.Agents
                     .Where(x => x.State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou && SameFolder(x.Cwd, folder))
                     .Select(x => x.CardId ?? $"\"{x.Name}\"");
@@ -377,7 +377,7 @@ public partial class ProjectViewModel : ObservableObject
                 a.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State) && a.State == AgentState.Exited) Board.Reload(); };
             Board.WorkOn = (card, file, alongside, show) =>
             {
-                Watch(Agents.Start(CardPrompt(card, file, alongside), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card)));
+                Watch(Agents.Start(CardPrompt(card, file, alongside), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card)));
                 if (show) Section = Section.Agents;
             };
             Board.Flows = () => Agents.Flows;
@@ -385,13 +385,17 @@ public partial class ProjectViewModel : ObservableObject
             {
                 Agents.ReloadFlows(); // its file may have been edited since the board last looked
                 var current = Agents.Flows.FirstOrDefault(f => f.Name == flow.Name) ?? flow;
-                var run = Agents.RunFlow(current, CardPrompt(card, file, []), $"{card.Id} {card.Title}", cardId: card.Id, job: CardJob(card));
+                var run = Agents.RunFlow(current, CardPrompt(card, file, []), $"{card.Id} {card.Title}", cwd: CardFolder(card), cardId: card.Id, job: CardJob(card));
                 // each stage is a new agent: the card follows the one at work
                 run.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(FlowRun.Status)) Board.Reload(); };
                 Section = Section.Agents;
             };
         }
     }
+
+    /// <summary>Where a card's agent starts: the repo the card names ("repo:Workspace" label, "Repo: Workspace"
+    /// line), else the project's first repo. The other repos are given to it either way.</summary>
+    string CardFolder(Card card) => Config.RepoFor(card.Labels, card.Description) ?? Config.WorkingFolder();
 
     static bool SameFolder(string a, string b) =>
         string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
