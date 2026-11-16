@@ -68,13 +68,15 @@
             <ComboBox ItemsSource="{Binding ModeChoices}" SelectedItem="{Binding ModeChoice}" FontSize="12" MinHeight="0" Padding="8,3"
                       ToolTip.Tip="Permission mode" AutomationProperties.Name="Permission mode"/>
           </StackPanel>
-          <StackPanel Orientation="Horizontal" Spacing="12">
-            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-            <TextBlock Classes="dim small" Text="{Binding StateText}" VerticalAlignment="Center"/>
-            <TextBlock Classes="dim small mono" Text="{Binding Model}" VerticalAlignment="Center"/>
-            <TextBlock Classes="dim small" Text="{Binding Billing}" VerticalAlignment="Center"/>
-            <TextBlock Classes="dim small mono" Text="{Binding Cwd}" VerticalAlignment="Center"/>
-          </StackPanel>
+          <!-- a DockPanel, not a StackPanel, so the folder (last) gets only the room left and trims instead of running under the pickers -->
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Left" Margin="0,0,12,0" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <TextBlock DockPanel.Dock="Left" Margin="0,0,12,0" Classes="dim small" Text="{Binding StateText}" VerticalAlignment="Center"/>
+            <TextBlock DockPanel.Dock="Left" Margin="0,0,12,0" Classes="dim small mono" Text="{Binding Model}" VerticalAlignment="Center"/>
+            <TextBlock DockPanel.Dock="Left" Margin="0,0,12,0" Classes="dim small" Text="{Binding Billing}" VerticalAlignment="Center"/>
+            <TextBlock Classes="dim small mono" Text="{Binding Cwd}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                       ToolTip.Tip="{Binding Cwd}"/>
+          </DockPanel>
         </DockPanel>
       </Border>
 
