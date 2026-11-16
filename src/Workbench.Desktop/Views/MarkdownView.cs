@@ -113,13 +113,28 @@ public sealed class MarkdownView : StackPanel
             if (s.Link is not null)
             {
                 run.Foreground = Link; run.TextDecorations = TextDecorations.Underline;
-                if (LinkClicked is not null)
+                if (LinkClicked is not null || IsWeb(s.Link))
                 {
                     // a clickable link: the run inside a small text block that takes the click
                     var target = s.Link;
                     var link = new TextBlock { Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) };
+                    ToolTip.SetTip(link, target.StartsWith("wiki:", StringComparison.Ordinal) ? target[5..] : target);
                     link.Inlines!.Add(run);
-                    link.PointerReleased += (_, e) => { LinkClicked?.Invoke(target); e.Handled = true; };
+                    // The link takes the press itself. Left to bubble, SelectableTextBlock's OnPointerPressed captures
+                    // the pointer, and the release then goes to the paragraph, not the link: clicks were lost.
+                    link.PointerPressed += (_, e) =>
+                    {
+                        if (!e.GetCurrentPoint(link).Properties.IsLeftButtonPressed) return;
+                        e.Pointer.Capture(link);
+                        e.Handled = true;
+                    };
+                    link.PointerReleased += (_, e) =>
+                    {
+                        if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Left || e.Pointer.Captured != link) return;
+                        e.Pointer.Capture(null);
+                        e.Handled = true;
+                        if (new Rect(link.Bounds.Size).Contains(e.GetPosition(link))) Open(target); // let go off the link: no click
+                    };
                     tb.Inlines!.Add(new InlineUIContainer(link));
                     at += 1; // an embedded control takes one character of the laid-out text
                     continue;
@@ -131,6 +146,19 @@ public sealed class MarkdownView : StackPanel
         }
         if (codes.Count > 0) CopyOnClick(tb, codes);
         return tb;
+    }
+
+    static bool IsWeb(string link) =>
+        link.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || link.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+        || link.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A view that handles links (Docs) gets every click; anywhere else (agent transcripts, Tools
+    /// answers) a web or mail link opens in the browser.</summary>
+    void Open(string target)
+    {
+        if (LinkClicked is not null) { LinkClicked(target); return; }
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true }); }
+        catch (Exception) { }
     }
 
     /// <summary>Inline code under the pointer shows a hand and copies on a plain click (a drag still selects).

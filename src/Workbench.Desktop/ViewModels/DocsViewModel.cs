@@ -172,21 +172,28 @@ public partial class DocsViewModel : ObservableObject
 
     [RelayCommand] void Cancel() => Editing = false;
 
-    /// <summary>A link in a doc: a wikilink opens the doc it names (anywhere in the folder), a web link the browser.</summary>
+    /// <summary>A link in a doc: a doc in the folder opens here (a [[wikilink]] or a relative markdown link, as
+    /// DocLinks resolves it); a web link, mail link or other file opens in its own app; one that goes nowhere says why.</summary>
     public void OpenLink(string link)
     {
-        if (link.StartsWith("wiki:"))
+        switch (Core.DocLinks.Resolve(link, Selected?.Path, _all, Folder))
         {
-            var name = link[5..].Split('#')[0].Trim();
-            var hit = _all.FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Equals(name, StringComparison.OrdinalIgnoreCase))
-                      ?? _all.FirstOrDefault(f => f.Equals(name + ".md", StringComparison.OrdinalIgnoreCase));
-            if (hit is null) { Status = $"No doc called {name} in this folder."; return; }
-            Find = "";
-            Selected = Files.FirstOrDefault(f => f.Path == hit);
-            Reveal(hit);
-            return;
+            case Core.DocLink.Doc(var hit) when hit.Equals(Selected?.Path, StringComparison.OrdinalIgnoreCase):
+                Status = "That link is to this doc.";
+                break;
+            case Core.DocLink.Doc(var hit):
+                Find = "";
+                Selected = Files.FirstOrDefault(f => f.Path == hit);
+                Reveal(hit);
+                break;
+            case Core.DocLink.External(var target):
+                try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); Status = $"Opened {target}"; }
+                catch (Exception e) { Status = $"Couldn't open {target}: {e.Message}"; }
+                break;
+            case Core.DocLink.Missing(var reason):
+                Status = reason;
+                break;
         }
-        if (link.StartsWith("http", StringComparison.OrdinalIgnoreCase)) Process.Start(new ProcessStartInfo(link) { UseShellExecute = true });
     }
 }
 
