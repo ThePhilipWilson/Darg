@@ -1,15 +1,19 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Workbench.Core;
 using Span = Workbench.Core.Span;
 
 namespace Workbench.Desktop.Views;
 
 /// <summary>Draws markdown (Workbench.Core.Markdown's blocks) as selectable text: headings, lists,
-/// code blocks, quotes, tables and rules, with bold, italic, inline code and links.</summary>
+/// code blocks, quotes, tables and rules, with bold, italic, inline code and links. Code copies in one
+/// click: a code block has a Copy button, and a plain click on inline code copies it, so a command an
+/// agent says to type goes straight to the clipboard.</summary>
 public sealed class MarkdownView : StackPanel
 {
     public static readonly StyledProperty<string?> MarkdownProperty = AvaloniaProperty.Register<MarkdownView, string?>(nameof(Markdown));
@@ -45,16 +49,7 @@ public sealed class MarkdownView : StackPanel
         MdHeading h => Text(h.Spans, size: h.Level switch { 1 => 20, 2 => 17, 3 => 15, _ => 14 }, bold: true),
         MdParagraph p => Text(p.Spans),
         MdList l => List(l),
-        MdCode c => new Border
-        {
-            Background = CodeBg, CornerRadius = new CornerRadius(6), Padding = new Thickness(10, 8),
-            Child = new ScrollViewer
-            {
-                HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-                Content = new SelectableTextBlock { Text = c.Text, FontFamily = Mono, FontSize = 12 },
-            },
-        },
+        MdCode c => CodeBlock(c.Text),
         MdQuote q => new Border
         {
             BorderBrush = Accent, BorderThickness = new Thickness(3, 0, 0, 0), Padding = new Thickness(10, 2),
@@ -64,9 +59,48 @@ public sealed class MarkdownView : StackPanel
         _ => new Border { Height = 1, Background = Line, Margin = new Thickness(0, 4) },
     };
 
+    Control CodeBlock(string text)
+    {
+        var copy = new Button
+        {
+            Content = "Copy", FontSize = 11, Padding = new Thickness(8, 2), MinHeight = 0,
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 5, 5, 0), Opacity = 0.75,
+        };
+        ToolTip.SetTip(copy, "Copy to clipboard");
+        copy.Click += async (_, _) =>
+        {
+            if (!await Copy(text)) return;
+            copy.Content = "Copied";
+            DispatcherTimer.RunOnce(() => copy.Content = "Copy", TimeSpan.FromSeconds(1.5));
+        };
+        var block = new Border
+        {
+            // room on the right so the button never sits over the first line's text
+            Background = CodeBg, CornerRadius = new CornerRadius(6), Padding = new Thickness(10, 8, 70, 8),
+            Child = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+                Content = new SelectableTextBlock { Text = text, FontFamily = Mono, FontSize = 12 },
+            },
+        };
+        return new Panel { Children = { block, copy } };
+    }
+
+    async Task<bool> Copy(string text)
+    {
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard is null) return false;
+        await clipboard.SetTextAsync(text);
+        return true;
+    }
+
     SelectableTextBlock Text(IReadOnlyList<Span> spans, double size = 0, bool bold = false, IBrush? brush = null)
     {
         var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, LineHeight = size > 0 ? double.NaN : 21 };
+        var codes = new List<(int Start, int End, string Text)>();
+        var at = 0;
         if (size > 0) tb.FontSize = size;
         if (bold) tb.FontWeight = FontWeight.SemiBold;
         if (brush is not null) tb.Foreground = brush;
@@ -87,12 +121,44 @@ public sealed class MarkdownView : StackPanel
                     link.Inlines!.Add(run);
                     link.PointerReleased += (_, e) => { LinkClicked?.Invoke(target); e.Handled = true; };
                     tb.Inlines!.Add(new InlineUIContainer(link));
+                    at += 1; // an embedded control takes one character of the laid-out text
                     continue;
                 }
             }
+            if (s.Code) codes.Add((at, at + s.Text.Length, s.Text));
+            at += s.Text.Length;
             tb.Inlines!.Add(run);
         }
+        if (codes.Count > 0) CopyOnClick(tb, codes);
         return tb;
+    }
+
+    /// <summary>Inline code under the pointer shows a hand and copies on a plain click (a drag still selects).
+    /// Found by hit-testing the laid-out text, so the paragraph still wraps and selects as one piece.</summary>
+    void CopyOnClick(SelectableTextBlock tb, List<(int Start, int End, string Text)> codes)
+    {
+        string? CodeAt(Avalonia.Input.PointerEventArgs e)
+        {
+            var hit = tb.TextLayout.HitTestPoint(e.GetPosition(tb) - new Point(tb.Padding.Left, tb.Padding.Top));
+            if (!hit.IsInside) return null;
+            foreach (var c in codes) if (hit.TextPosition >= c.Start && hit.TextPosition < c.End) return c.Text;
+            return null;
+        }
+        var hand = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+        tb.PointerMoved += (_, e) =>
+        {
+            var over = !e.GetCurrentPoint(tb).Properties.IsLeftButtonPressed && CodeAt(e) is not null;
+            tb.Cursor = over ? hand : null;
+            ToolTip.SetTip(tb, over ? "Click to copy" : null);
+        };
+        tb.AddHandler(Avalonia.Input.InputElement.PointerReleasedEvent, async (_, e) =>
+        {
+            if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Left || tb.SelectionStart != tb.SelectionEnd) return;
+            if (CodeAt(e) is not { } text || !await Copy(text)) return;
+            ToolTip.SetTip(tb, "Copied");
+            ToolTip.SetIsOpen(tb, true);
+            DispatcherTimer.RunOnce(() => ToolTip.SetIsOpen(tb, false), TimeSpan.FromSeconds(1.2));
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
     }
 
     Control List(MdList l)
