@@ -18,6 +18,39 @@ public static class ChildProcesses
     public static void TieToThisProcess()
     {
         if (!OperatingSystem.IsWindows() || _job != IntPtr.Zero) return;
+        var job = KillOnCloseJob();
+        if (!AssignProcessToJobObject(job, GetCurrentProcess())) throw new Win32Exception();
+        _job = job; // held for the life of the process; never closed by hand
+    }
+
+    /// <summary>A process and everything it goes on to start, ended together by <see cref="ProcessGroup.Dispose"/>.
+    /// Killing a process tree by parent ids misses what an intermediate (npm, cmd) has already let go of:
+    /// a stopped dev server left its node running. A job doesn't. Elsewhere it is a plain tree kill.</summary>
+    public static ProcessGroup Group(System.Diagnostics.Process started)
+    {
+        var job = IntPtr.Zero;
+        if (OperatingSystem.IsWindows())
+            try
+            {
+                job = KillOnCloseJob();
+                if (!AssignProcessToJobObject(job, started.Handle)) { CloseHandle(job); job = IntPtr.Zero; }
+            }
+            catch (Exception) { job = IntPtr.Zero; }
+        return new ProcessGroup(started, job);
+    }
+
+    public sealed class ProcessGroup(System.Diagnostics.Process process, IntPtr job) : IDisposable
+    {
+        IntPtr _job = job;
+        public void Dispose()
+        {
+            if (_job != IntPtr.Zero) { TerminateJobObject(_job, 1); CloseHandle(_job); _job = IntPtr.Zero; }
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch (Exception) { }
+        }
+    }
+
+    static IntPtr KillOnCloseJob()
+    {
         var job = CreateJobObject(IntPtr.Zero, null);
         if (job == IntPtr.Zero) throw new Win32Exception();
         var info = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION
@@ -32,9 +65,13 @@ public static class ChildProcesses
             if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, ptr, (uint)size)) throw new Win32Exception();
         }
         finally { Marshal.FreeHGlobal(ptr); }
-        if (!AssignProcessToJobObject(job, GetCurrentProcess())) throw new Win32Exception();
-        _job = job; // held for the life of the process; never closed by hand
+        return job;
     }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool TerminateJobObject(IntPtr job, uint exitCode);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool CloseHandle(IntPtr handle);
 
     const int JobObjectExtendedLimitInformation = 9;
     const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000;

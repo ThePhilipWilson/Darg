@@ -74,6 +74,8 @@ public sealed class ProjectConfig
     public string? GitHub { get; set; }
     /// <summary>Commands the project runs often (dev servers, tests, a stack's "up"): one click opens a console running one.</summary>
     public List<SavedCommand> Commands { get; set; } = [];
+    /// <summary>The dev server the Preview section shows; when not set, one is looked for in the repos.</summary>
+    public PreviewConfig? Preview { get; set; }
 
     public string? NotesFolder() => Notes ?? (Boards is null ? null : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(Boards))!, "notes"));
     /// <summary>Features this project uses; an empty list means all of them.</summary>
@@ -106,7 +108,7 @@ public sealed class SavedCommand
 
 public static class Features
 {
-    public const string Board = "board", Notes = "notes", Docs = "docs", Agents = "agents", Code = "code", GitHub = "github", Terminal = "terminal";
+    public const string Board = "board", Notes = "notes", Docs = "docs", Agents = "agents", Code = "code", GitHub = "github", Preview = "preview", Terminal = "terminal";
     /// <summary>Every feature, in the order the rail shows them (the Setup view's tick boxes).</summary>
-    public static readonly string[] All = [Board, Notes, Docs, Agents, Code, GitHub, Terminal];
+    public static readonly string[] All = [Board, Notes, Docs, Agents, Code, GitHub, Preview, Terminal];
 }
