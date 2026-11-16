@@ -9,8 +9,8 @@
     <!-- project tabs -->
     <Border Grid.Row="0" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
       <DockPanel Height="40">
-        <TextBlock DockPanel.Dock="Left" Text="{Binding Mark}" FontWeight="Bold" Foreground="{DynamicResource Accent}"
-                   VerticalAlignment="Center" Margin="14,0,16,0"/>
+        <Image DockPanel.Dock="Left" Source="/wordmark.png" Height="34" VerticalAlignment="Center" Margin="14,0,16,0"
+               ToolTip.Tip="Darg" AutomationProperties.Name="Darg"/>
         <Button DockPanel.Dock="Right" Content="🎨 Settings" Command="{Binding OpenSettingsCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Darg's own settings: the theme (dark, light, girlypop)"
                 AutomationProperties.Name="Settings"/>

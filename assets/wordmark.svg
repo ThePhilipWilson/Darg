@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 620" width="1080" height="620">
+  <g transform="translate(0 20)">
+    <g transform="translate(256 256) skewX(-14) translate(-256 -256)">
+      <rect x="172" y="102" width="554" height="420" rx="14" fill="#22d6d0" stroke="#000" stroke-width="18" stroke-linejoin="round"/>
+      <rect x="140" y="70" width="554" height="420" rx="14" fill="#e83e9f" stroke="#000" stroke-width="18" stroke-linejoin="round"/>
+    </g>
+    <!-- title: d a r g, leaning like the shape, 44 between each letter's ink -->
+    <g fill="#22d6d0" stroke="none" transform="translate(0 -30) translate(0 262) skewX(-14) translate(0 -262)">
+      <circle cx="252" cy="262" r="62"/><rect x="292" y="157" width="22" height="167"/>
+      <circle cx="390" cy="262" r="62"/>
+      <path d="M441 324 V222 C441 190 422 168 390 168 H348" fill="none" stroke="#22d6d0" stroke-width="22"/>
+      <path d="M487 324 V222 C487 190 506 168 538 168 H580" fill="none" stroke="#22d6d0" stroke-width="22"/>
+      <circle cx="580" cy="262" r="62"/><rect x="620" y="157" width="22" height="243"/>
+      <circle cx="580" cy="400" r="62"/>
+      <rect x="217" y="359" width="263" height="22"/><rect x="217" y="409" width="263" height="22"/>
+    </g>
+  </g>
+</svg>
