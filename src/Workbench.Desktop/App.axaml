@@ -1,5 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Workbench.Desktop.ViewModels"
              x:Class="Workbench.Desktop.App"
              RequestedThemeVariant="Dark">
   <Application.Resources>
@@ -17,6 +18,90 @@
     <SolidColorBrush x:Key="DelBg" Color="#3a1f22"/>
     <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
   </Application.Resources>
+
+  <!-- how an agent transcript draws, wherever one is shown (the agents view, the mascot) -->
+  <Application.DataTemplates>
+    <DataTemplate DataType="vm:UserItem">
+      <Border Background="#2b2a22" BorderBrush="#4a4330" BorderThickness="1" CornerRadius="10" Padding="12,8" HorizontalAlignment="Right" MaxWidth="700">
+        <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+      </Border>
+    </DataTemplate>
+    <DataTemplate DataType="vm:TextItem">
+      <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" LineHeight="21"/>
+    </DataTemplate>
+    <DataTemplate DataType="vm:NoteItem">
+      <TextBlock Text="{Binding Text}" Classes="dim small" TextWrapping="Wrap" Classes.bad="{Binding Bad}"/>
+    </DataTemplate>
+    <DataTemplate DataType="vm:ToolItem">
+      <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6">
+        <StackPanel>
+          <DockPanel Margin="9,5">
+            <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" Foreground="{StaticResource Info}" FontWeight="SemiBold" Classes="mono" Margin="0,0,8,0"/>
+            <TextBlock DockPanel.Dock="Right" Text="✓" Foreground="{StaticResource Ok}" IsVisible="{Binding Done}" Margin="8,0,0,0"/>
+            <TextBlock Text="{Binding Summary}" Classes="dim mono" TextTrimming="CharacterEllipsis"/>
+          </DockPanel>
+          <Image Source="{Binding Image}" IsVisible="{Binding HasImage}" MaxHeight="420" HorizontalAlignment="Left" Margin="9,0,9,9" Stretch="Uniform"/>
+          <StackPanel IsVisible="{Binding HasDiff}">
+            <Border Background="{StaticResource DelBg}" Padding="10,4" IsVisible="{Binding Removed, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <SelectableTextBlock Classes="mono" Foreground="#f0a0a0" Text="{Binding Removed}" TextWrapping="Wrap"/>
+            </Border>
+            <Border Background="{StaticResource AddBg}" Padding="10,4" IsVisible="{Binding Added, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <SelectableTextBlock Classes="mono" Foreground="#a8e6b8" Text="{Binding Added}" TextWrapping="Wrap"/>
+            </Border>
+          </StackPanel>
+          <Border IsVisible="{Binding HasPreview}" Background="#15171b" Padding="10,6">
+            <SelectableTextBlock Classes="mono" Text="{Binding Preview}" TextWrapping="Wrap"/>
+          </Border>
+          <Border IsVisible="{Binding Result, Converter={x:Static ObjectConverters.IsNotNull}}" Background="#101215" Padding="10,6">
+            <SelectableTextBlock Classes="mono" Text="{Binding Result}" TextWrapping="Wrap" Foreground="{StaticResource Dim}"/>
+          </Border>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+    <DataTemplate DataType="vm:PermissionItem">
+      <Border BorderBrush="{StaticResource Accent}" BorderThickness="1" CornerRadius="8" Background="#2a2416" Padding="12,10">
+        <StackPanel Spacing="8">
+          <TextBlock><Run Text="Allow "/><Run Text="{Binding Tool}" FontWeight="SemiBold"/><Run Text="?"/></TextBlock>
+          <SelectableTextBlock Classes="mono" Text="{Binding Summary}" TextWrapping="Wrap"/>
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Pending}">
+            <Button Classes="primary" Content="Allow" Command="{Binding AllowCommand}"/>
+            <Button Content="Deny" Command="{Binding DenyCommand}"/>
+          </StackPanel>
+          <TextBlock Classes="dim small" Text="{Binding Decision}" IsVisible="{Binding !Pending}"/>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+    <DataTemplate DataType="vm:QuestionItem">
+      <Border BorderBrush="{StaticResource Accent}" BorderThickness="1" CornerRadius="8" Background="#2a2416" Padding="12,10">
+        <ItemsControl ItemsSource="{Binding Questions}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="12"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:QuestionGroup">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="dim small" Text="{Binding Header}"/>
+                <TextBlock Text="{Binding Question}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNull}}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:QuestionOption">
+                      <Button Command="{Binding Command}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="{Binding Label}" FontWeight="SemiBold"/>
+                          <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap"/>
+                        </StackPanel>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Text="{Binding Chosen, StringFormat='You picked: {0}'}" Foreground="{StaticResource Accent}"/>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+    </DataTemplate>
+  </Application.DataTemplates>
 
   <Application.Styles>
     <FluentTheme />
@@ -91,6 +176,35 @@
     </Style>
     <Style Selector="Button.agentline.needs Ellipse.dot">
       <Setter Property="Fill" Value="{StaticResource Accent}"/>
+    </Style>
+    <!-- Bench: bobs gently; bobs quicker while it works; shows a badge when it needs you -->
+    <Style Selector="Button.critter">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="29"/>
+      <Setter Property="RenderTransform" Value="translate(0px, 0px)"/>
+      <Style.Animations>
+        <Animation Duration="0:0:2.6" IterationCount="Infinite" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%"><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+          <KeyFrame Cue="50%"><Setter Property="TranslateTransform.Y" Value="-4"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="Button.critter.working">
+      <Style.Animations>
+        <Animation Duration="0:0:0.7" IterationCount="Infinite" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%"><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+          <KeyFrame Cue="50%"><Setter Property="TranslateTransform.Y" Value="-6"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="Button.critter Border.badge">
+      <Setter Property="IsVisible" Value="False"/>
+    </Style>
+    <Style Selector="Button.critter.needs Border.badge">
+      <Setter Property="IsVisible" Value="True"/>
     </Style>
     <Style Selector="Button.primary">
       <Setter Property="Background" Value="{StaticResource Accent}"/>

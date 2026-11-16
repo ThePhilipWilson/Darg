@@ -5,6 +5,8 @@ Philip's one app for everything: per-project boards, notes, docs, code, agents, 
 ## Layout
 
 - `src/Workbench.Core`: no UI. `InstanceConfig` (an instance's projects, in `%APPDATA%/Workbench/<instance>/instance.json`; `WORKBENCH_INSTANCE`, `WORKBENCH_HOME`), `BoardStore` (boards in Tatty's markdown format, so Tatty and Obsidian see the same files), `AgentSession` (a real Claude Code session run headless over stream-json), `ChildProcesses` (everything Workbench starts dies with it).
+- Also in Core: `NoteStore` (the notes wall: one .md per note with Obsidian properties; `MakeTicket` uses `BoardStore.Create`, which names files as Tatty does).
+- Desktop extras: `Notifier` (Windows toasts carrying project and agent ids; clicking opens that agent; the Desktop project targets `net10.0-windows10.0.19041.0` when built on Windows, plain `net10.0` elsewhere, and code for toasts sits under `#if WINDOWS`), `MascotViewModel` (Bench: one session for the instance with `--add-dir` for every project's boards, notes and repos, and a briefing on the file formats via `--append-system-prompt`). Transcript templates live in `App.axaml`'s `Application.DataTemplates`, shared by the agents view and Bench.
 - `src/Workbench.Desktop`: the Avalonia app. MVVM with CommunityToolkit.Mvvm; views in `Views/`, view models in `ViewModels/`. Every project's view stays alive across tab switches, so agents and terminals keep running.
 - `tests/Workbench.Core.Tests`: xunit. `WORKBENCH_LIVE=1` also runs the live agent test (a Haiku turn through the real CLI).
 
@@ -16,4 +18,5 @@ Philip's one app for everything: per-project boards, notes, docs, code, agents, 
 
 - `NUGET_PACKAGES=D:/nuget/packages` (C: is small). `dotnet build`, `dotnet test`.
 - See it without clicking: `WORKBENCH_SECTION=Board|Agents|Terminal` opens that section of the first project; `WORKBENCH_AGENT="prompt"` starts an agent there (in `WORKBENCH_AGENT_CWD` if set). `tools/shot.ps1 -ProcessId <pid> -Out x.png` captures only the app's window (PrintWindow, works when covered). UI Automation can press its buttons (Avalonia exposes them by name).
-- Scratch output goes in `.shots/` (ignored).
+- Scratch output goes in `.shots/` (ignored). For anything that writes cards or notes, point the app at a throwaway instance (`WORKBENCH_HOME=.shots/home`, with its own `instance.json` and board), never at the real vault boards.
+- The exe is `src/Workbench.Desktop/bin/Debug/net10.0-windows10.0.19041.0/Workbench.Desktop.exe` on Windows.

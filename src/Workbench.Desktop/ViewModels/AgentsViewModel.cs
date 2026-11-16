@@ -91,7 +91,7 @@ public partial class AgentViewModel : ObservableObject
         AgentState.Idle => "idle", _ => "ended",
     };
 
-    public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null)
+    public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null)
     {
         Cwd = cwd;
         CardId = cardId;
@@ -99,7 +99,7 @@ public partial class AgentViewModel : ObservableObject
         Items.Add(new UserItem(prompt));
         try
         {
-            _session = AgentSession.Start(cwd);
+            _session = AgentSession.Start(cwd, extraArgs: args);
             _session.Event += e => Dispatcher.UIThread.Post(() => On(e));
             _session.Send(prompt);
             State = AgentState.Starting;

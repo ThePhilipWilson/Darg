@@ -18,5 +18,26 @@ public partial class MainWindow : Window
             Topmost = true; Topmost = false; // Windows won't always let a background app take focus; this at least raises it
         };
         Closed += (_, _) => Notifier.Clear();
+
+        // Bench's box: Enter sends, Shift+Enter is a new line; the chat follows its newest line.
+        MascotBox.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Avalonia.Input.Key.Enter || e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift)) return;
+            e.Handled = true;
+            vm.Mascot.SendCommand.Execute(null);
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        void Follow() => Avalonia.Threading.Dispatcher.UIThread.Post(() => MascotScroll.ScrollToEnd(), Avalonia.Threading.DispatcherPriority.Background);
+        System.Collections.ObjectModel.ObservableCollection<ViewModels.TranscriptItem>? watched = null;
+        vm.Mascot.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ViewModels.MascotViewModel.Open) && vm.Mascot.Open)
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => MascotBox.Focus());
+            if (e.PropertyName != nameof(ViewModels.MascotViewModel.Items)) return;
+            if (watched is not null) watched.CollectionChanged -= Grew;
+            watched = vm.Mascot.Items;
+            watched.CollectionChanged += Grew;
+            Follow();
+        };
+        void Grew(object? s, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => Follow();
     }
 }

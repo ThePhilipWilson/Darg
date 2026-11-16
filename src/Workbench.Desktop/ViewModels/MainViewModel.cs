@@ -12,6 +12,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial ProjectViewModel? Selected { get; set; }
     public string InstanceFile { get; }
     public bool Empty => Projects.Count == 0;
+    public MascotViewModel Mascot { get; }
+    const string MascotId = "~bench";
 
     public MainViewModel()
     {
@@ -24,6 +26,11 @@ public partial class MainViewModel : ObservableObject
                 agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
             Projects.Add(vm);
         }
+        Mascot = new MascotViewModel(config.Projects);
+        Mascot.Notify += (agent, what, detail) =>
+        {
+            if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, $"Bench: {what}", "", detail);
+        };
         Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
         Selected = Projects.FirstOrDefault();
         DevHooks();
@@ -56,6 +63,7 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Open a project's agent: its tab, the agents section, that agent, the window to the front.</summary>
     public void OpenAgent(string projectId, string agentId)
     {
+        if (projectId == MascotId) { Mascot.Open = true; BringToFront?.Invoke(); return; }
         var project = Projects.FirstOrDefault(p => p.Config.Id == projectId);
         var agent = project?.Agents?.Find(agentId);
         if (project is null || agent is null) { BringToFront?.Invoke(); return; }

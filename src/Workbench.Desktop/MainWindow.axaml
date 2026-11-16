@@ -60,6 +60,55 @@
       <SelectableTextBlock Classes="mono" Text="{Binding InstanceFile}"/>
     </StackPanel>
 
+    <!-- Bench, the mascot: a box for talking to an assistant that can act on any project -->
+    <StackPanel Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,22,18" Spacing="10">
+      <Border Width="400" IsVisible="{Binding Mascot.Open}" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}"
+              BorderThickness="1" CornerRadius="14" BoxShadow="0 14 40 0 #90000000" HorizontalAlignment="Right">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,8">
+            <DockPanel>
+              <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent"/>
+              <TextBlock Classes="dim small" VerticalAlignment="Center"
+                         Text="{Binding Mascot.Agent.StateText, StringFormat='Bench · {0}', FallbackValue='Bench · any project'}"/>
+            </DockPanel>
+          </Border>
+          <DockPanel DockPanel.Dock="Bottom">
+            <Button DockPanel.Dock="Right" Content="➤" Command="{Binding Mascot.SendCommand}" Background="Transparent"
+                    AutomationProperties.Name="Send to Bench" VerticalAlignment="Bottom" Margin="0,0,6,6"/>
+            <TextBox x:Name="MascotBox" Text="{Binding Mascot.Compose}" BorderThickness="0,1,0,0" CornerRadius="0,0,0,14"
+                     PlaceholderText="Ask, or tell me to do something…" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" Padding="12,9"/>
+          </DockPanel>
+          <ScrollViewer x:Name="MascotScroll" MaxHeight="380" IsVisible="{Binding Mascot.HasChat}">
+            <ItemsControl ItemsSource="{Binding Mascot.Items}" Margin="12,10" FontSize="13">
+              <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+
+      <Button Classes="critter" HorizontalAlignment="Right" Command="{Binding Mascot.ToggleCommand}" ToolTip.Tip="Bench: ask or tell it anything"
+              AutomationProperties.Name="Bench"
+              Classes.working="{Binding Mascot.Agent.Working, FallbackValue=False}" Classes.needs="{Binding Mascot.Agent.NeedsYou, FallbackValue=False}">
+        <Panel Width="58" Height="58">
+          <Ellipse Width="58" Height="58">
+            <Ellipse.Fill>
+              <RadialGradientBrush GradientOrigin="35%,30%" Center="40%,35%" RadiusX="70%" RadiusY="70%">
+                <GradientStop Color="#f5c56b" Offset="0"/>
+                <GradientStop Color="#d08a2e" Offset="1"/>
+              </RadialGradientBrush>
+            </Ellipse.Fill>
+          </Ellipse>
+          <Ellipse Classes="eye" Width="8" Height="10" Fill="#2a1a08" Margin="-18,-6,0,0"/>
+          <Ellipse Classes="eye" Width="8" Height="10" Fill="#2a1a08" Margin="18,-6,0,0"/>
+          <Border Width="14" Height="6" Background="#2a1a08" CornerRadius="0,0,8,8" Margin="0,22,0,0"/>
+          <Border Classes="badge" Width="18" Height="18" CornerRadius="9" Background="{StaticResource Bad}"
+                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0">
+            <TextBlock Text="!" Foreground="White" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+        </Panel>
+      </Button>
+    </StackPanel>
+
     <Border Grid.Row="2" Background="{StaticResource Chrome}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
       <TextBlock Classes="dim small" Text="{Binding Selected.StatusLine, FallbackValue=''}"/>
     </Border>
