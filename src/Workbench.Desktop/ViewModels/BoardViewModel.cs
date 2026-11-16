@@ -166,21 +166,29 @@ public partial class LabelChip(string name) : ObservableObject
     public event Action? Changed;
     partial void OnModeChanged(ChipMode value) => Changed?.Invoke();
 
-    // A double-click arrives as two clicks then the double: remember the mode before the first click,
-    // so the double sets "must have" from wherever the chip started (or clears it if it was already).
-    DateTime _lastClick;
+    // A double-click is: press, release (a Click), press again (seen by the view with a click count of
+    // two: DoubleClick), release (a second Click, which must not undo it). So remember the mode before the
+    // first click, let DoubleClick set "must have" from there (or clear it if it was already), and
+    // swallow the Click that follows.
     ChipMode _before;
+    DateTime _lastClick;
+    bool _swallow;
 
     [RelayCommand]
     void Click()
     {
+        if (_swallow) { _swallow = false; return; }
         var now = DateTime.UtcNow;
-        if ((now - _lastClick).TotalMilliseconds > 600) _before = Mode;
+        if ((now - _lastClick).TotalMilliseconds > 700) _before = Mode;
         _lastClick = now;
         Mode = Mode == ChipMode.Off ? ChipMode.Any : ChipMode.Off;
     }
 
-    public void DoubleClick() => Mode = _before == ChipMode.All ? ChipMode.Off : ChipMode.All;
+    public void DoubleClick()
+    {
+        _swallow = true;
+        Mode = _before == ChipMode.All ? ChipMode.Off : ChipMode.All;
+    }
 
     public static (HashSet<string> Any, HashSet<string> All) Picked(IEnumerable<LabelChip> chips) => (
         chips.Where(c => c.IsAny).Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase),

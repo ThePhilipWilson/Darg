@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.VisualTree;
 using Workbench.Desktop.ViewModels;
 
 namespace Workbench.Desktop.Views;
@@ -21,11 +22,16 @@ public partial class BoardView : UserControl
         ChipDoubleClicks(this);
     }
 
-    /// <summary>A double-click on a filter chip makes it "must have" (AND). The button swallows the
-    /// gesture, so it's caught here, handled or not.</summary>
+    /// <summary>A double-click on a filter chip makes it "must have" (AND). Seen on the second press (its
+    /// click count is 2), before the button turns the release into a click; the chip then ignores that click.
+    /// (The DoubleTapped gesture never reaches here: the button swallows it.)</summary>
     internal static void ChipDoubleClicks(Control host) =>
-        host.AddHandler(Avalonia.Input.InputElement.DoubleTappedEvent, (_, e) =>
+        host.AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (_, e) =>
         {
-            if ((e.Source as Avalonia.StyledElement)?.DataContext is LabelChip chip) { chip.DoubleClick(); e.Handled = true; }
-        }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
+            // the press lands on the chip's text, whose data is the label's string: find the chip's button
+            if (e.ClickCount != 2) return;
+            var chip = (e.Source as Avalonia.Visual)?.GetSelfAndVisualAncestors().OfType<Button>()
+                .Select(b => b.DataContext).OfType<LabelChip>().FirstOrDefault();
+            chip?.DoubleClick();
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
 }
