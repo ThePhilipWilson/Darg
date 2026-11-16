@@ -126,7 +126,8 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     AgentViewModel Wire(AgentViewModel a)
     {
         a.Notify += (what, detail) => Notify?.Invoke(a, what, detail);
-        a.Wrap = WithContext; // typed in the Agents view too, it still hears where Philip is
+        // typed in the Agents view too, it still hears where Philip is, and an untagged chat joins the project it carries on in
+        a.Wrap = text => { a.Project ??= ProjectId; return WithContext(text); };
         return a;
     }
 
@@ -177,7 +178,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
             _ = Retitle(Agent.Id, text);
             return;
         }
-        Agent.Project ??= ProjectId; // a chat from before chats had a project belongs where it carries on
+        Agent.Project ??= ProjectId; // as in Wire: an untagged chat joins the project it carries on in
         Agent.Say(text, sent);
     }
 
