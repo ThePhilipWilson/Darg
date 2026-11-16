@@ -195,6 +195,30 @@
       <Setter Property="Margin" Value="0,0,5,5"/>
       <Setter Property="MinHeight" Value="0"/>
     </Style>
+    <!-- filter chips: plain = off, outlined = any of these (OR), filled with + = must have (AND) -->
+    <Style Selector="Button.chip">
+      <Setter Property="Padding" Value="8,2"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Margin" Value="0,0,5,5"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.chip.any">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+      <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+      <Setter Property="Background" Value="#3a3020"/>
+    </Style>
+    <Style Selector="Button.chip.all">
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+      <Setter Property="Foreground" Value="#1a1408"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <Style Selector="Button.chip.all:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#f0bc5e"/>
+      <Setter Property="Foreground" Value="#1a1408"/>
+    </Style>
     <Style Selector="Button.rail, ToggleButton.rail">
       <Setter Property="Width" Value="48"/>
       <Setter Property="Height" Value="48"/>

@@ -14,5 +14,6 @@ public partial class NotesView : UserControl
             drop: (item, column, _) => { if (DataContext is NotesViewModel wall && item is NoteViewModel n) wall.Move(n.Id, column); },
             click: item => (item as NoteViewModel)?.Edit(),
             ordered: false); // notes sit newest first in a column; only the column matters
+        BoardView.ChipDoubleClicks(this);
     }
 }

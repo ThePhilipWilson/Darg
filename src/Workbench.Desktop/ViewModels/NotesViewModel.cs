@@ -66,12 +66,12 @@ public partial class NotesViewModel : ObservableObject
     {
         try { _all = NoteStore.List(Folder); ColumnNames = NoteStore.Columns(Folder); }
         catch (Exception e) { Status = $"Couldn't read the notes: {e.Message}"; return; }
-        var on = Tags.Where(t => t.IsOn).Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var was = Tags.ToDictionary(t => t.Name, t => t.Mode, StringComparer.OrdinalIgnoreCase);
         foreach (var t in Tags) t.Changed -= Apply;
         Tags.Clear();
         foreach (var name in _all.SelectMany(n => n.Tags).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
         {
-            var chip = new LabelChip(name) { IsOn = on.Contains(name) };
+            var chip = new LabelChip(name) { Mode = was.GetValueOrDefault(name) };
             chip.Changed += Apply;
             Tags.Add(chip);
         }
@@ -81,9 +81,9 @@ public partial class NotesViewModel : ObservableObject
     void Apply()
     {
         var words = Filter.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var tags = Tags.Where(t => t.IsOn).Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var colours = Colours.Where(c => c.IsOn).Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        bool Keep(Note n) => (tags.Count == 0 || n.Tags.Any(tags.Contains)) && (colours.Count == 0 || colours.Contains(n.Colour))
+        var (anyTag, allTags) = LabelChip.Picked(Tags);
+        var (anyColour, allColours) = LabelChip.Picked(Colours); // a note has one colour, so "must" two colours keeps none
+        bool Keep(Note n) => LabelFilter.Matches(n.Tags, anyTag, allTags) && LabelFilter.Matches([n.Colour], anyColour, allColours)
                              && words.All(w => n.Text.Contains(w, StringComparison.OrdinalIgnoreCase));
         var names = ColumnNames.ToList();
         // a note naming a column the wall doesn't have still shows, in a column of its own

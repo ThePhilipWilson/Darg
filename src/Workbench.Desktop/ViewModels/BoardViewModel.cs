@@ -44,7 +44,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             if (!BoardStore.ReadCards(Path.Combine(_project.Boards, b)).Any(c => c.Id == id)) continue;
             if (SelectedBoard != b) SelectedBoard = b;
             Filter = "";
-            foreach (var l in Labels) l.IsOn = false;
+            foreach (var l in Labels) l.Mode = ChipMode.Off;
             if (!ShowCompleted && _board?.Lists[Board.Completed].Any(c => c.Id == id) == true) ShowCompleted = true;
             var card = Lists.SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == id);
             if (card is null) return false;
@@ -80,12 +80,12 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (Folder is null) return;
         try { _board = BoardStore.Load(Folder); }
         catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
-        var on = Labels.Where(l => l.IsOn).Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var was = Labels.ToDictionary(l => l.Name, l => l.Mode, StringComparer.OrdinalIgnoreCase);
         foreach (var chip in Labels) chip.Changed -= Apply;
         Labels.Clear();
         foreach (var name in _board.AllCards.SelectMany(c => c.Labels).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
         {
-            var chip = new LabelChip(name) { IsOn = on.Contains(name) };
+            var chip = new LabelChip(name) { Mode = was.GetValueOrDefault(name) };
             chip.Changed += Apply;
             Labels.Add(chip);
         }
@@ -93,14 +93,14 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Rebuild the lists from the board through the filter: text matches the ID, title or
-    /// description; with labels ticked, a card needs at least one of them.</summary>
+    /// description; labels: every must-have one (double-clicked) and, if any are clicked, one of those.</summary>
     void Apply()
     {
         if (_board is null) return;
         var words = Filter.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var labels = Labels.Where(l => l.IsOn).Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var (any, all) = LabelChip.Picked(Labels);
         bool Keep(Card c) =>
-            (labels.Count == 0 || c.Labels.Any(labels.Contains)) &&
+            LabelFilter.Matches(c.Labels, any, all) &&
             words.All(w => c.Id.Contains(w, StringComparison.OrdinalIgnoreCase) || c.Title.Contains(w, StringComparison.OrdinalIgnoreCase)
                            || c.Description.Contains(w, StringComparison.OrdinalIgnoreCase));
         var targets = _board.ListOrder().Where(l => l.Id != Board.Unsorted).Select(l => (l.Id, l.Name)).ToList();
@@ -150,12 +150,41 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public void Dispose() => _watch?.Dispose();
 }
 
+public enum ChipMode { Off, Any, All }
+
+/// <summary>A label (or tag, or colour) to filter by. Click: "any of these" (OR) on or off.
+/// Double-click: "must have" (AND), or off again.</summary>
 public partial class LabelChip(string name) : ObservableObject
 {
     public string Name { get; } = name;
-    [ObservableProperty] public partial bool IsOn { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsAny), nameof(IsAll), nameof(Shown))] public partial ChipMode Mode { get; set; }
+    public bool IsAny => Mode == ChipMode.Any;
+    public bool IsAll => Mode == ChipMode.All;
+    public bool IsOn => Mode != ChipMode.Off;
+    /// <summary>The chip's text: a must-have label reads "+name".</summary>
+    public string Shown => Mode == ChipMode.All ? "+" + Name : Name;
     public event Action? Changed;
-    partial void OnIsOnChanged(bool value) => Changed?.Invoke();
+    partial void OnModeChanged(ChipMode value) => Changed?.Invoke();
+
+    // A double-click arrives as two clicks then the double: remember the mode before the first click,
+    // so the double sets "must have" from wherever the chip started (or clears it if it was already).
+    DateTime _lastClick;
+    ChipMode _before;
+
+    [RelayCommand]
+    void Click()
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastClick).TotalMilliseconds > 600) _before = Mode;
+        _lastClick = now;
+        Mode = Mode == ChipMode.Off ? ChipMode.Any : ChipMode.Off;
+    }
+
+    public void DoubleClick() => Mode = _before == ChipMode.All ? ChipMode.Off : ChipMode.All;
+
+    public static (HashSet<string> Any, HashSet<string> All) Picked(IEnumerable<LabelChip> chips) => (
+        chips.Where(c => c.IsAny).Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase),
+        chips.Where(c => c.IsAll).Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase));
 }
 
 public sealed class ListViewModel(BoardViewModel board, string id, string name, IEnumerable<CardViewModel> cards, int all)
