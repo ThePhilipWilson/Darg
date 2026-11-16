@@ -14,6 +14,12 @@ Philip's one app for everything: per-project boards, notes, docs, code, agents, 
 
 `claude -p --input-format stream-json --output-format stream-json --verbose --permission-prompt-tool stdio`. The `--permission-prompt-tool stdio` flag is what routes permission prompts to the host as `control_request` / `can_use_tool` **and** what makes `AskUserQuestion` available at all (without it the tool is missing from print mode). A question is answered by allowing it with `answers` (question text to label) added to its input. Permissions otherwise follow the person's own Claude settings: an edit their settings allow runs without a prompt, as in the terminal. Verified on Claude Code 2.1.325, 2026-11-16.
 
+## UI rules learned from Philip's use
+
+- **A list must read as a list of things, not of times or cut-off text.** Chats and agents went out named "Bench · 11:00" and the first 40 characters of a prompt; it annoyed him on sight (2026-11-17). When a screenshot shows a list, check that a stranger could tell its rows apart and say what each is; generated items get a real title (`ChatTitle`).
+- **Structure on disk shows as structure on screen.** A folder of docs or files is a tree that expands, not a flat list of every file (2026-11-17).
+- **Drag and drop shows the thing moving** (`DragLift`), never the OS drag with nothing under the pointer.
+
 ## Building and checking
 
 - `NUGET_PACKAGES=D:/nuget/packages` (C: is small). `dotnet build`, `dotnet test`. `dotnet test` rebuilds only Core and the tests, not the app: run `dotnet build` before launching the exe to check a change, or you're looking at the old build.

@@ -8,7 +8,27 @@
     <Border Grid.RowSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
         <TextBox DockPanel.Dock="Top" Text="{Binding Find}" PlaceholderText="Find a doc…" Margin="10"/>
-        <ListBox ItemsSource="{Binding Files}" SelectedItem="{Binding Selected}" Background="Transparent">
+        <Panel>
+        <!-- browsing: the folders, opening and closing -->
+        <TreeView ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedNode}" Background="Transparent" IsVisible="{Binding Browsing}">
+          <TreeView.Styles>
+            <Style Selector="TreeViewItem" x:DataType="vm:DocNode">
+              <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+              <Setter Property="MinHeight" Value="26"/>
+              <Setter Property="AutomationProperties.Name" Value="{Binding Path}"/>
+            </Style>
+          </TreeView.Styles>
+          <TreeView.ItemTemplate>
+            <TreeDataTemplate DataType="vm:DocNode" ItemsSource="{Binding Children}">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" Classes="dim small" Margin="8,0,6,0" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" Classes.dir="{Binding IsDir}" VerticalAlignment="Center"/>
+              </DockPanel>
+            </TreeDataTemplate>
+          </TreeView.ItemTemplate>
+        </TreeView>
+        <!-- searching: every match, flat -->
+        <ListBox ItemsSource="{Binding Files}" SelectedItem="{Binding Selected}" Background="Transparent" IsVisible="{Binding Searching}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:DocEntry">
               <StackPanel>
@@ -18,6 +38,7 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+        </Panel>
       </DockPanel>
     </Border>
 

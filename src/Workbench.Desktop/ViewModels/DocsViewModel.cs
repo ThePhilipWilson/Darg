@@ -17,8 +17,15 @@ public partial class DocsViewModel : ObservableObject
     readonly DispatcherTimer _debounce;
 
     public string Folder { get; }
+    /// <summary>Search results (shown instead of the tree while Find has text).</summary>
     public ObservableCollection<DocEntry> Files { get; } = [];
-    [ObservableProperty] public partial string Find { get; set; } = "";
+    /// <summary>The folder tree: folders first (each with its doc count), then docs.</summary>
+    public ObservableCollection<DocNode> Tree { get; } = [];
+    readonly HashSet<string> _open = new(StringComparer.OrdinalIgnoreCase);
+    [ObservableProperty] public partial DocNode? SelectedNode { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Searching), nameof(Browsing))] public partial string Find { get; set; } = "";
+    public bool Searching => Find.Trim().Length > 0;
+    public bool Browsing => !Searching;
     [ObservableProperty] public partial DocEntry? Selected { get; set; }
     [ObservableProperty] public partial string Text { get; set; } = "";
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Reading))] public partial bool Editing { get; set; }
@@ -49,7 +56,57 @@ public partial class DocsViewModel : ObservableObject
                 .Where(f => !f.Split('/').Any(part => part.StartsWith('.')))
                 .Order(StringComparer.OrdinalIgnoreCase));
         Filter();
+        BuildTree();
         Status = Directory.Exists(Folder) ? $"{_all.Count} docs in {Folder}" : $"No folder at {Folder}";
+    }
+
+    /// <summary>The tree from the file list, with folders that were open still open.</summary>
+    void BuildTree()
+    {
+        Tree.Clear();
+        foreach (var n in Children("")) Tree.Add(n);
+        if (Selected is not null) Reveal(Selected.Path);
+    }
+
+    IEnumerable<DocNode> Children(string dir)
+    {
+        var prefix = dir.Length == 0 ? "" : dir + "/";
+        var under = _all.Where(f => f.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).Select(f => f[prefix.Length..]).ToList();
+        foreach (var sub in under.Where(r => r.Contains('/')).Select(r => r[..r.IndexOf('/')]).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
+        {
+            var path = prefix + sub;
+            var count = under.Count(r => r.StartsWith(sub + "/", StringComparison.OrdinalIgnoreCase));
+            yield return new DocNode(this, sub, path, isDir: true, count) { IsExpanded = _open.Contains(path) };
+        }
+        foreach (var file in under.Where(r => !r.Contains('/')))
+            yield return new DocNode(this, System.IO.Path.GetFileNameWithoutExtension(file), prefix + file, isDir: false, 0);
+    }
+
+    internal IEnumerable<DocNode> ChildrenOf(DocNode folder) => Children(folder.Path);
+    internal void Opened(DocNode folder, bool open) { if (open) _open.Add(folder.Path); else _open.Remove(folder.Path); }
+
+    /// <summary>Open the folders down to a doc and select it in the tree.</summary>
+    void Reveal(string path)
+    {
+        var parts = path.Split('/');
+        IList<DocNode> level = Tree;
+        for (var i = 0; i < parts.Length; i++)
+        {
+            var sofar = string.Join('/', parts.Take(i + 1));
+            var node = level.FirstOrDefault(n => n.Path.Equals(sofar, StringComparison.OrdinalIgnoreCase));
+            if (node is null) return;
+            if (i == parts.Length - 1) { _revealing = true; SelectedNode = node; _revealing = false; return; }
+            node.IsExpanded = true;
+            level = node.Children;
+        }
+    }
+
+    bool _revealing;
+
+    partial void OnSelectedNodeChanged(DocNode? value)
+    {
+        if (_revealing || value is null || value.IsDir) return;
+        if (Selected?.Path != value.Path) Selected = new DocEntry(value.Path);
     }
 
     /// <summary>Files came or went, or one changed: list again, and show the open one again unless it's being edited.</summary>
@@ -60,7 +117,11 @@ public partial class DocsViewModel : ObservableObject
         if (keep is not null && !Editing) Load(keep);
     }
 
-    partial void OnFindChanged(string value) => Filter();
+    partial void OnFindChanged(string value)
+    {
+        Filter();
+        if (!Searching && Selected is not null) Reveal(Selected.Path); // back to the tree: show where the open doc lives
+    }
 
     void Filter()
     {
@@ -122,10 +183,42 @@ public partial class DocsViewModel : ObservableObject
             if (hit is null) { Status = $"No doc called {name} in this folder."; return; }
             Find = "";
             Selected = Files.FirstOrDefault(f => f.Path == hit);
+            Reveal(hit);
             return;
         }
         if (link.StartsWith("http", StringComparison.OrdinalIgnoreCase)) Process.Start(new ProcessStartInfo(link) { UseShellExecute = true });
     }
+}
+
+/// <summary>A folder or a doc in the docs tree. A folder's children are made when it is first opened.</summary>
+public sealed partial class DocNode : ObservableObject
+{
+    readonly DocsViewModel _docs;
+    bool _filled;
+    public string Name { get; }
+    public string Path { get; }
+    public bool IsDir { get; }
+    public string Count { get; }
+    public ObservableCollection<DocNode> Children { get; } = [];
+    [ObservableProperty] public partial bool IsExpanded { get; set; }
+
+    public DocNode(DocsViewModel docs, string name, string path, bool isDir, int count)
+    {
+        _docs = docs; Name = name; Path = path; IsDir = isDir; Count = isDir ? count.ToString() : "";
+        if (isDir) Children.Add(new DocNode(docs, "…", "", false, 0)); // a placeholder so it shows an arrow
+    }
+
+    partial void OnIsExpandedChanged(bool value)
+    {
+        if (!IsDir) return;
+        _docs.Opened(this, value);
+        if (!value || _filled) return;
+        _filled = true;
+        Children.Clear();
+        foreach (var c in _docs.ChildrenOf(this)) Children.Add(c);
+    }
+
+    public override string ToString() => Path; // what screen readers read for the row
 }
 
 public sealed class DocEntry(string path)
