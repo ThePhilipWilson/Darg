@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <AvaloniaResource Include="darg.png" />
+    <AvaloniaResource Include="darg.ico" />
     <AvaloniaResource Include="wordmark.png" />
   </ItemGroup>
 
