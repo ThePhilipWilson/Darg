@@ -32,6 +32,9 @@ public sealed record AgentChoice(string Value, string Label)
 public static class AgentChoices
 {
     public const string Default = "default";
+    /// <summary>The mode a new agent starts in, whatever the person's settings say: Auto, so it gets on with the
+    /// work and only asks about what Claude Code's classifier holds back. Picking another mode overrides it.</summary>
+    public const string NewAgentMode = "auto";
 
     public static readonly IReadOnlyList<AgentChoice> Models =
     [

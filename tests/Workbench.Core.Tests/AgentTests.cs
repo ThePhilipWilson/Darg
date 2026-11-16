@@ -97,6 +97,7 @@ public sealed class StreamParserTests
         Assert.Empty(AgentChoices.LaunchArgs(null, "default", null));
         Assert.Equal(["--model", "haiku", "--effort", "low", "--permission-mode", "plan"], AgentChoices.LaunchArgs("haiku", "low", "plan"));
         Assert.Equal("Ask before acting", AgentChoices.Find(AgentChoices.Modes, "manual").Label);
+        Assert.Equal(["--permission-mode", "auto"], AgentChoices.LaunchArgs(null, null, AgentChoices.NewAgentMode));
         Assert.Equal("bypassPermissions", AgentChoices.Find(AgentChoices.Modes, "bypassPermissions").Value);
     }
 
