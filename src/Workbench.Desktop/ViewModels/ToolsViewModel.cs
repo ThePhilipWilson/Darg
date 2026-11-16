@@ -19,6 +19,9 @@ public partial class ToolsViewModel : ObservableObject
     {
         _main = main;
         foreach (var t in tools) Cards.Add(new ToolCard(t));
+        // claude-draw is a plugin every agent already has, not a tool someone lists: it is always here
+        if (!Cards.Any(c => c.IsDraw))
+            Cards.Add(new ToolCard(new ToolConfig { Id = "claude-draw", Name = "claude-draw", Kind = "claude-draw", Url = ClaudeDraw.Url }));
         RefreshCommand.Execute(null);
     }
 
@@ -36,7 +39,8 @@ public partial class ToolCard(ToolConfig tool) : ObservableObject
     public bool IsForge => Tool.Kind == "forge";
     public bool IsOllama => Tool.Kind == "ollama";
     public bool IsComfy => Tool.Kind == "comfyui";
-    public bool CanStart => Tool.Start is not null;
+    public bool IsDraw => Tool.Kind == "claude-draw";
+    public bool CanStart => IsDraw ? ClaudeDraw.DaemonScript() is not null : Tool.Start is not null;
     public ObservableCollection<string> Models { get; } = [];
     public ObservableCollection<Bitmap> Recent { get; } = [];
 
@@ -61,6 +65,13 @@ public partial class ToolCard(ToolConfig tool) : ObservableObject
 
     public async Task Check()
     {
+        if (IsDraw)
+        {
+            var d = await ClaudeDraw.Read();
+            Up = d is not null;
+            Detail = ClaudeDraw.Describe(d);
+            return;
+        }
         var s = await Tools.Check(Tool);
         Up = s.Up;
         Detail = s.Detail;
@@ -82,8 +93,9 @@ public partial class ToolCard(ToolConfig tool) : ObservableObject
     [RelayCommand]
     async Task Start()
     {
-        if (Tool.Start is null) return;
-        Detail = Tools.Launch(Tool.Start) ? "starting…" : "couldn't start it";
+        if (IsDraw) Detail = ClaudeDraw.Start() ? "starting…" : "couldn't start it (is node on PATH?)";
+        else if (Tool.Start is null) return;
+        else Detail = Tools.Launch(Tool.Start) ? "starting…" : "couldn't start it";
         for (var i = 0; i < 20 && !Up; i++) { await Task.Delay(1500); await Check(); }
     }
 
@@ -91,6 +103,19 @@ public partial class ToolCard(ToolConfig tool) : ObservableObject
     void Open()
     {
         if (Tool.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) Process.Start(new ProcessStartInfo(Tool.Url) { UseShellExecute = true });
+    }
+
+    /// <summary>claude-draw: a blank canvas to draw on unasked. The drawing waits until an agent collects it
+    /// (tell one you've sent it something). Opens the canvas here if none is open anywhere.</summary>
+    [RelayCommand]
+    async Task NewCanvas()
+    {
+        Error = "";
+        if (!Up) await Start();
+        if (!Up) return;
+        if (await ClaudeDraw.Blank() is { } error) { Error = $"Couldn't start a blank canvas: {error}"; return; }
+        if ((await ClaudeDraw.Read())?.Canvases is 0) ClaudeDraw.Open();
+        await Check();
     }
 
     [RelayCommand]

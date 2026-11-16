@@ -373,6 +373,17 @@ public partial class AgentViewModel : ObservableObject
         State = AgentState.Working;
     }
 
+    /// <summary>✎ Draw: the agent puts a canvas up through its own claude-draw tools, so the drawing comes back
+    /// to this conversation. Whatever is in the compose box says what it's about.</summary>
+    [RelayCommand]
+    void Draw()
+    {
+        var about = Compose.Trim();
+        Compose = "";
+        var sent = ClaudeDraw.AskToDraw(about);
+        Say(about.Length == 0 ? "✎ I want to draw something for you" : $"✎ I want to draw something for you: {about}", Wrap is null ? sent : Wrap(sent));
+    }
+
     [RelayCommand]
     void Stop() => _session?.Interrupt();
 
