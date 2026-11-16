@@ -15,10 +15,15 @@
         <ListBox ItemsSource="{Binding Agents}" SelectedItem="{Binding Selected}" Background="Transparent">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:AgentViewModel">
-              <StackPanel Spacing="2">
-                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Classes="dim small" Text="{Binding StateText}"/>
-              </StackPanel>
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="×" Padding="6,0" Background="Transparent" MinHeight="0" VerticalAlignment="Center"
+                        Command="{Binding $parent[UserControl].((vm:AgentsViewModel)DataContext).ForgetCommand}" CommandParameter="{Binding}"
+                        ToolTip.Tip="Forget this agent (Claude Code keeps its own history)" AutomationProperties.Name="Forget agent"/>
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Classes="dim small" Text="{Binding StateText}"/>
+                </StackPanel>
+              </DockPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>

@@ -21,6 +21,7 @@ public partial class MainViewModel : ObservableObject
         InstanceFile = InstanceConfig.FilePath();
         foreach (var p in config.Projects) Projects.Add(Make(p));
         Mascot = new MascotViewModel(config.Projects);
+        Mascot.Restore();
         Mascot.Notify += (agent, what, detail) =>
         {
             if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, $"Bench: {what}", "", detail);
@@ -36,6 +37,13 @@ public partial class MainViewModel : ObservableObject
         if (vm.Agents is { } agents)
             agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
         return vm;
+    }
+
+    /// <summary>Save every agent (on closing, so nothing since the last turn is lost).</summary>
+    public void SaveAll()
+    {
+        foreach (var p in Projects) p.Agents?.SaveAll();
+        Mascot.Agent?.Save();
     }
 
     // ---------------------------------------------------------------- Setup

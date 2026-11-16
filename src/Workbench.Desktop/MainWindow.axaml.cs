@@ -17,6 +17,7 @@ public partial class MainWindow : Window
             Activate();
             Topmost = true; Topmost = false; // Windows won't always let a background app take focus; this at least raises it
         };
+        Closing += (_, _) => vm.SaveAll();
         Closed += (_, _) => Notifier.Clear();
 
         // Bench's box: Enter sends, Shift+Enter is a new line; the chat follows its newest line.

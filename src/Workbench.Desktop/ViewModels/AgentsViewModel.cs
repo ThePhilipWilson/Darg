@@ -8,9 +8,48 @@ using Workbench.Core;
 
 namespace Workbench.Desktop.ViewModels;
 
-public partial class AgentsViewModel(ProjectConfig project) : ObservableObject
+public partial class AgentsViewModel : ObservableObject
 {
+    readonly ProjectConfig project;
+    readonly string _store;
+
+    /// <summary>A project's agents, with the ones saved by earlier runs listed (newest first) to carry on.</summary>
+    public AgentsViewModel(ProjectConfig project)
+    {
+        this.project = project;
+        _store = AgentStore.Folder(project.Id.Length > 0 ? project.Id : "default");
+        foreach (var r in AgentStore.List(_store)) Add(new AgentViewModel(r, _store), select: false);
+        Selected = Agents.FirstOrDefault();
+    }
+
     public ObservableCollection<AgentViewModel> Agents { get; } = [];
+
+    /// <summary>Forget an agent: off the list and its saved file gone (Claude Code's own history stays).</summary>
+    [RelayCommand]
+    void Forget(AgentViewModel? a)
+    {
+        if (a is null) return;
+        a.End();
+        AgentStore.Delete(_store, a.Id);
+        Agents.Remove(a);
+        if (Selected == a) Selected = Agents.FirstOrDefault();
+    }
+
+    void Add(AgentViewModel agent, bool select)
+    {
+        agent.StoreFolder ??= _store;
+        agent.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(AgentViewModel.State)) return;
+            NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
+            if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
+        };
+        agent.Notify += (what, detail) => Notify?.Invoke(agent, what, detail);
+        if (select) { Agents.Insert(0, agent); Selected = agent; }
+        else Agents.Add(agent);
+    }
+
+    public void SaveAll() { foreach (var a in Agents) a.Save(); }
     [ObservableProperty] public partial AgentViewModel? Selected { get; set; }
     [ObservableProperty] public partial string NewPrompt { get; set; } = "";
     public string Folder => project.WorkingFolder();
@@ -35,16 +74,9 @@ public partial class AgentsViewModel(ProjectConfig project) : ObservableObject
 
     public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null)
     {
-        var agent = new AgentViewModel(string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd, prompt, cardId, name);
-        agent.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName != nameof(AgentViewModel.State)) return;
-            NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
-            if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
-        };
-        agent.Notify += (what, detail) => Notify?.Invoke(agent, what, detail);
-        Agents.Add(agent);
-        Selected = agent;
+        var agent = new AgentViewModel(string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd, prompt, cardId, name) { StoreFolder = _store };
+        Add(agent, select: true);
+        agent.Save();
         return agent;
     }
 
@@ -63,7 +95,7 @@ public partial class AgentsViewModel(ProjectConfig project) : ObservableObject
     }
 }
 
-public enum AgentState { Starting, Working, NeedsYou, Idle, Exited }
+public enum AgentState { Starting, Working, NeedsYou, Idle, Exited, Saved }
 
 /// <summary>One agent and its transcript. Session events arrive on a reader thread and are applied on
 /// the UI thread.</summary>
@@ -74,12 +106,18 @@ public partial class AgentViewModel : ObservableObject
     AgentSession? _session;
 
     public ObservableCollection<TranscriptItem> Items { get; } = [];
-    public string Id { get; } = Guid.NewGuid().ToString("N")[..10];
+    public string Id { get; private init; } = Guid.NewGuid().ToString("N")[..10];
     /// <summary>The board card this agent was started on, if any.</summary>
     public string? CardId { get; }
     public event Action<string, string>? Notify;
     public string Name { get; }
     public string Cwd { get; }
+    /// <summary>Claude Code's id for the conversation: what --resume takes.</summary>
+    public string? SessionId { get; private set; }
+    /// <summary>Where this agent is saved (set by its owner); null: not saved.</summary>
+    public string? StoreFolder { get; set; }
+    readonly List<string> _args;
+    DateTime _created = DateTime.Now;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou))] public partial AgentState State { get; set; }
     [ObservableProperty] public partial string Compose { get; set; } = "";
     [ObservableProperty] public partial string Model { get; set; } = "";
@@ -88,20 +126,37 @@ public partial class AgentViewModel : ObservableObject
     public string StateText => State switch
     {
         AgentState.Starting => "starting", AgentState.Working => "working", AgentState.NeedsYou => "needs you",
-        AgentState.Idle => "idle", _ => "ended",
+        AgentState.Idle => "idle", AgentState.Saved => "saved · send to carry on", _ => "ended",
     };
 
     public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null)
     {
         Cwd = cwd;
         CardId = cardId;
+        _args = args?.ToList() ?? [];
         Name = name ?? (prompt.Length > 40 ? prompt[..40].TrimEnd() + "…" : prompt);
         Items.Add(new UserItem(prompt));
+        Begin(prompt, resume: false);
+    }
+
+    /// <summary>An agent from an earlier run of Workbench: its transcript, and its session to resume.</summary>
+    public AgentViewModel(AgentRecord r, string storeFolder)
+    {
+        Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; SessionId = r.SessionId;
+        _args = r.Args; _created = r.Created; StoreFolder = storeFolder;
+        foreach (var i in r.Items) Items.Add(FromRecord(i));
+        State = AgentState.Saved;
+    }
+
+    /// <summary>Start (or resume) the Claude session and send it a message.</summary>
+    void Begin(string message, bool resume)
+    {
         try
         {
-            _session = AgentSession.Start(cwd, extraArgs: args);
+            var args = resume && SessionId is not null ? ["--resume", SessionId, .. _args] : _args;
+            _session = AgentSession.Start(Cwd, extraArgs: args);
             _session.Event += e => Dispatcher.UIThread.Post(() => On(e));
-            _session.Send(prompt);
+            _session.Send(message);
             State = AgentState.Starting;
         }
         catch (Exception e)
@@ -111,13 +166,49 @@ public partial class AgentViewModel : ObservableObject
         }
     }
 
+    /// <summary>Write this agent to its store (after every turn and on exit).</summary>
+    public void Save()
+    {
+        if (StoreFolder is null) return;
+        try
+        {
+            AgentStore.Save(StoreFolder, new AgentRecord
+            {
+                Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, SessionId = SessionId, Args = _args,
+                Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
+            });
+        }
+        catch (Exception) { /* a failed save must never take the agent down */ }
+    }
+
+    static ItemRecord? ToRecord(TranscriptItem i) => i switch
+    {
+        UserItem u => new() { Kind = "user", Text = u.Text },
+        TextItem t => new() { Kind = "text", Text = t.Text },
+        NoteItem n => new() { Kind = "note", Text = n.Text, Bad = n.Bad },
+        ToolItem t => new() { Kind = "tool", Name = t.Name, Summary = t.Summary, ImagePath = t.ImagePath, Removed = t.Removed, Added = t.Added, Preview = t.Preview, Result = t.Result, Bad = t.IsError },
+        QuestionItem q => new() { Kind = "note", Text = "Asked: " + string.Join(" / ", q.Questions.Select(g => g.Question + (g.Chosen is null ? "" : $" → {g.Chosen}"))) },
+        PermissionItem p => new() { Kind = "note", Text = $"Wanted {p.Tool}: {p.Decision ?? "no answer"}" },
+        _ => null,
+    };
+
+    static TranscriptItem FromRecord(ItemRecord r) => r.Kind switch
+    {
+        "user" => new UserItem(r.Text),
+        "text" => new TextItem(r.Text),
+        "tool" => ToolItem.Restore(r),
+        _ => new NoteItem(r.Text, r.Bad),
+    };
+
     void On(AgentEvent e)
     {
         switch (e)
         {
             case SessionStarted s:
                 Model = s.Model;
+                SessionId = s.SessionId;
                 State = AgentState.Working;
+                Save();
                 break;
             case AssistantText t:
                 Items.Add(new TextItem(t.Text));
@@ -146,12 +237,16 @@ public partial class AgentViewModel : ObservableObject
                 if (f.IsError) Items.Add(new NoteItem(f.Text, true));
                 Items.Add(new NoteItem(f.CostUsd is { } cost ? $"Turn done · ${cost:0.000}" : "Turn done", false));
                 State = AgentState.Idle;
+                Save();
                 Notify?.Invoke(f.IsError ? "stopped with an error" : "finished",
                     Items.OfType<TextItem>().LastOrDefault()?.Text ?? f.Text);
                 break;
             case SessionExited x:
-                Items.Add(new NoteItem(x.ExitCode == 0 ? "Session ended" : $"Session ended ({x.ExitCode}) {Last(x.Stderr)}", x.ExitCode != 0));
-                State = AgentState.Exited;
+                // a session we closed ourselves (resume later) isn't news; one that died is
+                if (x.ExitCode != 0) Items.Add(new NoteItem($"Session ended ({x.ExitCode}) {Last(x.Stderr)}", true));
+                State = SessionId is not null && x.ExitCode == 0 ? AgentState.Saved : AgentState.Exited;
+                _session = null;
+                Save();
                 break;
         }
     }
@@ -162,10 +257,18 @@ public partial class AgentViewModel : ObservableObject
     void Send()
     {
         var text = Compose.Trim();
-        if (text.Length == 0 || _session is null || State == AgentState.Exited) return;
-        Items.Add(new UserItem(text));
-        _session.Send(text);
+        if (text.Length == 0) return;
         Compose = "";
+        Items.Add(new UserItem(text));
+        if (_session is null)
+        {
+            // a saved agent (or one whose session ended): carry on in the same conversation if there is one
+            if (SessionId is null) { Items.Add(new NoteItem("This agent has no session to carry on; start a new one.", true)); return; }
+            Items.Add(new NoteItem("Resuming the session…", false));
+            Begin(text, resume: true);
+            return;
+        }
+        _session.Send(text);
         State = AgentState.Working;
     }
 
@@ -247,6 +350,17 @@ public sealed partial class ToolItem : TranscriptItem
         if (c.Name == "Write" && image is null) preview = Clip(S("content"));
         return new ToolItem { Name = c.Name, Summary = summary, Image = image, ImagePath = image is null ? null : path,
             Removed = removed, Added = added, Preview = preview };
+    }
+
+    /// <summary>A tool line from a saved transcript (its image read again from disk if it's still there).</summary>
+    public static ToolItem Restore(ItemRecord r)
+    {
+        var image = AgentViewModel.IsImage(r.ImagePath) && File.Exists(r.ImagePath) ? TryLoad(r.ImagePath!) : null;
+        return new ToolItem
+        {
+            Name = r.Name ?? "", Summary = r.Summary ?? "", Image = image, ImagePath = image is null ? null : r.ImagePath,
+            Removed = r.Removed, Added = r.Added, Preview = r.Preview, Result = r.Result, IsError = r.Bad, Done = true,
+        };
     }
 
     static string? Clip(string? s)

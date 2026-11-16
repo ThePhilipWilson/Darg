@@ -72,6 +72,8 @@
           <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,8">
             <DockPanel>
               <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent"/>
+              <Button DockPanel.Dock="Right" Content="New chat" Command="{Binding Mascot.FreshCommand}" Padding="8,0" Background="Transparent"
+                      FontSize="11" IsVisible="{Binding Mascot.HasChat}"/>
               <TextBlock Classes="dim small" VerticalAlignment="Center"
                          Text="{Binding Mascot.Agent.StateText, StringFormat='Bench · {0}', FallbackValue='Bench · any project'}"/>
             </DockPanel>

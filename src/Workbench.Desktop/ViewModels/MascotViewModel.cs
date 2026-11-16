@@ -23,6 +23,25 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     public bool HasChat => Agent is not null;
     public event Action<AgentViewModel, string, string>? Notify;
 
+    static string Store => AgentStore.Folder("~bench");
+
+    /// <summary>Bench's last conversation, from an earlier run, to carry on.</summary>
+    public void Restore()
+    {
+        if (AgentStore.List(Store).FirstOrDefault() is not { } r) return;
+        var a = new AgentViewModel(r, Store);
+        a.Notify += (what, detail) => Notify?.Invoke(a, what, detail);
+        Agent = a;
+    }
+
+    /// <summary>Start a fresh conversation (the old one is forgotten here; Claude Code keeps its history).</summary>
+    [RelayCommand]
+    void Fresh()
+    {
+        if (Agent is not null) { Agent.End(); AgentStore.Delete(Store, Agent.Id); }
+        Agent = null;
+    }
+
     [RelayCommand] void Toggle() => Open = !Open;
 
     [RelayCommand]
@@ -31,13 +50,14 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         var text = Compose.Trim();
         if (text.Length == 0) return;
         Compose = "";
-        if (Agent is null || Agent.State == AgentState.Exited)
+        if (Agent is null || (Agent.State == AgentState.Exited && Agent.SessionId is null))
         {
             var home = InstanceConfig.Folder();
             Directory.CreateDirectory(home);
-            var a = new AgentViewModel(home, text, name: "Bench", args: Args());
+            var a = new AgentViewModel(home, text, name: "Bench", args: Args()) { StoreFolder = Store };
             a.Notify += (what, detail) => Notify?.Invoke(a, what, detail);
             Agent = a;
+            a.Save();
             return;
         }
         Agent.Compose = text;
