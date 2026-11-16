@@ -34,6 +34,9 @@
           <ToggleButton DockPanel.Dock="Right" Content="By status" FontSize="11" Padding="6,1" MinHeight="0" Background="Transparent"
                         IsChecked="{Binding SortByStatus}" Margin="0,0,4,0" AutomationProperties.Name="Sort agents by status"
                         ToolTip.Tip="Group the list by status: needs you, working, failed, done, saved. Off: newest first."/>
+          <Button DockPanel.Dock="Right" Content="Clear finished" FontSize="11" Padding="6,1" MinHeight="0" Background="Transparent"
+                  Command="{Binding ClearFinishedCommand}" Margin="0,0,4,0"
+                  ToolTip.Tip="Forget every finished agent here: done ones, and saved ones whose card is done. Working, waiting and failed agents stay. Claude Code keeps their history."/>
           <Button DockPanel.Dock="Right" Content="Close idle" FontSize="11" Padding="6,1" MinHeight="0" Background="Transparent"
                   Command="{Binding CloseIdleCommand}" ToolTip.Tip="Close the session of every idle agent here. They stay listed; send one a message to carry on."/>
           <Button DockPanel.Dock="Right" Content="↻ Continue all" FontSize="11" Padding="6,1" MinHeight="0" Background="Transparent"
