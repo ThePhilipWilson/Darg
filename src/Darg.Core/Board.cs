@@ -13,14 +13,16 @@ public sealed record Card(string Id, string Title, string Status, string Priorit
     /// <summary>Its type, Task when the file leaves it blank.</summary>
     public string Kind => Type.Trim() is { Length: > 0 } t ? t : CardTypes.Task;
     public bool IsBug => Kind.Equals(CardTypes.Bug, StringComparison.OrdinalIgnoreCase);
+    /// <summary>A story: done cards wrapped up into one (<see cref="Stories"/>).</summary>
+    public bool IsStory => Kind.Equals(CardTypes.Story, StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>The types a card can have: Task and Bug for now. A card file may name another (Tatty's own
-/// types, or one typed by hand); it's kept as written.</summary>
+/// <summary>The types a card can have: Task, Bug, and Story (done cards wrapped up into one, WOR-0074). A card
+/// file may name another (Tatty's own types, or one typed by hand); it's kept as written.</summary>
 public static class CardTypes
 {
-    public const string Task = "Task", Bug = "Bug";
-    public static readonly IReadOnlyList<string> All = [Task, Bug];
+    public const string Task = "Task", Bug = "Bug", Story = "Story";
+    public static readonly IReadOnlyList<string> All = [Task, Bug, Story];
 
     /// <summary>The type to give a card made from words someone wrote (a note, an issue): Bug when they
     /// open with "bug" ("Bug: ...", "bug - ...", "[bug] ...", "Bug forgetting ...") or a label is bug,

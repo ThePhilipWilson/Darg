@@ -97,6 +97,8 @@
                               AutomationProperties.Name="{Binding Name, StringFormat='{}{0} menu'}">
                         <Button.Flyout>
                           <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuItem Header="Wrap up into stories…" Command="{Binding WrapUpCommand}" IsVisible="{Binding IsDoneColumn}"
+                                      ToolTip.Tip="An agent groups these cards into stories (a doc each and a Story card here), asks you, then moves the cards to Completed"/>
                             <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" IsVisible="{Binding IsColumn}"/>
                             <MenuItem Header="Minimize" Command="{Binding ToggleMinimizedCommand}"/>
                             <MenuItem Header="Remove column…" Command="{Binding AskRemoveCommand}" IsVisible="{Binding IsColumn}"/>

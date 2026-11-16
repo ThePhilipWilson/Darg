@@ -459,7 +459,7 @@ public partial class ProjectViewModel : ObservableObject
             // a card looks up its agent only when the board rebuilds: forgetting the agent frees the card now
             Agents.Forgotten += a => { if (a.CardId is { } card) Board.AgentGone(card); };
             Board.OpenAgent = a => { Agents.Selected = a; Section = Section.Agents; };
-            Board.StartAgent = (prompt, cwd, name) => { Agents.Start(prompt, cwd, name: name); Section = Section.Agents; };
+            Board.StartAgent = (prompt, cwd, name, dirs) => { Agents.Start(prompt, cwd, name: name, dirs: dirs); Section = Section.Agents; };
             string CardPrompt(Card card, string file, IReadOnlyList<string> alongside, string? agentId = null)
             {
                 // everyone at work in this folder: the batch this card was started with, and agents busy here now
