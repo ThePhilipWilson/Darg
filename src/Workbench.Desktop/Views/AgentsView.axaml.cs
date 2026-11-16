@@ -1,49 +1,41 @@
-using System.Collections.Specialized;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Threading;
 using Workbench.Desktop.ViewModels;
 
 namespace Workbench.Desktop.Views;
 
 public partial class AgentsView : UserControl
 {
-    AgentViewModel? _shown;
+    readonly StickToBottom _follow;
+    AgentsViewModel? _vm;
 
     public AgentsView()
     {
         InitializeComponent();
+        _follow = new StickToBottom(Scroll);
         // Enter sends; Shift+Enter is a new line. Tunnel, so it's seen before the TextBox takes the Enter.
+        // (Asks the view model each time which agent is shown, so the one open at start works too.)
         ComposeBox.AddHandler(KeyDownEvent, (_, e) =>
         {
-            if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _shown is not null)
+            if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _vm?.Shown is { } shown)
             {
                 e.Handled = true;
-                _shown.SendCommand.Execute(null);
+                shown.SendCommand.Execute(null);
             }
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
-        PropertyChanged += (_, e) => { if (e.Property == DataContextProperty) Hook(); };
     }
 
-    void Hook()
+    protected override void OnDataContextChanged(EventArgs e)
     {
-        if (DataContext is not AgentsViewModel vm) return;
-        vm.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName != nameof(AgentsViewModel.Shown)) return;
-            if (_shown is not null) _shown.Items.CollectionChanged -= Grew;
-            _shown = vm.Shown;
-            if (_shown is not null) _shown.Items.CollectionChanged += Grew;
-            ScrollSoon();
-        };
+        base.OnDataContextChanged(e);
+        if (_vm is not null) _vm.PropertyChanged -= Changed;
+        _vm = DataContext as AgentsViewModel;
+        if (_vm is not null) _vm.PropertyChanged += Changed;
+        _follow.Reset();
     }
 
-    /// <summary>Follow the transcript as it grows, unless the person has scrolled up to read.</summary>
-    void Grew(object? sender, NotifyCollectionChangedEventArgs e)
+    void Changed(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        var nearBottom = Scroll.Offset.Y >= Scroll.Extent.Height - Scroll.Viewport.Height - 120;
-        if (nearBottom) ScrollSoon();
+        if (e.PropertyName == nameof(AgentsViewModel.Shown)) _follow.Reset(); // another agent: start at its newest line
     }
-
-    void ScrollSoon() => Dispatcher.UIThread.Post(() => Scroll.ScrollToEnd(), DispatcherPriority.Background);
 }

@@ -41,6 +41,13 @@ public sealed class MarkdownTests
     }
 
     [Fact]
+    public void Line_breaks_in_a_paragraph_stay()
+    {
+        var p = Assert.IsType<MdParagraph>(Assert.Single(Markdown.Parse("1 Apple\n2 Banana\n3 Cherry")));
+        Assert.Equal("1 Apple\n2 Banana\n3 Cherry", string.Concat(p.Spans.Select(s => s.Text)));
+    }
+
+    [Fact]
     public void Inline_styles()
     {
         var s = Markdown.Inline("a **bold** and *it* `code` [link](http://x) end");

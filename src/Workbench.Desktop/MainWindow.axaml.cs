@@ -27,18 +27,17 @@ public partial class MainWindow : Window
             e.Handled = true;
             vm.Mascot.SendCommand.Execute(null);
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
-        void Follow() => Avalonia.Threading.Dispatcher.UIThread.Post(() => MascotScroll.ScrollToEnd(), Avalonia.Threading.DispatcherPriority.Background);
-        System.Collections.ObjectModel.ObservableCollection<ViewModels.TranscriptItem>? watched = null;
+        // the chat keeps to its newest line as it grows (Views.StickToBottom), whichever chat it is and
+        // however it got there; opening the bubble or switching chats starts at the bottom
+        var follow = new Views.StickToBottom(MascotScroll);
         vm.Mascot.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(ViewModels.MascotViewModel.Open) && vm.Mascot.Open)
+            {
+                follow.Reset();
                 Avalonia.Threading.Dispatcher.UIThread.Post(() => MascotBox.Focus());
-            if (e.PropertyName != nameof(ViewModels.MascotViewModel.Items)) return;
-            if (watched is not null) watched.CollectionChanged -= Grew;
-            watched = vm.Mascot.Items;
-            watched.CollectionChanged += Grew;
-            Follow();
+            }
+            if (e.PropertyName == nameof(ViewModels.MascotViewModel.Items)) follow.Reset();
         };
-        void Grew(object? s, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => Follow();
     }
 }
