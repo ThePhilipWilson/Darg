@@ -68,6 +68,8 @@ public sealed class ProjectConfig
     /// <summary>The notes wall's folder; by default "notes" beside the boards folder.</summary>
     public string? Notes { get; set; }
     public List<string> Repos { get; set; } = [];
+    /// <summary>The project's docs folder (in the Obsidian vault, usually).</summary>
+    public string? Docs { get; set; }
     /// <summary>The gh account this project's GitHub calls sign in as (null: gh's active account).</summary>
     public string? GitHub { get; set; }
     /// <summary>Commands the project runs often (dev servers, tests, a stack's "up"): one click opens a console running one.</summary>
@@ -104,7 +106,7 @@ public sealed class SavedCommand
 
 public static class Features
 {
-    public const string Board = "board", Notes = "notes", Agents = "agents", Code = "code", GitHub = "github", Terminal = "terminal";
+    public const string Board = "board", Notes = "notes", Docs = "docs", Agents = "agents", Code = "code", GitHub = "github", Terminal = "terminal";
     /// <summary>Every feature, in the order the rail shows them (the Setup view's tick boxes).</summary>
-    public static readonly string[] All = [Board, Notes, Agents, Code, GitHub, Terminal];
+    public static readonly string[] All = [Board, Notes, Docs, Agents, Code, GitHub, Terminal];
 }

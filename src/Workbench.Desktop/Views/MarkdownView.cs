@@ -23,6 +23,9 @@ public sealed class MarkdownView : StackPanel
     static readonly IBrush Link = new SolidColorBrush(Color.Parse("#6aa5e8"));
     static readonly IBrush Accent = new SolidColorBrush(Color.Parse("#e0a84a"));
 
+    /// <summary>A link was clicked: its target ("wiki:Name" for an Obsidian [[link]], else the URL).</summary>
+    public event Action<string>? LinkClicked;
+
     public MarkdownView() => Spacing = 8;
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -61,7 +64,7 @@ public sealed class MarkdownView : StackPanel
         _ => new Border { Height = 1, Background = Line, Margin = new Thickness(0, 4) },
     };
 
-    static SelectableTextBlock Text(IReadOnlyList<Span> spans, double size = 0, bool bold = false, IBrush? brush = null)
+    SelectableTextBlock Text(IReadOnlyList<Span> spans, double size = 0, bool bold = false, IBrush? brush = null)
     {
         var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, LineHeight = size > 0 ? double.NaN : 21 };
         if (size > 0) tb.FontSize = size;
@@ -73,13 +76,26 @@ public sealed class MarkdownView : StackPanel
             if (s.Bold) run.FontWeight = FontWeight.Bold;
             if (s.Italic) run.FontStyle = FontStyle.Italic;
             if (s.Code) { run.FontFamily = Mono; run.FontSize = 12.5; run.Background = InlineCodeBg; }
-            if (s.Link is not null) { run.Foreground = Link; run.TextDecorations = TextDecorations.Underline; }
+            if (s.Link is not null)
+            {
+                run.Foreground = Link; run.TextDecorations = TextDecorations.Underline;
+                if (LinkClicked is not null)
+                {
+                    // a clickable link: the run inside a small text block that takes the click
+                    var target = s.Link;
+                    var link = new TextBlock { Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) };
+                    link.Inlines!.Add(run);
+                    link.PointerReleased += (_, e) => { LinkClicked?.Invoke(target); e.Handled = true; };
+                    tb.Inlines!.Add(new InlineUIContainer(link));
+                    continue;
+                }
+            }
             tb.Inlines!.Add(run);
         }
         return tb;
     }
 
-    static Control List(MdList l)
+    Control List(MdList l)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowSpacing = 3 };
         for (var i = 0; i < l.Items.Count; i++)
@@ -93,7 +109,7 @@ public sealed class MarkdownView : StackPanel
         return grid;
     }
 
-    static Control Table(MdTable t)
+    Control Table(MdTable t)
     {
         var cols = t.Rows.Max(r => r.Count);
         var grid = new Grid();

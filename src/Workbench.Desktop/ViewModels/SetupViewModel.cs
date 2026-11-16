@@ -88,6 +88,7 @@ public partial class ProjectSetup : ObservableObject
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Brush))] public partial string Color { get; set; }
     [ObservableProperty] public partial string Boards { get; set; }
     [ObservableProperty] public partial string Notes { get; set; }
+    [ObservableProperty] public partial string Docs { get; set; }
     [ObservableProperty] public partial string ReposText { get; set; }
     [ObservableProperty] public partial string GitHubAccount { get; set; }
     [ObservableProperty] public partial string CommandsText { get; set; }
@@ -102,7 +103,7 @@ public partial class ProjectSetup : ObservableObject
     {
         _setup = setup;
         _id = p.Id;
-        Name = p.Name; Color = p.Color; Boards = p.Boards ?? ""; Notes = p.Notes ?? "";
+        Name = p.Name; Color = p.Color; Boards = p.Boards ?? ""; Notes = p.Notes ?? ""; Docs = p.Docs ?? "";
         ReposText = string.Join(Environment.NewLine, p.Repos);
         GitHubAccount = p.GitHub ?? "";
         CommandsText = SavedCommand.Render(p.Commands);
@@ -120,6 +121,7 @@ public partial class ProjectSetup : ObservableObject
             Id = _id, Name = Name.Trim(), Color = Color.Trim(),
             Boards = Boards.Trim().Length > 0 ? Boards.Trim() : null,
             Notes = Notes.Trim().Length > 0 ? Notes.Trim() : null,
+            Docs = Docs.Trim().Length > 0 ? Docs.Trim() : null,
             Repos = ReposText.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList(),
             GitHub = GitHubAccount.Trim().Length > 0 ? GitHubAccount.Trim() : null,
             // a command's own folder isn't editable here yet: keep it when the command is unchanged

@@ -25,9 +25,18 @@ public static class Markdown
     static readonly Regex Heading = new(@"^(#{1,6})\s+(.*?)\s*#*\s*$");
     static readonly Regex TableSep = new(@"^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$");
 
+    /// <summary>Text without Obsidian's properties block (a --- fenced block at the very top).</summary>
+    public static string StripProperties(string text)
+    {
+        var t = text.Replace("\r\n", "\n");
+        if (!t.StartsWith("---\n")) return t;
+        var end = t.IndexOf("\n---", 4, StringComparison.Ordinal);
+        return end < 0 ? t : t[(end + 4)..].TrimStart('\n');
+    }
+
     public static List<MdBlock> Parse(string text)
     {
-        var lines = text.Replace("\r\n", "\n").Split('\n');
+        var lines = StripProperties(text).Split('\n');
         var blocks = new List<MdBlock>();
         var para = new List<string>();
         void Flush()
@@ -118,6 +127,20 @@ public static class Markdown
             {
                 var end = s.IndexOf('`', i + 1);
                 if (end > i) { Emit(); spans.Add(new Span(s[(i + 1)..end], bold, italic, Code: true)); i = end; continue; }
+            }
+            if (c == '[' && i + 1 < s.Length && s[i + 1] == '[')
+            {
+                // Obsidian's [[note]] or [[note|shown text]]
+                var end = s.IndexOf("]]", i + 2, StringComparison.Ordinal);
+                if (end > i)
+                {
+                    Emit();
+                    var inner = s[(i + 2)..end];
+                    var bar = inner.IndexOf('|');
+                    spans.Add(new Span(bar >= 0 ? inner[(bar + 1)..] : inner, bold, italic, Link: "wiki:" + (bar >= 0 ? inner[..bar] : inner)));
+                    i = end + 1;
+                    continue;
+                }
             }
             if (c == '[')
             {

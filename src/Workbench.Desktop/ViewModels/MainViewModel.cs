@@ -118,7 +118,7 @@ public partial class MainViewModel : ObservableObject
     }
 }
 
-public enum Section { Board, Notes, Agents, Code, GitHub, Terminal }
+public enum Section { Board, Notes, Docs, Agents, Code, GitHub, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -127,13 +127,14 @@ public partial class ProjectViewModel : ObservableObject
     public IBrush Brush { get; }
     public BoardViewModel? Board { get; }
     public NotesViewModel? Notes { get; }
+    public DocsViewModel? Docs { get; }
     public CodeViewModel? Code { get; }
     public GitHubViewModel? Hub { get; }
     public AgentsViewModel? Agents { get; }
     public ConsolesViewModel? Consoles { get; }
     public bool UsesTerminal => Consoles is not null;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnAgents), nameof(OnCode), nameof(OnHub), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnCode), nameof(OnHub), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -142,6 +143,7 @@ public partial class ProjectViewModel : ObservableObject
 
     public bool OnBoard => Section == Section.Board;
     public bool OnNotes => Section == Section.Notes;
+    public bool OnDocs => Section == Section.Docs;
     public bool OnCode => Section == Section.Code;
     public bool OnHub => Section == Section.GitHub;
     public bool OnAgents => Section == Section.Agents;
@@ -154,6 +156,7 @@ public partial class ProjectViewModel : ObservableObject
         if (config.Uses(Features.Board)) Board = new BoardViewModel(config);
         if (config.Uses(Features.Agents)) Agents = new AgentsViewModel(config);
         if (config.Uses(Features.Terminal)) Consoles = new ConsolesViewModel(config);
+        if (config.Uses(Features.Docs) && config.Docs is { Length: > 0 } docs) Docs = new DocsViewModel(docs);
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
             Notes = new NotesViewModel(notes) { TicketBoard = () => Board?.Folder };
         if (config.Uses(Features.Code) && config.Repos.Count > 0) Code = new CodeViewModel(config);
@@ -187,7 +190,7 @@ public partial class ProjectViewModel : ObservableObject
         var s = Enum.Parse<Section>(section);
         var has = s switch
         {
-            Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Agents => Agents is not null,
+            Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null,
             Section.Code => Code is not null, Section.GitHub => Hub is not null, _ => Consoles is not null,
         };
         if (has) Section = s;

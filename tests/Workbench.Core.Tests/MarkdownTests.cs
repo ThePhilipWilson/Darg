@@ -51,6 +51,16 @@ public sealed class MarkdownTests
         Assert.Equal("a bold and it code link end", string.Concat(s.Select(x => x.Text)));
     }
 
+    [Fact]
+    public void Obsidian_properties_are_left_out_and_wikilinks_read_as_links()
+    {
+        var b = Markdown.Parse("---\ntags: [a]\ncreated: x\n---\n# Title\nSee [[DESIGN-NOTES]] and [[UI-FIGHT|the fight screen]].");
+        Assert.Equal("Title", string.Concat(Assert.IsType<MdHeading>(b[0]).Spans.Select(s => s.Text)));
+        var spans = Assert.IsType<MdParagraph>(b[1]).Spans;
+        Assert.Contains(spans, s => s is { Text: "DESIGN-NOTES", Link: "wiki:DESIGN-NOTES" });
+        Assert.Contains(spans, s => s is { Text: "the fight screen", Link: "wiki:UI-FIGHT" });
+    }
+
     [Theory] // markers that aren't styling stay as text
     [InlineData("snake_case_name stays", "snake_case_name stays")]
     [InlineData("2 * 3 = 6", "2 * 3 = 6")]

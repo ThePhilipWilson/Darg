@@ -74,6 +74,10 @@
           <TextBox Text="{Binding Notes}" Classes="mono"/>
         </StackPanel>
         <StackPanel Spacing="4">
+          <TextBlock Text="Docs folder (the project's notes in the Obsidian vault)" Classes="dim small"/>
+          <TextBox Text="{Binding Docs}" Classes="mono"/>
+        </StackPanel>
+        <StackPanel Spacing="4">
           <TextBlock Text="Repos, one per line (agents and the terminal start in the first)" Classes="dim small"/>
           <TextBox Text="{Binding ReposText}" Classes="mono" AcceptsReturn="True" MinHeight="70"/>
         </StackPanel>

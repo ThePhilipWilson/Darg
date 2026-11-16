@@ -1,0 +1,50 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Workbench.Desktop.ViewModels"
+             xmlns:views="using:Workbench.Desktop.Views"
+             x:Class="Workbench.Desktop.Views.DocsView"
+             x:DataType="vm:DocsViewModel">
+  <Grid ColumnDefinitions="300,*" RowDefinitions="*,Auto">
+    <Border Grid.RowSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel>
+        <TextBox DockPanel.Dock="Top" Text="{Binding Find}" PlaceholderText="Find a doc…" Margin="10"/>
+        <ListBox ItemsSource="{Binding Files}" SelectedItem="{Binding Selected}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:DocEntry">
+              <StackPanel>
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding Where}" Classes="dim small" IsVisible="{Binding Where, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <DockPanel Grid.Column="1" IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+            <Button Content="Edit" Command="{Binding EditCommand}" IsVisible="{Binding Reading}"/>
+            <Button Classes="primary" Content="Save" Command="{Binding SaveCommand}" IsVisible="{Binding Editing}"/>
+            <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding Editing}"/>
+          </StackPanel>
+          <TextBlock Text="{Binding Selected.Path, FallbackValue=''}" Classes="mono" VerticalAlignment="Center"/>
+        </DockPanel>
+      </Border>
+      <Panel>
+        <ScrollViewer IsVisible="{Binding Reading}">
+          <views:MarkdownView x:Name="Rendered" Markdown="{Binding Text}" Margin="28,20" MaxWidth="860" HorizontalAlignment="Left"/>
+        </ScrollViewer>
+        <TextBox x:Name="Editor" IsVisible="{Binding Editing}" Text="{Binding EditText}" AcceptsReturn="True" AcceptsTab="True"
+                 TextWrapping="Wrap" Classes="mono" BorderThickness="0" Padding="24,16"/>
+      </Panel>
+    </DockPanel>
+    <TextBlock Grid.Column="1" Classes="dim" Text="Pick a doc on the left." HorizontalAlignment="Center" VerticalAlignment="Center"
+               IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNull}}"/>
+
+    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+      <TextBlock Classes="dim small" Text="{Binding Status}"/>
+    </Border>
+  </Grid>
+</UserControl>
