@@ -262,8 +262,8 @@ public partial class AgentsViewModel : ObservableObject
     /// <summary>The prompt for working on a card: the card itself, where its file is, and the house rules.</summary>
     /// <param name="alongside">Other agents at work in the same folder: cards started in the same batch and
     /// agents already busy there.</param>
-    /// <param name="repo">The folder, when it is a git repository: then the agent is told how to decide on,
-    /// and use, a worktree of its own.</param>
+    /// <param name="repo">The folder, when it is a git repository: then the agent is told which branch to work on
+    /// (<see cref="CardBranch"/>) and how to decide on, and use, a worktree of its own.</param>
     public static string CardPrompt(string projectName, Card card, string file, IReadOnlyList<string>? alongside = null, string? repo = null)
     {
         var lines = new List<string> { $"Work on this card from the {projectName} board.", "", $"{card.Id}: {card.Title}" };
@@ -282,31 +282,10 @@ public partial class AgentsViewModel : ObservableObject
             lines.Add($"Other agents are working on {string.Join(", ", alongside)} in the same folder at the same time. " +
                       "Change only what this card needs, expect files you didn't touch to change under you, " +
                       "and stage and commit only the files you changed yourself.");
-            if (repo is not null) lines.AddRange(WorktreeRules(card.Id.ToLowerInvariant(), repo));
         }
+        // every card gets a branch of its own (or the one it names), alone or not
+        if (repo is not null) lines.AddRange(CardBranch.Rules(card, repo, alongside is { Count: > 0 }));
         return string.Join(Environment.NewLine, lines);
-    }
-
-    /// <summary>Whether a card's agent needs its own worktree is its call: only it knows, once it has read
-    /// the card, whether it will build or edit code. These are the rules it decides by and works to.</summary>
-    static IEnumerable<string> WorktreeRules(string branch, string repo)
-    {
-        var dir = $".claude/worktrees/{branch}";
-        yield return "";
-        yield return "Decide for yourself, once you know what the card needs, whether to work in a git worktree of your own. " +
-                     "Use one if you will edit source code, build, or run tests or the app: another agent building or editing here " +
-                     "at the same moment can break your build, lock its output, or end up in your commit. Stay in this folder " +
-                     "if you will only read, answer a question, or edit notes, docs or card files the other cards don't touch. " +
-                     "I don't want to be asked: make the call, and say in your last message which you chose and why.";
-        yield return $"To use one: add `.claude/worktrees/` to `.git/info/exclude` if it isn't there; `git worktree add {dir} -b {branch} HEAD` " +
-                     "(from local HEAD, so unpushed commits come too); then EnterWorktree with that path (without the tool, work there by " +
-                     $"absolute path). Untracked local files such as CLAUDE.local.md aren't in the worktree: read them from {repo}. " +
-                     "Commit on your branch.";
-        yield return $"When the work is done: rebase your branch onto the branch {repo} is on, then in {repo} run `git merge --ff-only {branch}` " +
-                     "and push if the project's rules say to. If the merge is refused (another agent's uncommitted change in the way, or a conflict " +
-                     $"you can't settle), leave the branch and say so. Once merged, step out before cleaning up (Windows won't delete a folder " +
-                     $"a session is still in): ExitWorktree with keep, then `cd {repo}`, then `git -C {repo} worktree remove {dir}` " +
-                     $"and `git -C {repo} branch -d {branch}`.";
     }
 }
 
