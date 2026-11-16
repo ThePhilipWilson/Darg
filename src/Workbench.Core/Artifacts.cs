@@ -150,6 +150,9 @@ public sealed class ArtifactServer : IDisposable
     /// <summary>Set by the app: close these agents' sessions and say what happened (POST /agents/&lt;token&gt;/close,
     /// the ids in the body). Fettle closes agents through it when Philip asks.</summary>
     public Func<IReadOnlyList<string>, Task<string>>? CloseAgents { get; set; }
+    /// <summary>The Workbench API the app registers its commands in (GET /api/&lt;token&gt; lists them,
+    /// GET or POST /api/&lt;token&gt;/&lt;name&gt; runs one, its arguments as a JSON object in the body or the query string).</summary>
+    public WorkbenchApi Api { get; } = new();
 
     ArtifactServer(string instance, int port, string token)
     {
@@ -214,6 +217,8 @@ public sealed class ArtifactServer : IDisposable
                 await ServeImage(res, string.Join('/', parts[1..]));
             else if (parts.Length == 5 && parts[0] == "reply" && ctx.Request.HttpMethod == "POST")
                 await TakeReply(ctx, parts[1], parts[2], parts[3], parts[4]);
+            else if (parts.Length is 2 or 3 && parts[0] == "api")
+                await CallApi(ctx, parts[1], parts.Length == 3 ? parts[2] : null);
             else if (parts.Length is 2 or 3 && parts[0] == "agents")
                 await Agents(ctx, parts[1], parts.Length == 3 ? parts[2] : null);
             else res.StatusCode = 404;
@@ -272,6 +277,27 @@ public sealed class ArtifactServer : IDisposable
             await Write(res, Encoding.UTF8.GetBytes(await CloseAgents(Ids(body))), "text/plain; charset=utf-8");
         }
         else res.StatusCode = 404;
+    }
+
+    /// <summary>An API call: the command list (no name), or a command run with the body's JSON and the query string.</summary>
+    async Task CallApi(HttpListenerContext ctx, string token, string? name)
+    {
+        var res = ctx.Response;
+        if (!Allowed(token)) { res.StatusCode = 403; return; }
+        if (name is null) { await Write(res, Encoding.UTF8.GetBytes(Api.Help()), "text/plain; charset=utf-8"); return; }
+        var body = "";
+        if (ctx.Request.HasEntityBody)
+        {
+            using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
+            body = await reader.ReadToEndAsync();
+            if (body.Length > MaxReply) { res.StatusCode = 413; return; }
+        }
+        var q = ctx.Request.QueryString;
+        var query = q.AllKeys.OfType<string>().Select(k => new KeyValuePair<string, string>(k, q[k] ?? ""));
+        var (status, text) = await Api.Call(name, ApiArgs.Parse(body, query));
+        res.StatusCode = status;
+        var t = text.TrimStart();
+        await Write(res, Encoding.UTF8.GetBytes(text), t.StartsWith('[') || t.StartsWith('{') ? "application/json" : "text/plain; charset=utf-8");
     }
 
     /// <summary>Agent ids out of a body however it's written: spaces, commas, lines or a JSON array.</summary>

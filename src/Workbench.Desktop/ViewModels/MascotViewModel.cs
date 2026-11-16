@@ -237,8 +237,9 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
             Change these files directly; Workbench shows changes within a second. Ask with AskUserQuestion before deleting anything or before changing more than 20 files. Never commit or push.
             """);
         if (ArtifactHost.Server is { } server)
-            sb.AppendLine($"""
-                Agents: each project has Claude Code agents running in Workbench. To see them, GET {server.Root}agents/TOKEN, where TOKEN is the text of the file artifact-token in your working folder: a JSON list, each with project, id, name, state (starting, working, needsyou, idle, saved, exited), open (whether its session is running) and card. To close agents' sessions when Philip asks, POST their ids (separated by spaces) to {server.Root}agents/TOKEN/close; the reply says what happened to each. A closed agent stays listed with its transcript and carries on when he sends it a message. Closing one that's working or needs him stops what it was doing: unless he named it, ask with AskUserQuestion first. Use curl.
+            sb.AppendLine($$"""
+                Workbench API: for anything that isn't a file edit (showing Philip a card, doc, section or agent, listing agents and reading their transcripts, starting an agent or putting one on a card, sending an agent a message, closing agents, running a flow or a saved command), use the API with curl. TOKEN is the text of the file artifact-token in your working folder. GET {{server.Root}}api/TOKEN lists the commands and what each takes; read it before your first call in a chat. Run one with POST {{server.Root}}api/TOKEN/NAME and its arguments as a JSON object in the body (curl -s -X POST URL -d '{"project":"x"}'). A 400 answer says what was wrong; correct it and try again.
+                Starting agents and flows costs Philip sessions: do it only when he asks. Closing an agent that is working or needs him stops what it was doing: unless he named it, ask with AskUserQuestion first. Prefer show to telling him where something is.
                 """);
         return sb.ToString();
     }

@@ -148,6 +148,54 @@ public sealed class ArtifactTests : IDisposable
     }
 
     [Fact]
+    public async Task The_api_lists_and_runs_commands_only_with_the_token()
+    {
+        using var server = ArtifactServer.Start(_home, FreePort());
+        var token = File.ReadAllText(Path.Combine(_home, "artifact-token")).Trim();
+        ApiArgs? got = null;
+        server.Api.Add("show", "bring something up: {project, card?}", a => { got = a; return $"{a.Need("project")} on screen"; });
+        server.Api.Add("projects", "the projects", _ => "[{\"id\":\"p1\"}]");
+
+        var help = await Http.GetStringAsync($"{server.Root}api/{token}");
+        Assert.Contains("show: bring something up", help);
+        Assert.Contains("projects: the projects", help);
+
+        var r = await Http.PostAsync($"{server.Root}api/{token}/show", new StringContent("{\"project\":\"p1\",\"card\":\"WOR-1\"}"));
+        Assert.Equal("p1 on screen", await r.Content.ReadAsStringAsync());
+        Assert.Equal("WOR-1", got!.Get("card"));
+        // the query string works too, for a GET; a JSON answer says so
+        Assert.Equal("p2 on screen", await Http.GetStringAsync($"{server.Root}api/{token}/show?project=p2"));
+        Assert.Equal("application/json", (await Http.GetAsync($"{server.Root}api/{token}/projects")).Content.Headers.ContentType?.MediaType);
+
+        var missing = await Http.PostAsync($"{server.Root}api/{token}/show", new StringContent("{}"));
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+        Assert.Contains("project", await missing.Content.ReadAsStringAsync());
+        var unknown = await Http.GetAsync($"{server.Root}api/{token}/fly");
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        Assert.Contains("show:", await unknown.Content.ReadAsStringAsync()); // says what there is
+
+        var bad = new string('0', 32);
+        got = null;
+        Assert.Equal(HttpStatusCode.Forbidden, (await Http.GetAsync($"{server.Root}api/{bad}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Http.PostAsync($"{server.Root}api/{bad}/show", new StringContent("{\"project\":\"p1\"}"))).StatusCode);
+        Assert.Null(got);
+    }
+
+    [Fact]
+    public void Api_arguments_come_from_json_or_plain_text()
+    {
+        var a = ApiArgs.Parse("{\"ids\":[\"a1\",\"b2\"],\"last\":5,\"name\":\"  \"}", [new("project", "p1"), new("last", "9")]);
+        Assert.Equal(["a1", "b2"], a.List("ids"));
+        Assert.Equal("5", a.Get("last")); // the body wins over the query string
+        Assert.Equal("p1", a.Get("project"));
+        Assert.Null(a.Get("name"));
+        Assert.Throws<ApiError>(() => a.Need("card"));
+        var text = ApiArgs.Parse("a1, b2 c3");
+        Assert.Equal("a1, b2 c3", text.Get("text"));
+        Assert.Equal(["a1", "b2"], ApiArgs.Parse("{\"ids\":\"a1 b2\"}").List("ids"));
+    }
+
+    [Fact]
     public void Agent_ids_come_out_of_any_list() =>
         Assert.Equal(["a1", "b2", "c3"], ArtifactServer.Ids("a1, b2\nc3 a1"));
 

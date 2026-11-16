@@ -153,6 +153,15 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>Open a card by its ID, on whichever board holds it (clearing filters that hide it).</summary>
     public bool OpenById(string id)
     {
+        if (Show(id) is not { } card) return false;
+        Open(card);
+        return true;
+    }
+
+    /// <summary>The card with this ID, on whichever board holds it, brought into view (its board picked, filters
+    /// that hide it cleared); null, with the status saying so, when no board here has it.</summary>
+    public CardViewModel? Show(string id)
+    {
         foreach (var b in Boards.ToList())
         {
             if (_project.Boards is null) break;
@@ -161,13 +170,10 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             Filter = "";
             foreach (var l in Labels) l.Mode = ChipMode.Off;
             if (!ShowCompleted && _board?.Lists[Board.Completed].Any(c => c.Id == id) == true) ShowCompleted = true;
-            var card = Lists.SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == id);
-            if (card is null) return false;
-            Open(card);
-            return true;
+            return Lists.SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == id);
         }
         Status = $"No card {id} on this project's boards.";
-        return false;
+        return null;
     }
 
     public void MarkDone(CardViewModel card)
