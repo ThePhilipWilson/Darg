@@ -154,4 +154,37 @@ public static class NoteStore
         notes.Where(n => n.Ticket.Length == 0 && n.Text.Trim().Length > 0)
             .OrderBy(n => n.Created, StringComparer.Ordinal).ThenBy(n => n.Id, StringComparer.Ordinal)
             .Select(n => MakeTicket(folder, n, boardFolder).Card).ToList();
+
+    /// <summary>What Fettle is told when Organise is pressed: sort these notes (the loose ones showing, no
+    /// tickets) into the wall's columns, give them tags and colours, and say which look like duplicates.
+    /// Null when there's nothing to organise.</summary>
+    public static string? OrganisePrompt(string folder, IReadOnlyList<Note> notes, IReadOnlyList<string> columns)
+    {
+        var mine = notes.Where(n => n.Ticket.Length == 0).ToList();
+        if (mine.Count == 0) return null;
+        var tags = List(folder).SelectMany(n => n.Tags).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        var sb = new StringBuilder();
+        sb.AppendLine($"Organise the notes wall: {mine.Count} post-it{(mine.Count == 1 ? "" : "s")} in {folder}. Philip pressed Organise, so you may change all of these files without asking; touch no other note.");
+        sb.AppendLine();
+        sb.AppendLine($"Columns on the wall, in order: {string.Join(", ", columns.Select(c => $"\"{c}\""))}. The first is where new notes land.");
+        sb.AppendLine(tags.Count > 0 ? $"Tags already in use: {string.Join(", ", tags)}." : "No tags are in use yet.");
+        sb.AppendLine($"Colours: {string.Join(", ", Colours)}.");
+        sb.AppendLine();
+        sb.AppendLine("For each note, edit only its properties (column, colour, tags), never its text:");
+        sb.AppendLine("- column: the one that fits what the note is. Leave it where it is if nothing fits better. If several notes clearly form a group no column fits, you may add up to two columns to wall.json ({\"columns\": [every column, in order]}); keep the existing ones and their order, and never name one Ticketed or Archive.");
+        sb.AppendLine("- tags: one to three short lowercase tags, reusing the ones in use where they fit. Keep tags a note already has unless they're plainly wrong.");
+        sb.AppendLine("- colour: one colour per theme, the same theme the same colour across the wall. A note that isn't yellow was coloured by Philip: keep it, and let it hint at what that colour means.");
+        sb.AppendLine("Don't delete, merge or make tickets. If two notes look like the same thought, say which in your reply.");
+        sb.AppendLine();
+        sb.AppendLine("The notes:");
+        foreach (var n in mine)
+        {
+            var text = n.Text.Replace("\r", "").Replace("\n", " / ");
+            if (text.Length > 300) text = text[..300] + "…";
+            sb.AppendLine($"- {n.Id}.md [{n.Column}; {n.Colour}{(n.Tags.Count > 0 ? "; " + string.Join(", ", n.Tags) : "")}]: {text}");
+        }
+        sb.AppendLine();
+        sb.Append("When done, reply in a few lines: what went where (by theme, not note by note), any new columns or tags, and any duplicates.");
+        return sb.ToString();
+    }
 }

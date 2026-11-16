@@ -76,6 +76,20 @@ public sealed class NoteStoreTests : IDisposable
     }
 
     [Fact]
+    public void Organise_prompt_lists_the_loose_notes_columns_and_tags_but_not_ticketed_ones()
+    {
+        var a = NoteStore.Save(_dir, new Note("a1", "Fettle should blink\nmore often", "Loose", "yellow", ["ui"], "", ""));
+        var b = NoteStore.Save(_dir, new Note("b2", "Done already", "Loose", "pink", ["ops"], "", "WOR-0001"));
+        var prompt = NoteStore.OrganisePrompt(_dir, [a, b], ["Loose", "Parked"])!;
+        Assert.Contains("1 post-it in", prompt);
+        Assert.Contains("\"Loose\", \"Parked\"", prompt);
+        Assert.Contains("Tags already in use: ops, ui.", prompt);
+        Assert.Contains("- a1.md [Loose; yellow; ui]: Fettle should blink / more often", prompt);
+        Assert.DoesNotContain("b2.md", prompt);
+        Assert.Null(NoteStore.OrganisePrompt(_dir, [b], ["Loose"]));
+    }
+
+    [Fact]
     public void A_note_without_properties_is_a_loose_yellow_note()
     {
         File.WriteAllText(Path.Combine(_dir, "hand.md"), "Written in Obsidian\n");

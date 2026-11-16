@@ -160,6 +160,25 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
 
     [RelayCommand] void Toggle() => Open = !Open;
 
+    /// <summary>Fettle is in the middle of something in the chat on screen.</summary>
+    public bool Busy => Agent?.State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou;
+
+    /// <summary>A job from a button elsewhere (Organise on the notes wall): a new chat with this message,
+    /// shown as <paramref name="shown"/>, with the box opened. The chat that was open stays in the list.
+    /// False, and nothing sent, while the open chat is busy: ending it would cut Fettle off mid-turn.</summary>
+    public bool Ask(string shown, string text)
+    {
+        if (Busy) return false;
+        Fresh();
+        var home = InstanceConfig.Folder();
+        Directory.CreateDirectory(home);
+        Agent = Wire(new AgentViewModel(home, WithContext(text), name: ChatTitle.Guess(shown), args: Args(), shown: shown) { StoreFolder = Store, Project = ProjectId });
+        Agent.Save();
+        ListChats();
+        Open = true;
+        return true;
+    }
+
     [RelayCommand]
     void Send()
     {
