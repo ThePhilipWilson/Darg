@@ -506,6 +506,8 @@ public partial class AgentViewModel : ObservableObject
         CardId = cardId;
         _args = args?.ToList() ?? [];
         NameDefaultModel(AgentChoices.DefaultModel(cwd));
+        _mode = AgentChoices.NewAgentMode; // saved with it, so a resume stays in Auto too
+        ShowMode(_mode);
         var visible = shown ?? prompt;
         Name = name ?? (visible.Length > 40 ? visible[..40].TrimEnd() + "…" : visible);
         Items.Add(new UserItem(visible));
