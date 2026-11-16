@@ -141,6 +141,18 @@ public partial class AgentsViewModel : ObservableObject
         foreach (var a in Agents.Where(a => a.State == AgentState.Idle).ToList()) a.CloseSession();
     }
 
+    /// <summary>Forget every finished agent here: one whose turn ended well and is waiting, or a saved one whose card is done.
+    /// Working, waiting on you and failed agents stay listed. Each goes as the × on it would (its file goes, Claude Code keeps its history).</summary>
+    [RelayCommand]
+    void ClearFinished()
+    {
+        foreach (var a in Agents.Where(IsFinished).ToList()) Forget(a);
+    }
+
+    /// <summary>Whether the agent has finished its work and is only sitting in the list.</summary>
+    public bool IsFinished(AgentViewModel a) =>
+        a.IsDone || (a.State == AgentState.Saved && a.CardDone && a.FinishedTurn);
+
     /// <summary>True while an agent here has run out of usage and isn't yet set to carry on.</summary>
     [ObservableProperty] public partial bool AnyOutOfUsage { get; set; }
 
