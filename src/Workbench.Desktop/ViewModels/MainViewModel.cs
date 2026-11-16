@@ -337,6 +337,8 @@ public partial class ProjectViewModel : ObservableObject
             Agents.CardIsDone = Board.IsDone;
             Board.Reloaded += Agents.RefreshCards;
             Agents.RefreshCards();
+            // a card looks up its agent only when the board rebuilds: forgetting the agent frees the card now
+            Agents.Forgotten += a => { if (a.CardId is { } card) Board.AgentGone(card); };
             Board.OpenAgent = a => { Agents.Selected = a; Section = Section.Agents; };
             Board.StartAgent = (prompt, cwd, name) => { Agents.Start(prompt, cwd, name: name); Section = Section.Agents; };
             string CardPrompt(Card card, string file, IReadOnlyList<string> alongside)

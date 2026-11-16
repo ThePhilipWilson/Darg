@@ -357,6 +357,14 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (_held is not null) _reloadWaiting = true; else Reload();
     }
 
+    /// <summary>A card's agent was forgotten: its card drops the link (Work on, flows, moving to another board
+    /// come back), on the board and in the card's panel if it's open.</summary>
+    public void AgentGone(string cardId)
+    {
+        Reload();
+        if (Editor is { } e && e.CardId == cardId) e.AgentChanged();
+    }
+
     /// <summary>Reload now. A header being edited is given up (this is a click elsewhere: a move, another board).</summary>
     public void Reload()
     {
@@ -635,9 +643,12 @@ public partial class CardEditor : ObservableObject
     [ObservableProperty] public partial string LabelsText { get; set; }
     [ObservableProperty] public partial string Priority { get; set; }
     [ObservableProperty] public partial string Error { get; set; } = "";
-    public bool CanWorkOn => _card is not null && !_card.HasAgent;
+    public string? CardId => _card?.Id;
+    /// <summary>The card's live agent, looked up now: the panel can outlast the agent (forgotten while it's open).</summary>
+    bool HasAgent => _card is not null && (_board.AgentFor?.Invoke(_card.Id) is not null);
+    public bool CanWorkOn => _card is not null && !HasAgent;
     /// <summary>A button per flow, to run it on this card.</summary>
-    public IReadOnlyList<MoveTarget> FlowTargets { get; }
+    public IReadOnlyList<MoveTarget> FlowTargets { get; private set; } = [];
 
     public CardEditor(BoardViewModel board, CardViewModel? card)
     {
@@ -648,11 +659,21 @@ public partial class CardEditor : ObservableObject
         Priority = card?.Priority ?? "";
         Type = CardTypes.All.FirstOrDefault(t => t.Equals(card?.Card.Kind, StringComparison.OrdinalIgnoreCase)) ?? card?.Card.Kind ?? CardTypes.Task;
         TypeChoices = CardTypes.All.Contains(Type) ? CardTypes.All : [.. CardTypes.All, Type];
-        FlowTargets = card is null || card.HasAgent ? [] : board.FlowList().Select(f => new MoveTarget("▶ " + f.Name, new RelayCommand(() =>
-        {
-            board.Editor = null;
-            board.StartFlow(card, f);
-        }))).ToList();
+        FlowTargets = MakeFlowTargets();
+    }
+
+    List<MoveTarget> MakeFlowTargets() => _card is not { } card || HasAgent ? [] : _board.FlowList().Select(f => new MoveTarget("▶ " + f.Name, new RelayCommand(() =>
+    {
+        _board.Editor = null;
+        _board.StartFlow(card, f);
+    }))).ToList();
+
+    /// <summary>The card's agent came or went: Work on and the flow buttons follow (what's typed in the panel stays).</summary>
+    public void AgentChanged()
+    {
+        FlowTargets = MakeFlowTargets();
+        OnPropertyChanged(nameof(FlowTargets));
+        OnPropertyChanged(nameof(CanWorkOn));
     }
 
     IEnumerable<string> LabelList() => LabelsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
