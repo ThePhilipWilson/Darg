@@ -43,6 +43,11 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand] void OpenSetup() => Setup = new SetupViewModel(this, InstanceConfig.Load());
     public void CloseSetup() => Setup = null;
 
+    // ---------------------------------------------------------------- Tools
+    [ObservableProperty] public partial ToolsViewModel? ToolsPage { get; set; }
+    [RelayCommand] void OpenTools() => ToolsPage = new ToolsViewModel(this, InstanceConfig.Load().ToolsOrDefaults());
+    public void CloseTools() => ToolsPage = null;
+
     /// <summary>A saved instance config, applied: projects whose settings didn't change stay exactly as
     /// they are (their agents and terminals keep running); changed ones are rebuilt; removed ones close.</summary>
     public void Apply(InstanceConfig config)

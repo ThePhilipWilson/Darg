@@ -9,6 +9,9 @@ public sealed class InstanceConfig
 {
     public string Name { get; set; } = "home";
     public List<ProjectConfig> Projects { get; set; } = [];
+    /// <summary>This machine's local tools (Forge, ComfyUI, Ollama, Pinokio…); the usual four when not set.</summary>
+    public List<ToolConfig>? Tools { get; set; }
+    public List<ToolConfig> ToolsOrDefaults() => Tools is { Count: > 0 } t ? t : ToolConfig.Defaults();
 
     static readonly JsonSerializerOptions Json = new()
     {

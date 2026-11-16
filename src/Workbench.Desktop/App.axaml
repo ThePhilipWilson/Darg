@@ -116,6 +116,12 @@
     <Style Selector="TextBlock.dim, SelectableTextBlock.dim">
       <Setter Property="Foreground" Value="{StaticResource Dim}"/>
     </Style>
+    <Style Selector="Ellipse.status">
+      <Setter Property="Fill" Value="#5a606c"/>
+    </Style>
+    <Style Selector="Ellipse.status.up">
+      <Setter Property="Fill" Value="{StaticResource Ok}"/>
+    </Style>
     <Style Selector="TextBlock.good">
       <Setter Property="Foreground" Value="{StaticResource Ok}"/>
     </Style>
