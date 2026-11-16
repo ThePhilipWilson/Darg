@@ -25,7 +25,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var p in Projects) if (p.Agents is { } a) a.Mascot = Mascot;
         Mascot.Notify += (agent, what, detail) =>
         {
-            if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, $"Bench: {what}", "", detail);
+            if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, $"Fettle: {what}", "", detail);
         };
         Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
         Selected = Projects.FirstOrDefault();
