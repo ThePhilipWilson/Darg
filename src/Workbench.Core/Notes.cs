@@ -6,7 +6,7 @@ namespace Workbench.Core;
 
 /// <summary>A post-it: one markdown file, its fields as Obsidian-style properties at the top.</summary>
 public sealed record Note(string Id, string Text, string Column, string Colour, IReadOnlyList<string> Tags,
-    string Created, string Ticket)
+    string Created, string Ticket, string Image = "")
 {
     /// <summary>The first line, for a ticket's title.</summary>
     public string FirstLine => Text.Split('\n', 2)[0].Trim();
@@ -148,7 +148,7 @@ public static class NoteStore
         var tags = fields.GetValueOrDefault("tags", "").Trim('[', ']')
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(t => t.TrimStart('#')).ToList();
         return new Note(id, body.TrimEnd(), fields.GetValueOrDefault("column", DefaultColumns[0]),
-            fields.GetValueOrDefault("colour", "yellow"), tags, fields.GetValueOrDefault("created", ""), fields.GetValueOrDefault("ticket", ""));
+            fields.GetValueOrDefault("colour", "yellow"), tags, fields.GetValueOrDefault("created", ""), fields.GetValueOrDefault("ticket", ""), fields.GetValueOrDefault("image", ""));
     }
 
     public static string Render(Note n)
@@ -158,6 +158,7 @@ public static class NoteStore
         if (n.Tags.Count > 0) sb.Append($"tags: [{string.Join(", ", n.Tags)}]\n");
         sb.Append($"created: {n.Created}\n");
         if (n.Ticket.Length > 0) sb.Append($"ticket: {n.Ticket}\n");
+        if (n.Image.Length > 0) sb.Append($"image: {n.Image}\n");
         sb.Append("---\n").Append(n.Text.Trim()).Append('\n');
         return sb.ToString();
     }
@@ -189,6 +190,8 @@ public static class NoteStore
         var rest = note.Text.Contains('\n') ? note.Text[(note.Text.IndexOf('\n') + 1)..].Trim() : "";
         var title = note.FirstLine.Length > 70 ? note.FirstLine[..70].TrimEnd() : note.FirstLine;
         var desc = (rest.Length > 0 ? rest + "\n\n" : "") + $"From a note on the wall ({note.Id}).";
+        if (note.Image.Length > 0 && Pictures.Resolve(folder, note.Image) is { } pic && File.Exists(pic))
+            desc += $"\n\n![]({Pictures.Add(boardFolder, pic)})";
         var card = BoardStore.Create(boardFolder, title, desc, note.Tags, type: CardTypes.Guess(note.Text, note.Tags));
         return (Save(folder, note with { Ticket = card.Id }), card);
     }

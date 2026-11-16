@@ -15,6 +15,10 @@ public partial class NotesView : UserControl
     public NotesView()
     {
         InitializeComponent();
+        AddPicture.Click += async (_, _) =>
+        {
+            if (DataContext is NotesViewModel { Editor: { } editor } && await PicturePicker.Pick(this) is { } path) editor.SetPicture(path);
+        };
         _ = new DragLift(this, Overlay, "postit", "wallcol",
             itemsOf: col => (col as NoteColumn)?.Notes.Cast<object>().ToList() ?? [],
             drop: (items, column, _) => { if (DataContext is NotesViewModel wall) wall.Move(items.OfType<NoteViewModel>().Select(n => n.Id), column); },

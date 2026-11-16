@@ -101,12 +101,19 @@
                       <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="14"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:NoteViewModel">
-                          <Border Classes="postit" Classes.picked="{Binding IsPicked}" Tag="{Binding}" Background="{Binding Brush}" CornerRadius="2" Padding="12,12,12,9" MinHeight="90"
+                          <Border Classes="postit" Classes.picked="{Binding IsPicked}" Tag="{Binding}" Background="{Binding Paper}" CornerRadius="2" Padding="12,12,12,9" MinHeight="90"
                                   BoxShadow="0 6 14 0 #70000000" Cursor="Hand" Opacity="{Binding PaperOpacity}">
                             <Border.RenderTransform>
                               <RotateTransform Angle="{Binding Angle}"/>
                             </Border.RenderTransform>
                             <StackPanel Spacing="8">
+                              <!-- a polaroid: the picture in its frame, a strip of the note's colour under it -->
+                              <StackPanel Spacing="0" IsVisible="{Binding HasPicture}">
+                                <Border Background="#1b1b1b" Padding="1">
+                                  <Image Source="{Binding Picture}" Stretch="Uniform" MaxHeight="260"/>
+                                </Border>
+                                <Border Height="5" Background="{Binding Brush}" Margin="0,6,0,0"/>
+                              </StackPanel>
                               <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="#2a2620" FontSize="15"
                                          FontFamily="Segoe Print, Comic Sans MS, Chalkboard, cursive"/>
                               <DockPanel Opacity="0.65">
@@ -137,10 +144,18 @@
       <StackPanel DataContext="{Binding Editor}" x:DataType="vm:NoteEditor" Margin="14" Spacing="10">
         <TextBlock Text="{Binding Heading}" FontWeight="SemiBold"/>
         <Border Background="{Binding Brush}" CornerRadius="2" Padding="8">
+          <StackPanel Spacing="6">
+          <Image Source="{Binding Picture}" IsVisible="{Binding HasPicture}" Stretch="Uniform" MaxHeight="220"/>
           <TextBox x:Name="PaperBox" Classes="paper" Text="{Binding Text}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="140" Foreground="#2a2620"
                    Background="Transparent" BorderThickness="0" FontSize="15" FontFamily="Segoe Print, Comic Sans MS, Chalkboard, cursive"
                    PlaceholderText="Write it down…"/>
+          </StackPanel>
         </Border>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button x:Name="AddPicture" Content="{Binding HasPicture, Converter={x:Static vm:Bools.ChangeOrAddPicture}}"
+                  ToolTip.Tip="Put a picture on this note: it becomes a polaroid. The file is copied into the wall's images folder."/>
+          <Button Content="Remove picture" Command="{Binding RemovePictureCommand}" IsVisible="{Binding HasPicture}"/>
+        </StackPanel>
         <ItemsControl ItemsSource="{Binding $parent[UserControl].((vm:NotesViewModel)DataContext).ColourChoices}">
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>

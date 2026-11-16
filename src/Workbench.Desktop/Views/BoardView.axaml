@@ -205,6 +205,14 @@
           </DockPanel>
           <TextBox Text="{Binding Title}" PlaceholderText="Title" FontSize="15" TextWrapping="Wrap"/>
           <TextBox Text="{Binding Description}" PlaceholderText="Description (markdown)" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="220"/>
+          <ItemsControl ItemsSource="{Binding Pictures}" IsVisible="{Binding HasPictures}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate><Image Source="{Binding}" Stretch="Uniform" MaxHeight="300" HorizontalAlignment="Left"/></DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Button x:Name="AddCardPicture" Content="+ Picture…" HorizontalAlignment="Left"
+                  ToolTip.Tip="Copy a picture into the board's images folder and add it to the description as a markdown image"/>
           <TextBox Text="{Binding LabelsText}" PlaceholderText="Labels, comma separated"/>
           <Grid ColumnDefinitions="*,8,*">
             <ComboBox Grid.Column="0" ItemsSource="{Binding TypeChoices}" SelectedItem="{Binding Type}" HorizontalAlignment="Stretch" ToolTip.Tip="Type"/>

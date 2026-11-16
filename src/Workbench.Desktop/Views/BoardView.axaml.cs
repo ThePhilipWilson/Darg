@@ -16,6 +16,10 @@ public partial class BoardView : UserControl
     public BoardView()
     {
         InitializeComponent();
+        AddCardPicture.Click += async (_, _) =>
+        {
+            if (DataContext is BoardViewModel { Editor: { } editor } && await PicturePicker.Pick(this) is { } path) editor.AddPicture(path);
+        };
         _ = new DragLift(this, Overlay, "card", "list",
             itemsOf: list => (list as ListViewModel)?.Cards.Cast<object>().ToList() ?? [],
             drop: (items, list, before) =>
