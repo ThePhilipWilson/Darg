@@ -18,6 +18,7 @@ public partial class AgentsViewModel : ObservableObject
     {
         this.project = project;
         _store = AgentStore.Folder(project.Id.Length > 0 ? project.Id : "default");
+        Agents.CollectionChanged += (_, _) => Resort();
         foreach (var r in AgentStore.List(_store)) Add(new AgentViewModel(r, _store), select: false);
         Selected = Agents.FirstOrDefault();
         ReloadFlows();
@@ -34,6 +35,35 @@ public partial class AgentsViewModel : ObservableObject
     }
 
     public ObservableCollection<AgentViewModel> Agents { get; } = [];
+
+    /// <summary>The agents as the list shows them: <see cref="Agents"/> in its own order, or grouped by status.</summary>
+    public ObservableCollection<AgentViewModel> Listed { get; } = [];
+
+    /// <summary>Sort the list by status: waiting on you, then working, failed, done, saved. Otherwise newest first.</summary>
+    [ObservableProperty] public partial bool SortByStatus { get; set; }
+    partial void OnSortByStatusChanged(bool value) => Resort();
+
+    static int Rank(AgentViewModel a) => a.State switch
+    {
+        AgentState.NeedsYou => 0,
+        AgentState.Starting or AgentState.Working => 1,
+        AgentState.Exited => 2,
+        AgentState.Idle => a.TurnFailed ? 2 : 3,
+        _ => 4, // saved
+    };
+
+    /// <summary>Bring Listed into the wanted order by moving rows, so the selection and scroll stay put.</summary>
+    void Resort()
+    {
+        var want = SortByStatus ? Agents.OrderBy(Rank).ToList() : Agents.ToList(); // OrderBy is stable: ties keep list order
+        foreach (var gone in Listed.Where(a => !want.Contains(a)).ToList()) Listed.Remove(gone);
+        for (var i = 0; i < want.Count; i++)
+        {
+            if (i < Listed.Count && Listed[i] == want[i]) continue;
+            var at = Listed.IndexOf(want[i]);
+            if (at < 0) Listed.Insert(i, want[i]); else Listed.Move(at, i);
+        }
+    }
 
     /// <summary>Bench, shared by every project: the chats started in this project are listed here too, under their own heading.</summary>
     [ObservableProperty] public partial MascotViewModel? Mascot { get; set; }
@@ -101,6 +131,7 @@ public partial class AgentsViewModel : ObservableObject
         agent.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AgentViewModel.CanContinueAfterReset)) AnyOutOfUsage = Agents.Any(a => a.CanContinueAfterReset);
+            if (e.PropertyName is nameof(AgentViewModel.State) or nameof(AgentViewModel.TurnFailed) && SortByStatus) Resort();
             if (e.PropertyName != nameof(AgentViewModel.State)) return;
             NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
             if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
