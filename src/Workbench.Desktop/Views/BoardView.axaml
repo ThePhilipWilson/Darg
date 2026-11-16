@@ -41,7 +41,7 @@
                 ToolTip.Tip="Make a new board, or have an agent sort the cards into boards"/>
         <Button DockPanel.Dock="Right" Classes="primary" Content="+ Card" Command="{Binding NewCardCommand}" Margin="12,0,0,0"/>
         <CheckBox DockPanel.Dock="Right" Content="Show completed" IsChecked="{Binding ShowCompleted}" Margin="12,0,0,0"/>
-        <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+        <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
           <TextBlock Text="{Binding PickedText}" IsVisible="{Binding HasPicked}" VerticalAlignment="Center" Foreground="{StaticResource Accent}"/>
           <Button Classes="primary" Content="{Binding WorkOnPickedText}" Command="{Binding WorkOnPickedCommand}" IsVisible="{Binding CanWorkOnPicked}"
@@ -50,7 +50,7 @@
           <Button Content="Pick all" Command="{Binding PickAllCommand}"
                   ToolTip.Tip="Pick every card showing (Ctrl+A). A column's own Pick all picks just that column; Ctrl- or Shift-click picks one at a time."/>
         </StackPanel>
-        <TextBox Text="{Binding Filter}" PlaceholderText="Filter by ID, title or description…" MaxWidth="460" HorizontalAlignment="Left" MinWidth="280"/>
+        <TextBox Text="{Binding Filter}" PlaceholderText="Filter by ID, title or description…" MaxWidth="460" HorizontalAlignment="Left" MinWidth="60"/>
       </DockPanel>
     </Border>
 
