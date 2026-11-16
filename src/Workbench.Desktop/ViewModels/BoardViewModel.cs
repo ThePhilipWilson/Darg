@@ -168,6 +168,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             if (_project.Boards is null) break;
             if (!BoardStore.ReadCards(Path.Combine(_project.Boards, b)).Any(c => c.Id == id)) continue;
             if (SelectedBoard != b) SelectedBoard = b;
+            // a card made a moment ago (a ticket from a note) is on disk before the watcher's debounced
+            // reload has run, so the lists don't have it yet: read the board now rather than find nothing
+            if (_board?.AllCards.Any(c => c.Id == id) != true) Reload();
             Filter = "";
             foreach (var l in Labels) l.Mode = ChipMode.Off;
             if (!ShowCompleted && _board?.Lists[Board.Completed].Any(c => c.Id == id) == true) ShowCompleted = true;
