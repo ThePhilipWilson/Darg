@@ -9,9 +9,57 @@ namespace Workbench.Core;
 public abstract record AgentEvent;
 /// <param name="ApiKeySource">Where Claude Code's login comes from: "none" means no API key, so the
 /// person's Claude subscription; anything else names the API key's source (and real per-token cost).</param>
-public sealed record SessionStarted(string SessionId, string Model, string Cwd, string ApiKeySource = "none") : AgentEvent
+public sealed record SessionStarted(string SessionId, string Model, string Cwd, string ApiKeySource = "none", string PermissionMode = "") : AgentEvent
 {
     public bool OnSubscription => ApiKeySource is "" or "none";
+}
+/// <summary>The session's permission mode changed (asked for by the host, or by the agent itself, as when it leaves plan mode).</summary>
+public sealed record ModeChanged(string Mode) : AgentEvent;
+/// <summary>The session now runs on this model (its full name), after the host asked for a change.</summary>
+public sealed record ModelChanged(string Model) : AgentEvent;
+/// <summary>The session refused something the host asked of it (a model, mode or effort it won't take).</summary>
+public sealed record ControlFailed(string RequestId, string Error) : AgentEvent;
+
+/// <summary>One of the choices for a session setting: what Claude Code takes, and what the person reads.</summary>
+public sealed record AgentChoice(string Value, string Label)
+{
+    public override string ToString() => Label;
+}
+
+/// <summary>What can be changed in a running session (and given at the start of one): model, effort and
+/// permission mode. "default" leaves it to the person's own Claude settings. Bypass permissions is left out:
+/// a session refuses it unless it was launched with --dangerously-skip-permissions.</summary>
+public static class AgentChoices
+{
+    public const string Default = "default";
+
+    public static readonly IReadOnlyList<AgentChoice> Models =
+    [
+        new(Default, "Model: default"), new("opus", "Opus"), new("fable", "Fable"), new("sonnet", "Sonnet"), new("haiku", "Haiku"),
+    ];
+    public static readonly IReadOnlyList<AgentChoice> Efforts =
+    [
+        new(Default, "Effort: default"), new("low", "Effort: low"), new("medium", "Effort: medium"), new("high", "Effort: high"),
+        new("xhigh", "Effort: xhigh"), new("max", "Effort: max"),
+    ];
+    public static readonly IReadOnlyList<AgentChoice> Modes =
+    [
+        new(Default, "Ask before acting"), new("acceptEdits", "Accept edits"), new("auto", "Auto"), new("plan", "Plan"),
+        new("dontAsk", "Don't ask (deny unallowed)"),
+    ];
+
+    /// <summary>The flags that start (or resume) a session with these choices; a default adds nothing.</summary>
+    public static IEnumerable<string> LaunchArgs(string? model, string? effort, string? mode)
+    {
+        if (model is { Length: > 0 } and not Default) { yield return "--model"; yield return model; }
+        if (effort is { Length: > 0 } and not Default) { yield return "--effort"; yield return effort; }
+        if (mode is { Length: > 0 } and not Default) { yield return "--permission-mode"; yield return mode; }
+    }
+
+    /// <summary>The choice for a value: a known one, else a made-up entry so a value set elsewhere still shows.</summary>
+    public static AgentChoice Find(IReadOnlyList<AgentChoice> list, string? value) =>
+        list.FirstOrDefault(c => string.Equals(c.Value, value, StringComparison.OrdinalIgnoreCase))
+        ?? (string.IsNullOrEmpty(value) || value == "manual" ? list[0] : new AgentChoice(value, value));
 }
 public sealed record AssistantText(string Text) : AgentEvent;
 public sealed record ToolCall(string Id, string Name, JsonObject Input) : AgentEvent;
@@ -36,7 +84,17 @@ public static class StreamParser
         {
             case "system" when (string?)m["subtype"] == "init":
                 yield return new SessionStarted((string?)m["session_id"] ?? "", (string?)m["model"] ?? "", (string?)m["cwd"] ?? "",
-                    (string?)m["apiKeySource"] ?? "none");
+                    (string?)m["apiKeySource"] ?? "none", (string?)m["permissionMode"] ?? "");
+                break;
+            case "system" when (string?)m["subtype"] == "status" && (string?)m["permissionMode"] is { Length: > 0 } mode:
+                yield return new ModeChanged(mode);
+                break;
+            case "control_response":
+                var resp = m["response"];
+                if ((string?)resp?["subtype"] == "error")
+                    yield return new ControlFailed((string?)resp["request_id"] ?? "", (string?)resp["error"] ?? "refused");
+                else if ((string?)resp?["response"]?["model"] is { Length: > 0 } model)
+                    yield return new ModelChanged(model);
                 break;
             case "assistant":
                 foreach (var c in m["message"]?["content"] as JsonArray ?? [])
@@ -195,6 +253,27 @@ public sealed class AgentSession : IAsyncDisposable
     {
         ["type"] = "control_request", ["request_id"] = $"int-{Interlocked.Increment(ref _nextId)}",
         ["request"] = new JsonObject { ["subtype"] = "interrupt" },
+    });
+
+    /// <summary>Switch the session's model ("default" for the person's own). Takes effect from the next turn.</summary>
+    public void SetModel(string model) => Control(new JsonObject
+    {
+        ["subtype"] = "set_model", ["model"] = model == AgentChoices.Default ? null : model,
+    });
+
+    /// <summary>Switch the session's effort level ("default" for the person's own).</summary>
+    public void SetEffort(string effort) => Control(new JsonObject
+    {
+        ["subtype"] = "apply_flag_settings",
+        ["settings"] = new JsonObject { ["effortLevel"] = effort == AgentChoices.Default ? null : effort },
+    });
+
+    /// <summary>Switch the session's permission mode (default, acceptEdits, auto, plan, dontAsk).</summary>
+    public void SetPermissionMode(string mode) => Control(new JsonObject { ["subtype"] = "set_permission_mode", ["mode"] = mode });
+
+    void Control(JsonObject request) => SendRaw(new JsonObject
+    {
+        ["type"] = "control_request", ["request_id"] = $"set-{Interlocked.Increment(ref _nextId)}", ["request"] = request,
     });
 
     void Respond(string requestId, JsonObject response) => SendRaw(new JsonObject

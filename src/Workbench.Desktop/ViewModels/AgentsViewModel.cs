@@ -194,6 +194,39 @@ public partial class AgentViewModel : ObservableObject
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou))] public partial AgentState State { get; set; }
     [ObservableProperty] public partial string Compose { get; set; } = "";
     [ObservableProperty] public partial string Model { get; set; } = "";
+
+    // Model, effort and permission mode, changeable mid-chat. A running session is told at once (it takes
+    // effect from its next turn); a saved one starts with them when it resumes. Only what the person picked
+    // is saved: a mode the session reports (their default, or one the agent switched to) shows but isn't kept.
+    public IReadOnlyList<AgentChoice> ModelChoices => AgentChoices.Models;
+    public IReadOnlyList<AgentChoice> EffortChoices => AgentChoices.Efforts;
+    public IReadOnlyList<AgentChoice> ModeChoices => AgentChoices.Modes;
+    [ObservableProperty] public partial AgentChoice ModelChoice { get; set; } = AgentChoices.Models[0];
+    [ObservableProperty] public partial AgentChoice EffortChoice { get; set; } = AgentChoices.Efforts[0];
+    [ObservableProperty] public partial AgentChoice ModeChoice { get; set; } = AgentChoices.Modes[0];
+    string? _model, _effort, _mode;
+    bool _fromSession;
+
+    partial void OnModelChoiceChanged(AgentChoice value) => Picked(ref _model, value, s => s.SetModel(value.Value));
+    partial void OnEffortChoiceChanged(AgentChoice value) => Picked(ref _effort, value, s => s.SetEffort(value.Value));
+    partial void OnModeChoiceChanged(AgentChoice value) => Picked(ref _mode, value, s => s.SetPermissionMode(value.Value));
+
+    void Picked(ref string? field, AgentChoice? value, Action<AgentSession> tell)
+    {
+        if (_fromSession || value is null) return; // the session said so; nothing to tell it
+        field = value.Value == AgentChoices.Default ? null : value.Value;
+        if (_session is not null) tell(_session);
+        Save();
+    }
+
+    /// <summary>Show what the session reports without sending it back as a change.</summary>
+    void ShowMode(string mode)
+    {
+        _fromSession = true;
+        ModeChoice = AgentChoices.Find(AgentChoices.Modes, mode);
+        _fromSession = false;
+    }
+
     /// <summary>How the session is paid for: "on your subscription", or which API key it uses.</summary>
     [ObservableProperty] public partial string Billing { get; set; } = "";
     bool OnSubscription { get; set; } = true;
@@ -241,6 +274,12 @@ public partial class AgentViewModel : ObservableObject
     {
         Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; SessionId = r.SessionId; Project = r.Project;
         _args = r.Args; _created = r.Created; StoreFolder = storeFolder;
+        _model = r.Model; _effort = r.Effort; _mode = r.Mode;
+        _fromSession = true;
+        ModelChoice = AgentChoices.Find(AgentChoices.Models, r.Model);
+        EffortChoice = AgentChoices.Find(AgentChoices.Efforts, r.Effort);
+        ModeChoice = AgentChoices.Find(AgentChoices.Modes, r.Mode);
+        _fromSession = false;
         foreach (var i in r.Items) Items.Add(FromRecord(i));
         State = AgentState.Saved;
     }
@@ -250,7 +289,8 @@ public partial class AgentViewModel : ObservableObject
     {
         try
         {
-            var args = resume && SessionId is not null ? ["--resume", SessionId, .. _args] : _args;
+            List<string> args = resume && SessionId is not null ? ["--resume", SessionId, .. _args] : [.. _args];
+            args.AddRange(AgentChoices.LaunchArgs(_model, _effort, _mode));
             _session = AgentSession.Start(Cwd, extraArgs: args);
             _session.Event += e => Dispatcher.UIThread.Post(() => On(e));
             _session.Send(message);
@@ -272,6 +312,7 @@ public partial class AgentViewModel : ObservableObject
             AgentStore.Save(StoreFolder, new AgentRecord
             {
                 Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Project = Project, SessionId = SessionId, Args = _args,
+                Model = _model, Effort = _effort, Mode = _mode,
                 Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
             });
         }
@@ -307,8 +348,20 @@ public partial class AgentViewModel : ObservableObject
                 SessionId = s.SessionId;
                 OnSubscription = s.OnSubscription;
                 Billing = s.OnSubscription ? "on your subscription" : $"API key ({s.ApiKeySource})";
+                if (s.PermissionMode.Length > 0) ShowMode(s.PermissionMode);
                 State = AgentState.Working;
                 Save();
+                break;
+            case ModeChanged m:
+                ShowMode(m.Mode);
+                if (_mode is not null) _mode = m.Mode == AgentChoices.Default ? null : m.Mode; // left plan mode: resume where it is now
+                break;
+            case ModelChanged mc:
+                Model = mc.Model;
+                Items.Add(new NoteItem($"Model now {mc.Model}", false));
+                break;
+            case ControlFailed cf:
+                Items.Add(new NoteItem($"Couldn't change that: {cf.Error}", true));
                 break;
             case AssistantText t:
                 Items.Add(new TextItem(t.Text));
