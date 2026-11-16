@@ -18,6 +18,7 @@ public partial class CodeView : UserControl
     public CodeView()
     {
         InitializeComponent();
+        TabDrag.Attach(FileTabs, (from, to) => (DataContext as CodeViewModel)?.Tabs.Move(from, to));
         _textMate = Editor.InstallTextMate(Grammars);
         Tree.AddHandler(PointerReleasedEvent, (_, e) =>
         {

@@ -9,6 +9,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         var vm = new ViewModels.MainViewModel();
         DataContext = vm;
+        Views.TabDrag.Attach(ProjectTabs, vm.MoveProject);
         Activated += (_, _) => vm.WindowActive = true;
         Deactivated += (_, _) => vm.WindowActive = false;
         vm.BringToFront += () =>
