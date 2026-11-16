@@ -35,6 +35,10 @@
                       Command="{Binding OpenCommand}" CommandParameter="GitHub" ToolTip.Tip="GitHub: pull requests, issues, CI">
           <StackPanel><TextBlock Text="⎇" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="GitHub" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
         </ToggleButton>
+        <ToggleButton Classes="rail" IsChecked="{Binding OnPreview, Mode=OneWay}" IsVisible="{Binding Preview, Converter={x:Static ObjectConverters.IsNotNull}}"
+                      Command="{Binding OpenCommand}" CommandParameter="Preview" ToolTip.Tip="Preview: the site, live from its dev server">
+          <StackPanel><TextBlock Text="◉" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Site" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
+        </ToggleButton>
         <ToggleButton Classes="rail" IsChecked="{Binding OnTerminal, Mode=OneWay}" IsVisible="{Binding UsesTerminal}"
                       Command="{Binding OpenCommand}" CommandParameter="Terminal" ToolTip.Tip="Terminal">
           <StackPanel><TextBlock Text="▶" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Term" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
@@ -50,6 +54,7 @@
       <views:DocsView DataContext="{Binding Docs}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnDocs}"/>
       <views:AgentsView DataContext="{Binding Agents}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnAgents}"/>
       <views:ArtifactsView DataContext="{Binding Artifacts}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnArtifacts}"/>
+      <views:PreviewView DataContext="{Binding Preview}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnPreview}"/>
       <views:ConsolesView DataContext="{Binding Consoles}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnTerminal}"/>
     </Panel>
   </Grid>
