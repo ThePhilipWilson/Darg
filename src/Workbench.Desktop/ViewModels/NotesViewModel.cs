@@ -20,7 +20,7 @@ public partial class NotesViewModel : ObservableObject
     };
     public static IBrush BrushFor(string colour) => new SolidColorBrush(Paper.GetValueOrDefault(colour, Paper["yellow"]));
 
-    readonly FileSystemWatcher? _watch, _watchBoards;
+    readonly FileSystemWatcher? _watch, _watchBoards, _watchWall;
     readonly DispatcherTimer _debounce;
     List<Note> _all = [];
     List<Note> _archived = [];
@@ -81,7 +81,7 @@ public partial class NotesViewModel : ObservableObject
             chip.Changed += Apply;
             Colours.Add(chip);
         }
-        _debounce = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => { _debounce!.Stop(); Reload(); });
+        _debounce = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => { _debounce!.Stop(); Changed(); });
         Reload();
         try
         {
@@ -89,6 +89,9 @@ public partial class NotesViewModel : ObservableObject
             _watch = new FileSystemWatcher(folder, "*.md") { EnableRaisingEvents = true };
             void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
             _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
+            // the columns: Fettle's Organise may add some, or wall.json may be edited by hand
+            _watchWall = new FileSystemWatcher(folder, "wall.json") { EnableRaisingEvents = true };
+            _watchWall.Changed += Poke; _watchWall.Created += Poke; _watchWall.Deleted += Poke; _watchWall.Renamed += (s, e) => Poke(s, e);
         }
         catch (Exception e) { Status = $"Can't watch {folder}: {e.Message}"; }
         // a ticket moving on the board changes its note: completed sends the note to the archive
@@ -107,8 +110,72 @@ public partial class NotesViewModel : ObservableObject
     partial void OnFilterChanged(string value) { _notice = null; Apply(); }
     partial void OnShowArchiveChanged(bool value) { OnPropertyChanged(nameof(ArchiveText)); Apply(); }
 
+    /// <summary>The column whose header is being edited (a rename, or a remove waiting to be confirmed).
+    /// While it is, reloads from disk wait, so a half-typed name isn't thrown away.</summary>
+    NoteColumn? _held;
+    bool _reloadWaiting;
+    internal void Hold(NoteColumn column)
+    {
+        if (_held is not null && _held != column) { _held.IsRenaming = false; _held.ConfirmingRemove = false; }
+        _held = column;
+    }
+    internal void Release()
+    {
+        _held = null;
+        if (_reloadWaiting) Reload();
+    }
+    void Changed()
+    {
+        if (_held is not null) _reloadWaiting = true; else Reload();
+    }
+
+    /// <summary>Run a change to the wall's columns, then reload; a refusal (a bad name) shows on the column.</summary>
+    bool ChangeColumns(NoteColumn? column, Action change, string? notice = null)
+    {
+        try { change(); }
+        catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            if (column is not null) column.Error = e.Message; else Status = e.Message;
+            return false;
+        }
+        _notice = notice;
+        Reload();
+        return true;
+    }
+
+    internal void RenameColumn(NoteColumn c, string name)
+    {
+        if (name.Trim() == c.Name) { c.CancelRenameCommand.Execute(null); return; }
+        ChangeColumns(c, () => NoteStore.RenameColumn(Folder, c.Name, name));
+    }
+
+    internal void RemoveColumn(NoteColumn c)
+    {
+        var moved = 0;
+        ChangeColumns(c, () => moved = NoteStore.RemoveColumn(Folder, c.Name));
+        if (_notice is null && moved > 0) { _notice = $"Removed {c.Name}; {(moved == 1 ? "its note is" : $"its {moved} notes are")} in {ColumnNames[0]}"; Apply(); }
+    }
+
+    internal void ShiftColumn(NoteColumn c, int by) => ChangeColumns(c, () =>
+    {
+        // a column only notes name isn't on the wall yet: shifting it puts it there first
+        if (!ColumnNames.Contains(c.Name, StringComparer.OrdinalIgnoreCase)) NoteStore.AddColumn(Folder, c.Name);
+        NoteStore.ShiftColumn(Folder, c.Name, by);
+    });
+
+    /// <summary>A new column at the end of the wall's own columns, its name open to type over.</summary>
+    [RelayCommand]
+    void AddColumn()
+    {
+        var name = "";
+        if (!ChangeColumns(null, () => name = NoteStore.AddColumn(Folder))) return;
+        Columns.FirstOrDefault(c => c.Name == name)?.StartRenameCommand.Execute(null);
+    }
+
     public void Reload()
     {
+        if (_held is not null) { _held.IsRenaming = false; _held.ConfirmingRemove = false; _held = null; }
+        _reloadWaiting = false;
         try
         {
             _statuses = NoteStore.TicketStatuses(Boards);
@@ -156,8 +223,16 @@ public partial class NotesViewModel : ObservableObject
             if (!names.Contains(extra, StringComparer.OrdinalIgnoreCase)) names.Add(extra);
         Columns.Clear();
         foreach (var name in names)
+        {
+            var i = ColumnNames.ToList().FindIndex(c => c.Equals(name, StringComparison.OrdinalIgnoreCase));
+            var all = loose.Count(n => n.Column.Equals(name, StringComparison.OrdinalIgnoreCase));
             Columns.Add(new NoteColumn(name, loose.Where(n => n.Column.Equals(name, StringComparison.OrdinalIgnoreCase) && Keep(n))
-                .Select(n => new NoteViewModel(n, this) { IsPicked = _picked.Contains(n.Id) })));
+                .Select(n => new NoteViewModel(n, this) { IsPicked = _picked.Contains(n.Id) }))
+            {
+                Wall = this, All = all, CanShiftLeft = i != 0, CanShiftRight = i >= 0 && i < ColumnNames.Count - 1,
+                CanRemove = i < 0 || ColumnNames.Count > 1,
+            });
+        }
         // a note with a ticket leaves its column for Ticketed, where it shows how far its ticket has got
         if (_all.Any(n => n.Ticket.Length > 0))
             Columns.Add(new NoteColumn(NoteStore.Ticketed, _all.Where(n => n.Ticket.Length > 0 && Keep(n))
@@ -278,11 +353,35 @@ public partial class NotesViewModel : ObservableObject
 
 public sealed record ColourChoice(string Name, IBrush Brush, IRelayCommand Command);
 
-public sealed class NoteColumn(string name, IEnumerable<NoteViewModel> notes, bool isArchive = false)
+public sealed partial class NoteColumn(string name, IEnumerable<NoteViewModel> notes, bool isArchive = false) : ObservableObject
 {
     public string Name { get; } = name;
     public bool IsArchive { get; } = isArchive;
     public ObservableCollection<NoteViewModel> Notes { get; } = new(notes);
+
+    /// <summary>Set for the wall's own columns; Ticketed and the archive follow the tickets and can't be edited.</summary>
+    public NotesViewModel? Wall { get; init; }
+    public bool IsEditable => Wall is not null;
+    public int All { get; init; }
+    public bool CanShiftLeft { get; init; }
+    public bool CanShiftRight { get; init; }
+    public bool CanRemove { get; init; }
+
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsHeaderPlain))] public partial bool IsRenaming { get; set; }
+    [ObservableProperty] public partial string EditName { get; set; } = name;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsHeaderPlain))] public partial bool ConfirmingRemove { get; set; }
+    [ObservableProperty] public partial string Error { get; set; } = "";
+    public bool IsHeaderPlain => !IsRenaming && !ConfirmingRemove;
+    public string RemoveQuestion => All == 0 ? $"Remove {Name}?" : $"Remove {Name}? Its {(All == 1 ? "note goes" : $"{All} notes go")} to the first column.";
+
+    [RelayCommand] void StartRename() { if (Wall is null) return; EditName = Name; Error = ""; IsRenaming = true; Wall.Hold(this); }
+    [RelayCommand] void CommitRename() => Wall?.RenameColumn(this, EditName);
+    [RelayCommand] void CancelRename() { IsRenaming = false; Error = ""; Wall?.Release(); }
+    [RelayCommand] void ShiftLeft() => Wall?.ShiftColumn(this, -1);
+    [RelayCommand] void ShiftRight() => Wall?.ShiftColumn(this, 1);
+    [RelayCommand] void AskRemove() { if (Wall is null || !CanRemove) return; Error = ""; ConfirmingRemove = true; Wall.Hold(this); }
+    [RelayCommand] void Remove() => Wall?.RemoveColumn(this);
+    [RelayCommand] void KeepIt() { ConfirmingRemove = false; Error = ""; Wall?.Release(); }
 }
 
 public sealed partial class NoteViewModel(Note note, NotesViewModel wall, string? ticketStatus = null) : ObservableObject

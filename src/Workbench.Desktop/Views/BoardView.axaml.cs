@@ -10,13 +10,7 @@ namespace Workbench.Desktop.Views;
 /// picks every card showing (a column header's Pick all, just that column), Escape unpicks them; picked cards can each be given an agent in one go.</summary>
 public partial class BoardView : UserControl
 {
-    /// <summary>A column's name box takes the keyboard, its text selected, the moment it shows.</summary>
-    static BoardView() =>
-        IsVisibleProperty.Changed.AddClassHandler<TextBox>((box, e) =>
-        {
-            if (e.NewValue is not true || !box.Classes.Contains("rename")) return;
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => { box.Focus(); box.SelectAll(); }, Avalonia.Threading.DispatcherPriority.Input);
-        });
+    static BoardView() => RenameBox.Hook();
 
     public BoardView()
     {
@@ -62,4 +56,25 @@ public partial class BoardView : UserControl
             // clicks 1, 3, 5… start a pair; 2, 4, 6… finish a double (Windows keeps counting while the pointer stays put)
             if (e.ClickCount % 2 == 1) chip.PressStarts(); else chip.DoubleClick();
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+}
+
+/// <summary>A column's name box (a TextBox with the rename class, on the board or the notes wall) takes the
+/// keyboard, its text selected, the moment it shows: when it turns visible, or when it is made already
+/// visible (a column just added is built with its name open).</summary>
+static class RenameBox
+{
+    static bool _hooked;
+    public static void Hook()
+    {
+        if (_hooked) return;
+        _hooked = true;
+        Visual.IsVisibleProperty.Changed.AddClassHandler<TextBox>((box, e) => { if (e.NewValue is true) Grab(box); });
+        Control.LoadedEvent.AddClassHandler<TextBox>((box, _) => { if (box.IsVisible) Grab(box); });
+    }
+
+    static void Grab(TextBox box)
+    {
+        if (!box.Classes.Contains("rename")) return;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (box.IsEffectivelyVisible) { box.Focus(); box.SelectAll(); } }, Avalonia.Threading.DispatcherPriority.Input);
+    }
 }

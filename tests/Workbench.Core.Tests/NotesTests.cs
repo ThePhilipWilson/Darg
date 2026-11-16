@@ -172,3 +172,80 @@ public sealed class NoteStoreTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dir, true);
 }
+
+public sealed class WallColumnTests : IDisposable
+{
+    readonly string _dir = Directory.CreateTempSubdirectory("wb-wallcols-").FullName;
+
+    Note Put(string id, string column, string ticket = "") => NoteStore.Save(_dir, new Note(id, "text " + id, column, "yellow", [], "2026-11-16 10:00", ticket));
+
+    [Fact]
+    public void Adding_starts_from_the_default_columns_and_numbers_new_ones()
+    {
+        Assert.Equal("New column", NoteStore.AddColumn(_dir));
+        Assert.Equal("New column 2", NoteStore.AddColumn(_dir));
+        Assert.Equal([.. NoteStore.DefaultColumns, "New column", "New column 2"], NoteStore.Columns(_dir));
+    }
+
+    [Fact]
+    public void Renaming_moves_its_notes_with_it_archived_ones_too_and_keeps_other_wall_settings()
+    {
+        File.WriteAllText(Path.Combine(_dir, "wall.json"), """{"columns":["Loose","Ideas"],"other":1}""");
+        Put("a", "Ideas"); Put("b", "Loose");
+        NoteStore.Save(NoteStore.ArchiveFolder(_dir), new Note("c", "old", "Ideas", "yellow", [], "2026-11-16 10:00", "WOR-0001"));
+        NoteStore.RenameColumn(_dir, "Ideas", "  Someday   maybe ");
+        Assert.Equal(["Loose", "Someday maybe"], NoteStore.Columns(_dir));
+        Assert.Equal("Someday maybe", NoteStore.List(_dir).Single(n => n.Id == "a").Column);
+        Assert.Equal("Loose", NoteStore.List(_dir).Single(n => n.Id == "b").Column);
+        Assert.Equal("Someday maybe", NoteStore.Archived(_dir).Single().Column);
+        Assert.Contains("\"other\": 1", File.ReadAllText(Path.Combine(_dir, "wall.json")));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Ticketed")]
+    [InlineData("archive")]
+    [InlineData("parked")] // another column's name, in any case
+    public void Bad_names_are_refused(string name) =>
+        Assert.Throws<InvalidOperationException>(() => NoteStore.RenameColumn(_dir, "Loose", name));
+
+    [Fact]
+    public void A_case_only_rename_is_allowed()
+    {
+        NoteStore.RenameColumn(_dir, "Loose", "loose");
+        Assert.Equal("loose", NoteStore.Columns(_dir)[0]);
+    }
+
+    [Fact]
+    public void A_column_only_notes_name_joins_the_wall_when_renamed()
+    {
+        Put("a", "Stray");
+        NoteStore.RenameColumn(_dir, "Stray", "Kept");
+        Assert.Equal([.. NoteStore.DefaultColumns, "Kept"], NoteStore.Columns(_dir));
+        Assert.Equal("Kept", NoteStore.List(_dir).Single().Column);
+    }
+
+    [Fact]
+    public void Removing_sends_its_loose_notes_to_the_first_column_and_the_last_one_stays()
+    {
+        Put("a", "Thinking about"); Put("b", "Thinking about", "WOR-0002"); Put("c", "Loose");
+        Assert.Equal(1, NoteStore.RemoveColumn(_dir, "Thinking about")); // the ticketed one moves but isn't counted: it shows in Ticketed
+        Assert.Equal(["Loose", "Parked"], NoteStore.Columns(_dir));
+        Assert.All(NoteStore.List(_dir), n => Assert.Equal("Loose", n.Column));
+        NoteStore.RemoveColumn(_dir, "Loose");
+        Assert.Equal("Parked", NoteStore.List(_dir).Single(n => n.Id == "c").Column);
+        Assert.Throws<InvalidOperationException>(() => NoteStore.RemoveColumn(_dir, "Parked"));
+    }
+
+    [Fact]
+    public void Shifting_swaps_with_a_neighbour_and_stops_at_the_ends()
+    {
+        NoteStore.ShiftColumn(_dir, "Parked", -1);
+        Assert.Equal(["Loose", "Parked", "Thinking about"], NoteStore.Columns(_dir));
+        NoteStore.ShiftColumn(_dir, "Loose", -1);
+        NoteStore.ShiftColumn(_dir, "Thinking about", 1);
+        Assert.Equal(["Loose", "Parked", "Thinking about"], NoteStore.Columns(_dir));
+    }
+
+    public void Dispose() => Directory.Delete(_dir, true);
+}
