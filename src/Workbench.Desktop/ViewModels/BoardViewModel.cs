@@ -15,6 +15,13 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     DispatcherTimer? _debounce;
     Board? _board;
 
+    /// <summary>Set by the project: the live agent working on a card, if any.</summary>
+    public Func<string, AgentViewModel?>? AgentFor { get; set; }
+    /// <summary>Set by the project: start an agent on a card (the card's file path is passed).</summary>
+    public Action<Card, string>? WorkOn { get; set; }
+    /// <summary>Set by the project: show an agent.</summary>
+    public Action<AgentViewModel>? OpenAgent { get; set; }
+
     public ObservableCollection<string> Boards { get; } = [];
     public ObservableCollection<ListViewModel> Lists { get; } = [];
     public ObservableCollection<LabelChip> Labels { get; } = [];
@@ -74,9 +81,22 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             if (id == Board.Completed && !ShowCompleted) continue;
             var cards = _board.Lists[id].Where(Keep).ToList();
             total += cards.Count;
-            Lists.Add(new ListViewModel(this, id, name, cards.Select(c => new CardViewModel(c, targets, this)), _board.Lists[id].Count));
+            Lists.Add(new ListViewModel(this, id, name, cards.Select(c => new CardViewModel(c, targets, this, AgentFor?.Invoke(c.Id))), _board.Lists[id].Count));
         }
         Status = $"{total} of {_board.AllCards.Count()} cards";
+    }
+
+    /// <summary>Start an agent on a card: it goes to the board's working column ("In Progress", else
+    /// the first column) if it was waiting in the backlog or the first column, and the agent opens.</summary>
+    public void StartWork(CardViewModel card)
+    {
+        if (Folder is null || _board is null || WorkOn is null) return;
+        var working = _board.Columns.FirstOrDefault(c => c.Name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) ?? _board.Columns.FirstOrDefault();
+        var place = BoardStore.PlaceOf(card.Card.Status, _board.Columns);
+        WorkOn(card.Card, Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File)));
+        if (working is not null && (place == Board.Backlog || place == _board.Columns[0].Id) && place != working.Id)
+            Move(card, working.Id);
+        else Reload();
     }
 
     public void Move(CardViewModel card, string toList, string? beforeId = null)
@@ -127,11 +147,22 @@ public sealed class CardViewModel
     public IReadOnlyList<string> Labels => Card.Labels;
     public string Description => Card.Description;
     public IReadOnlyList<MoveTarget> MoveTargets { get; }
+    /// <summary>The agent working on this card (its state shows on the card, live), if any.</summary>
+    public AgentViewModel? Agent { get; }
+    public bool HasAgent => Agent is not null;
+    public IRelayCommand WorkOnCommand { get; }
+    public IRelayCommand OpenAgentCommand { get; }
 
-    public CardViewModel(Card card, IEnumerable<(string Id, string Name)> lists, BoardViewModel board)
+    public CardViewModel(Card card, IEnumerable<(string Id, string Name)> lists, BoardViewModel board, AgentViewModel? agent = null)
     {
         Card = card;
-        MoveTargets = lists.Select(l => new MoveTarget("Move to " + l.Name, new RelayCommand(() => board.Move(this, l.Id)))).ToList();
+        Agent = agent;
+        WorkOnCommand = new RelayCommand(() => board.StartWork(this));
+        OpenAgentCommand = new RelayCommand(() => { if (Agent is not null) board.OpenAgent?.Invoke(Agent); });
+        MoveTargets = [
+            new MoveTarget(agent is null ? "Work on this with an agent" : "Open its agent", agent is null ? WorkOnCommand : OpenAgentCommand),
+            .. lists.Select(l => new MoveTarget("Move to " + l.Name, new RelayCommand(() => board.Move(this, l.Id)))),
+        ];
     }
 }
 

@@ -20,6 +20,9 @@ public partial class AgentsViewModel(ProjectConfig project) : ObservableObject
     /// <summary>Something the person may want to hear about: (agent, what happened, detail).</summary>
     public event Action<AgentViewModel, string, string>? Notify;
     public AgentViewModel? Find(string id) => Agents.FirstOrDefault(a => a.Id == id);
+    /// <summary>The newest agent started on a card that hasn't ended.</summary>
+    public AgentViewModel? ForCard(string cardId) =>
+        Agents.LastOrDefault(a => a.CardId == cardId && a.State != AgentState.Exited);
 
     [RelayCommand]
     void StartAgent()
@@ -30,9 +33,9 @@ public partial class AgentsViewModel(ProjectConfig project) : ObservableObject
         NewPrompt = "";
     }
 
-    public void Start(string prompt, string? cwd = null)
+    public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null)
     {
-        var agent = new AgentViewModel(string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd, prompt);
+        var agent = new AgentViewModel(string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd, prompt, cardId, name);
         agent.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(AgentViewModel.State)) return;
@@ -42,6 +45,21 @@ public partial class AgentsViewModel(ProjectConfig project) : ObservableObject
         agent.Notify += (what, detail) => Notify?.Invoke(agent, what, detail);
         Agents.Add(agent);
         Selected = agent;
+        return agent;
+    }
+
+    /// <summary>The prompt for working on a card: the card itself, where its file is, and the house rules.</summary>
+    public static string CardPrompt(string projectName, Card card, string file)
+    {
+        var lines = new List<string> { $"Work on this card from the {projectName} board.", "", $"{card.Id}: {card.Title}" };
+        if (card.Labels.Count > 0) lines.Add($"Labels: {string.Join(", ", card.Labels)}");
+        if (card.Priority.Length > 0) lines.Add($"Priority: {card.Priority}");
+        lines.Add($"Card file: {file}");
+        if (card.Description.Length > 0) { lines.Add(""); lines.Add(card.Description); }
+        lines.Add("");
+        lines.Add("Read the project's CLAUDE.md first. Use AskUserQuestion when a choice is mine to make. " +
+                  "When you stop, say what is done and what is left. Leave the card's Status alone: I move cards.");
+        return string.Join(Environment.NewLine, lines);
     }
 }
 
@@ -57,23 +75,27 @@ public partial class AgentViewModel : ObservableObject
 
     public ObservableCollection<TranscriptItem> Items { get; } = [];
     public string Id { get; } = Guid.NewGuid().ToString("N")[..10];
+    /// <summary>The board card this agent was started on, if any.</summary>
+    public string? CardId { get; }
     public event Action<string, string>? Notify;
     public string Name { get; }
     public string Cwd { get; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working))] public partial AgentState State { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou))] public partial AgentState State { get; set; }
     [ObservableProperty] public partial string Compose { get; set; } = "";
     [ObservableProperty] public partial string Model { get; set; } = "";
     public bool Working => State is AgentState.Working or AgentState.Starting;
+    public bool NeedsYou => State == AgentState.NeedsYou;
     public string StateText => State switch
     {
         AgentState.Starting => "starting", AgentState.Working => "working", AgentState.NeedsYou => "needs you",
         AgentState.Idle => "idle", _ => "ended",
     };
 
-    public AgentViewModel(string cwd, string prompt)
+    public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null)
     {
         Cwd = cwd;
-        Name = prompt.Length > 40 ? prompt[..40].TrimEnd() + "…" : prompt;
+        CardId = cardId;
+        Name = name ?? (prompt.Length > 40 ? prompt[..40].TrimEnd() + "…" : prompt);
         Items.Add(new UserItem(prompt));
         try
         {

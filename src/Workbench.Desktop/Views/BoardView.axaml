@@ -56,10 +56,12 @@
                           </Border.ContextMenu>
                           <StackPanel Spacing="4">
                             <DockPanel>
-                              <Border DockPanel.Dock="Right" IsVisible="{Binding HasPriority}" Background="#3a3020" CornerRadius="8" Padding="6,0">
+                              <Button DockPanel.Dock="Right" Classes="workon" Content="▶ Work on" Command="{Binding WorkOnCommand}"
+                                      IsVisible="{Binding !HasAgent}" ToolTip.Tip="Start an agent on this card"/>
+                              <Border DockPanel.Dock="Right" IsVisible="{Binding HasPriority}" Background="#3a3020" CornerRadius="8" Padding="6,0" Margin="0,0,6,0">
                                 <TextBlock Text="{Binding Priority}" FontSize="10" Foreground="{StaticResource Accent}"/>
                               </Border>
-                              <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}"/>
+                              <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}" VerticalAlignment="Center"/>
                             </DockPanel>
                             <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
                             <ItemsControl ItemsSource="{Binding Labels}">
@@ -70,6 +72,13 @@
                                 </DataTemplate>
                               </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <Button IsVisible="{Binding HasAgent}" Command="{Binding OpenAgentCommand}" Classes="agentline"
+                                    Classes.needs="{Binding Agent.NeedsYou, FallbackValue=False}" ToolTip.Tip="Open this card's agent">
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Ellipse Width="7" Height="7" Classes="dot"/>
+                                <TextBlock FontSize="11" Text="{Binding Agent.StateText, StringFormat='agent {0}', FallbackValue=''}"/>
+                              </StackPanel>
+                            </Button>
                           </StackPanel>
                         </Border>
                       </DataTemplate>

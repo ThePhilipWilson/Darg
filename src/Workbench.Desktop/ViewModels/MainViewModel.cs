@@ -102,6 +102,18 @@ public partial class ProjectViewModel : ObservableObject
         if (config.Uses(Features.Board)) Board = new BoardViewModel(config);
         if (config.Uses(Features.Agents)) Agents = new AgentsViewModel(config);
         Section = Board is not null ? Section.Board : Agents is not null ? Section.Agents : Section.Terminal;
+        if (Board is not null && Agents is not null)
+        {
+            Board.AgentFor = Agents.ForCard;
+            Board.OpenAgent = a => { Agents.Selected = a; Section = Section.Agents; };
+            Board.WorkOn = (card, file) =>
+            {
+                var a = Agents.Start(AgentsViewModel.CardPrompt(Name, card, file), cardId: card.Id, name: $"{card.Id} {card.Title}");
+                // the card shows the agent's state; when the agent ends, the card drops its link
+                a.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State) && a.State == AgentState.Exited) Board.Reload(); };
+                Section = Section.Agents;
+            };
+        }
     }
 
     partial void OnSectionChanged(Section value)

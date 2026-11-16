@@ -67,6 +67,31 @@
       <Setter Property="Margin" Value="0,2"/>
       <Setter Property="CornerRadius" Value="10"/>
     </Style>
+    <Style Selector="Button.workon">
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="Padding" Value="6,1"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="Opacity" Value="0.35"/>
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Border.card:pointerover Button.workon">
+      <Setter Property="Opacity" Value="1"/>
+    </Style>
+    <Style Selector="Button.agentline">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="0,2"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="Foreground" Value="{StaticResource Ok}"/>
+    </Style>
+    <Style Selector="Button.agentline Ellipse.dot">
+      <Setter Property="Fill" Value="{StaticResource Ok}"/>
+    </Style>
+    <Style Selector="Button.agentline.needs">
+      <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+    </Style>
+    <Style Selector="Button.agentline.needs Ellipse.dot">
+      <Setter Property="Fill" Value="{StaticResource Accent}"/>
+    </Style>
     <Style Selector="Button.primary">
       <Setter Property="Background" Value="{StaticResource Accent}"/>
       <Setter Property="Foreground" Value="#1a1408"/>
