@@ -42,6 +42,16 @@ public sealed class StreamParserTests
     }
 
     [Fact]
+    public void Images_in_a_tool_result_come_through_as_bytes()
+    {
+        var b64 = Convert.ToBase64String([0x89, 0x50, 0x4E, 0x47]);
+        var r = Assert.IsType<ToolResult>(Assert.Single(StreamParser.Parse(
+            $$$"""{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t9","content":[{"type":"text","text":"drew it"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"{{{b64}}}"}}]}]}}""")));
+        Assert.Equal("drew it", r.Text);
+        Assert.Equal([0x89, 0x50, 0x4E, 0x47], Assert.Single(r.Images!));
+    }
+
+    [Fact]
     public void A_question_arrives_as_a_permission_request_needing_the_person()
     {
         // As captured from Claude Code 2.1.325 on 2026-11-16.

@@ -42,6 +42,20 @@
             <TextBlock Text="{Binding Summary}" Classes="dim mono" TextTrimming="CharacterEllipsis"/>
           </DockPanel>
           <Image Source="{Binding Image}" IsVisible="{Binding HasImage}" MaxHeight="420" HorizontalAlignment="Left" Margin="9,0,9,9" Stretch="Uniform"/>
+          <!-- what the step made: thumbnails, click for the full image -->
+          <ItemsControl ItemsSource="{Binding Gallery}" IsVisible="{Binding HasGallery}" Margin="9,0,9,9">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:PreviewImage">
+                <Button Command="{Binding OpenCommand}" Padding="0" Margin="0,0,8,8" Background="Transparent" Cursor="Hand"
+                        ToolTip.Tip="{Binding Path}" AutomationProperties.Name="{Binding Name}">
+                  <Border CornerRadius="4" ClipToBounds="True" BorderBrush="{StaticResource Line}" BorderThickness="1">
+                    <Image Source="{Binding Thumb}" Height="260" Stretch="Uniform"/>
+                  </Border>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
           <StackPanel IsVisible="{Binding HasDiff}">
             <Border Background="{StaticResource DelBg}" Padding="10,4" IsVisible="{Binding Removed, Converter={x:Static ObjectConverters.IsNotNull}}">
               <SelectableTextBlock Classes="mono" Foreground="#f0a0a0" Text="{Binding Removed}" TextWrapping="Wrap"/>

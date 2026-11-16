@@ -17,6 +17,8 @@ public sealed class ItemRecord
     public string? Added { get; set; }
     public string? Preview { get; set; }
     public string? Result { get; set; }
+    /// <summary>A tool step's preview images (files), shown again when the transcript comes back.</summary>
+    public List<string>? Images { get; set; }
 }
 
 /// <summary>An agent as saved between runs of Workbench: enough to list it, show what it did, and

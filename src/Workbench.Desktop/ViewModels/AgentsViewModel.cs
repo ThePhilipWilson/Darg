@@ -247,7 +247,8 @@ public partial class AgentViewModel : ObservableObject
         UserItem u => new() { Kind = "user", Text = u.Text },
         TextItem t => new() { Kind = "text", Text = t.Text },
         NoteItem n => new() { Kind = "note", Text = n.Text, Bad = n.Bad },
-        ToolItem t => new() { Kind = "tool", Name = t.Name, Summary = t.Summary, ImagePath = t.ImagePath, Removed = t.Removed, Added = t.Added, Preview = t.Preview, Result = t.Result, Bad = t.IsError },
+        ToolItem t => new() { Kind = "tool", Name = t.Name, Summary = t.Summary, ImagePath = t.ImagePath, Removed = t.Removed, Added = t.Added, Preview = t.Preview, Result = t.Result, Bad = t.IsError,
+            Images = t.Gallery.Count > 0 ? t.Gallery.Select(g => g.Path).ToList() : null },
         QuestionItem q => new() { Kind = "note", Text = "Asked: " + string.Join(" / ", q.Questions.Select(g => g.Question + (g.Chosen is null ? "" : $" → {g.Chosen}"))) },
         PermissionItem p => new() { Kind = "note", Text = $"Wanted {p.Tool}: {p.Decision ?? "no answer"}" },
         _ => null,
@@ -282,7 +283,7 @@ public partial class AgentViewModel : ObservableObject
                 Items.Add(item);
                 break;
             case ToolResult r when _tools.TryGetValue(r.ToolUseId, out var tool):
-                tool.SetResult(r.Text, r.IsError);
+                tool.SetResult(r, Cwd);
                 break;
             case PermissionAsked { ToolName: "AskUserQuestion" } q:
                 var question = new QuestionItem(q, this);
@@ -388,13 +389,50 @@ public sealed partial class ToolItem : TranscriptItem
     [ObservableProperty] public partial bool IsError { get; set; }
     [ObservableProperty] public partial bool Done { get; set; }
 
-    public void SetResult(string text, bool error)
+    /// <summary>Images the step made or pointed at (a generator's output, a script's saved file, an image
+    /// the tool sent back): thumbnails under the step; click one for the full image.</summary>
+    public ObservableCollection<PreviewImage> Gallery { get; } = [];
+    [ObservableProperty] public partial bool HasGallery { get; set; }
+    /// <summary>The call's input as text, kept to look for image paths when its result comes.</summary>
+    public string InputText { get; init; } = "";
+
+    public void SetResult(ToolResult r, string cwd)
     {
         Done = true;
-        IsError = error;
+        IsError = r.IsError;
         // Successful results are noise in the transcript; errors and short outputs are worth a line.
-        if (error || Name is "Bash" or "PowerShell" or "Grep" or "Glob")
-            Result = text.Length > 1200 ? text[..1200] + "\n…" : text;
+        if (r.IsError || Name is "Bash" or "PowerShell" or "Grep" or "Glob")
+            Result = r.Text.Length > 1200 ? r.Text[..1200] + "\n…" : r.Text;
+        if (r.IsError) return;
+        // images the tool sent back: kept as files so they come back with the transcript
+        foreach (var bytes in r.Images ?? [])
+        {
+            try
+            {
+                var dir = Path.Combine(InstanceConfig.Folder(), "previews");
+                Directory.CreateDirectory(dir);
+                var file = Path.Combine(dir, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..6]}.png");
+                File.WriteAllBytes(file, bytes);
+                AddPreview(file);
+            }
+            catch (Exception) { }
+        }
+        // images the result or the call names (not ones only searched for: a Glob's list of matches isn't a picture to show)
+        if (Name is "Glob" or "Grep") return;
+        foreach (var p in ImagePaths.Find(r.Text + "\n" + InputText, cwd))
+            if (!string.Equals(p, ImagePath, StringComparison.OrdinalIgnoreCase)) AddPreview(p);
+    }
+
+    public void AddPreview(string path)
+    {
+        if (Gallery.Count >= 12 || Gallery.Any(g => string.Equals(g.Path, path, StringComparison.OrdinalIgnoreCase))) return;
+        try
+        {
+            using var f = File.OpenRead(path);
+            Gallery.Add(new PreviewImage(path, Bitmap.DecodeToHeight(f, 260)));
+            HasGallery = true;
+        }
+        catch (Exception) { }
     }
 
     public static ToolItem From(ToolCall c)
@@ -415,18 +453,20 @@ public sealed partial class ToolItem : TranscriptItem
         }
         if (c.Name == "Write" && image is null) preview = Clip(S("content"));
         return new ToolItem { Name = c.Name, Summary = summary, Image = image, ImagePath = image is null ? null : path,
-            Removed = removed, Added = added, Preview = preview };
+            Removed = removed, Added = added, Preview = preview, InputText = c.Input.ToJsonString() };
     }
 
     /// <summary>A tool line from a saved transcript (its image read again from disk if it's still there).</summary>
     public static ToolItem Restore(ItemRecord r)
     {
         var image = AgentViewModel.IsImage(r.ImagePath) && File.Exists(r.ImagePath) ? TryLoad(r.ImagePath!) : null;
-        return new ToolItem
+        var item = new ToolItem
         {
             Name = r.Name ?? "", Summary = r.Summary ?? "", Image = image, ImagePath = image is null ? null : r.ImagePath,
             Removed = r.Removed, Added = r.Added, Preview = r.Preview, Result = r.Result, IsError = r.Bad, Done = true,
         };
+        foreach (var p in r.Images ?? []) if (File.Exists(p)) item.AddPreview(p);
+        return item;
     }
 
     static string? Clip(string? s)
@@ -513,4 +553,16 @@ public sealed class QuestionOption(string label, string description, QuestionIte
     public string Label { get; } = label;
     public string Description { get; } = description;
     public IRelayCommand Command { get; } = new RelayCommand(() => owner.Pick(question, label));
+}
+
+/// <summary>A thumbnail of an image a step made; clicking it opens the full image in the system's viewer.</summary>
+public sealed class PreviewImage(string path, Bitmap thumb)
+{
+    public string Path { get; } = path;
+    public Bitmap Thumb { get; } = thumb;
+    public string Name { get; } = System.IO.Path.GetFileName(path);
+    public IRelayCommand OpenCommand { get; } = new RelayCommand(() =>
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true }); } catch (Exception) { }
+    });
 }

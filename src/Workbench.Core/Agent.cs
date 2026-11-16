@@ -15,7 +15,8 @@ public sealed record SessionStarted(string SessionId, string Model, string Cwd, 
 }
 public sealed record AssistantText(string Text) : AgentEvent;
 public sealed record ToolCall(string Id, string Name, JsonObject Input) : AgentEvent;
-public sealed record ToolResult(string ToolUseId, string Text, bool IsError) : AgentEvent;
+/// <param name="Images">Images the tool returned in its result (an MCP tool's image content), as file bytes.</param>
+public sealed record ToolResult(string ToolUseId, string Text, bool IsError, IReadOnlyList<byte[]>? Images = null) : AgentEvent;
 /// <summary>The session needs the host's say before a tool runs. AskUserQuestion arrives this way too
 /// (RequiresUser is true): it is answered by allowing it with the answers added to its input.</summary>
 public sealed record PermissionAsked(string RequestId, string ToolName, JsonObject Input, bool RequiresUser) : AgentEvent;
@@ -55,7 +56,8 @@ public static class StreamParser
             case "user":
                 foreach (var c in m["message"]?["content"] as JsonArray ?? [])
                     if ((string?)c?["type"] == "tool_result")
-                        yield return new ToolResult((string?)c["tool_use_id"] ?? "", ResultText(c["content"]), (bool?)c["is_error"] ?? false);
+                        yield return new ToolResult((string?)c["tool_use_id"] ?? "", ResultText(c["content"]), (bool?)c["is_error"] ?? false,
+                            ResultImages(c["content"]));
                 break;
             case "control_request" when ((string?)(m["request"]?["subtype"])) == "can_use_tool":
                 var r = m["request"]!;
@@ -66,6 +68,15 @@ public static class StreamParser
                 yield return new TurnFinished((bool?)m["is_error"] ?? false, (string?)m["result"] ?? "", (double?)m["total_cost_usd"]);
                 break;
         }
+    }
+
+    static List<byte[]> ResultImages(JsonNode? content)
+    {
+        var images = new List<byte[]>();
+        foreach (var block in content as JsonArray ?? [])
+            if ((string?)block?["type"] == "image" && (string?)block?["source"]?["data"] is { Length: > 0 } b64)
+                try { images.Add(Convert.FromBase64String(b64)); } catch (FormatException) { }
+        return images;
     }
 
     static string ResultText(JsonNode? content) => content switch
