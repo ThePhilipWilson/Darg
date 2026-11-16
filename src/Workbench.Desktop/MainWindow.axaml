@@ -11,6 +11,8 @@
       <DockPanel Height="40">
         <TextBlock DockPanel.Dock="Left" Text="◆ Workbench" FontWeight="Bold" Foreground="{StaticResource Accent}"
                    VerticalAlignment="Center" Margin="14,0,16,0"/>
+        <Button DockPanel.Dock="Right" Content="⚙ Setup" Command="{Binding OpenSetupCommand}" Background="Transparent"
+                VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Which projects this instance has, and which features each uses"/>
         <ListBox ItemsSource="{Binding Projects}" SelectedItem="{Binding Selected}" Background="Transparent"
                  VerticalAlignment="Bottom">
           <ListBox.ItemsPanel>
@@ -54,10 +56,9 @@
       </ItemsControl.ItemTemplate>
     </ItemsControl>
 
-    <StackPanel Grid.Row="1" IsVisible="{Binding Empty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-      <TextBlock Text="No projects in this instance yet." FontSize="16"/>
-      <TextBlock Classes="dim" Text="Add them to:"/>
-      <SelectableTextBlock Classes="mono" Text="{Binding InstanceFile}"/>
+    <StackPanel Grid.Row="1" IsVisible="{Binding Empty}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+      <TextBlock Text="No projects in this instance yet." FontSize="16" HorizontalAlignment="Center"/>
+      <Button Classes="primary" Content="⚙ Set up projects" Command="{Binding OpenSetupCommand}" HorizontalAlignment="Center"/>
     </StackPanel>
 
     <!-- Bench, the mascot: a box for talking to an assistant that can act on any project -->
@@ -109,6 +110,13 @@
         </Panel>
       </Button>
     </StackPanel>
+
+    <!-- Setup covers the projects while it's open -->
+    <ContentControl Grid.Row="1" Content="{Binding Setup}" IsVisible="{Binding Setup, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <ContentControl.DataTemplates>
+        <DataTemplate DataType="vm:SetupViewModel"><views:SetupView/></DataTemplate>
+      </ContentControl.DataTemplates>
+    </ContentControl>
 
     <Border Grid.Row="2" Background="{StaticResource Chrome}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
       <TextBlock Classes="dim small" Text="{Binding Selected.StatusLine, FallbackValue=''}"/>

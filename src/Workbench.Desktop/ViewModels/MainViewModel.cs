@@ -19,13 +19,7 @@ public partial class MainViewModel : ObservableObject
     {
         var config = InstanceConfig.Load();
         InstanceFile = InstanceConfig.FilePath();
-        foreach (var p in config.Projects)
-        {
-            var vm = new ProjectViewModel(p);
-            if (vm.Agents is { } agents)
-                agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
-            Projects.Add(vm);
-        }
+        foreach (var p in config.Projects) Projects.Add(Make(p));
         Mascot = new MascotViewModel(config.Projects);
         Mascot.Notify += (agent, what, detail) =>
         {
@@ -34,6 +28,38 @@ public partial class MainViewModel : ObservableObject
         Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
         Selected = Projects.FirstOrDefault();
         DevHooks();
+    }
+
+    ProjectViewModel Make(ProjectConfig p)
+    {
+        var vm = new ProjectViewModel(p);
+        if (vm.Agents is { } agents)
+            agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
+        return vm;
+    }
+
+    // ---------------------------------------------------------------- Setup
+    [ObservableProperty] public partial SetupViewModel? Setup { get; set; }
+    [RelayCommand] void OpenSetup() => Setup = new SetupViewModel(this, InstanceConfig.Load());
+    public void CloseSetup() => Setup = null;
+
+    /// <summary>A saved instance config, applied: projects whose settings didn't change stay exactly as
+    /// they are (their agents and terminals keep running); changed ones are rebuilt; removed ones close.</summary>
+    public void Apply(InstanceConfig config)
+    {
+        var old = Projects.ToDictionary(p => p.Config.Id, StringComparer.OrdinalIgnoreCase);
+        var keep = new List<ProjectViewModel>();
+        foreach (var c in config.Projects)
+            keep.Add(old.TryGetValue(c.Id, out var vm) && SetupViewModel.Same(vm.Config, c) ? vm : Make(c));
+        foreach (var gone in Projects.Where(p => !keep.Contains(p)).ToList()) gone.Close();
+        var selectedId = Selected?.Config.Id;
+        Projects.Clear();
+        foreach (var p in keep) Projects.Add(p);
+        Selected = Projects.FirstOrDefault(p => p.Config.Id == selectedId) ?? Projects.FirstOrDefault();
+        foreach (var p in Projects) p.IsActive = p == Selected;
+        Mascot.Projects = config.Projects;
+        OnPropertyChanged(nameof(Empty));
+        Setup = null;
     }
 
     /// <summary>For checking the app without clicking: WORKBENCH_SECTION opens a section of the first
@@ -138,4 +164,11 @@ public partial class ProjectViewModel : ObservableObject
     }
 
     [RelayCommand] void Open(string section) => Section = Enum.Parse<Section>(section);
+
+    /// <summary>The project is leaving the app (removed or changed in Setup): stop its agents and its watcher.</summary>
+    public void Close()
+    {
+        foreach (var a in Agents?.Agents ?? []) a.End();
+        Board?.Dispose();
+    }
 }

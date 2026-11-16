@@ -172,6 +172,14 @@ public partial class AgentViewModel : ObservableObject
     [RelayCommand]
     void Stop() => _session?.Interrupt();
 
+    /// <summary>End the session for good (its project is closing).</summary>
+    public void End()
+    {
+        var s = _session;
+        _session = null;
+        if (s is not null) _ = s.DisposeAsync().AsTask();
+    }
+
     internal void Answered(TranscriptItem item, Action<AgentSession> respond)
     {
         if (_session is null) return;

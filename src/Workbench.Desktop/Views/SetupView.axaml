@@ -1,0 +1,98 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Workbench.Desktop.ViewModels"
+             x:Class="Workbench.Desktop.Views.SetupView"
+             x:DataType="vm:SetupViewModel"
+             Background="{StaticResource Bg}">
+  <Grid RowDefinitions="Auto,*,Auto" ColumnDefinitions="280,*">
+    <!-- the instance -->
+    <Border Grid.ColumnSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Left" Text="Setup" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,20,0"/>
+        <TextBlock DockPanel.Dock="Left" Text="This instance:" Classes="dim" VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <TextBox DockPanel.Dock="Left" Text="{Binding InstanceName}" Width="160"/>
+        <SelectableTextBlock Classes="dim small mono" Text="{Binding InstanceFile}" VerticalAlignment="Center" Margin="16,0,0,0"/>
+      </DockPanel>
+    </Border>
+
+    <!-- its projects -->
+    <Border Grid.Row="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Projects in this instance" Classes="dim small" Margin="14,12,14,6"/>
+        <Button DockPanel.Dock="Bottom" Content="+ Add a project" Command="{Binding AddCommand}" HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center" Margin="12"/>
+        <ListBox ItemsSource="{Binding Projects}" SelectedItem="{Binding Selected}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ProjectSetup">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Ellipse Width="9" Height="9" Fill="{Binding Brush}" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Name}"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <!-- the selected project -->
+    <ScrollViewer Grid.Row="1" Grid.Column="1">
+      <StackPanel DataContext="{Binding Selected}" x:DataType="vm:ProjectSetup" Margin="24,18" Spacing="14" MaxWidth="760" HorizontalAlignment="Left"
+                  IsVisible="{Binding $parent[UserControl].((vm:SetupViewModel)DataContext).Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Name" Classes="dim small"/>
+          <TextBox Text="{Binding Name}" Width="320" HorizontalAlignment="Left"/>
+        </StackPanel>
+        <StackPanel Spacing="4">
+          <TextBlock Text="Tab colour" Classes="dim small"/>
+          <ItemsControl ItemsSource="{Binding Swatches}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:SwatchChoice">
+                <Button Width="24" Height="24" CornerRadius="12" Background="{Binding Brush}" Command="{Binding Command}"/>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <TextBlock Text="Features this project uses" FontWeight="SemiBold" Margin="0,8,0,0"/>
+        <ItemsControl ItemsSource="{Binding Features}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:FeatureTick">
+              <CheckBox Content="{Binding Label}" IsChecked="{Binding On}" Margin="0,0,22,0"/>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Text="Where things are" FontWeight="SemiBold" Margin="0,8,0,0"/>
+        <StackPanel Spacing="4">
+          <TextBlock Text="Boards folder (one subfolder per board)" Classes="dim small"/>
+          <TextBox Text="{Binding Boards}" Classes="mono" PlaceholderText="e.g. D:/Projects/vault/Tatty/Alpha/tasks"/>
+        </StackPanel>
+        <StackPanel Spacing="4">
+          <TextBlock Text="Notes folder (leave empty for 'notes' beside the boards folder)" Classes="dim small"/>
+          <TextBox Text="{Binding Notes}" Classes="mono"/>
+        </StackPanel>
+        <StackPanel Spacing="4">
+          <TextBlock Text="Repos, one per line (agents and the terminal start in the first)" Classes="dim small"/>
+          <TextBox Text="{Binding ReposText}" Classes="mono" AcceptsReturn="True" MinHeight="70"/>
+        </StackPanel>
+
+        <Button Content="Remove from this instance" Command="{Binding RemoveCommand}" Foreground="{StaticResource Bad}" Margin="0,8,0,0"
+                ToolTip.Tip="Takes the project out of this instance only. Its boards, notes and repos stay as they are."/>
+      </StackPanel>
+    </ScrollViewer>
+
+    <Border Grid.Row="2" Grid.ColumnSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="16,10">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+          <Button Content="Cancel" Command="{Binding CloseCommand}"/>
+          <Button Classes="primary" Content="Save" Command="{Binding SaveCommand}"/>
+        </StackPanel>
+        <TextBlock Classes="bad" Text="{Binding Error}" VerticalAlignment="Center"/>
+        <TextBlock Classes="dim small" VerticalAlignment="Center" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                   Text="Saving rebuilds only the projects you changed; agents and terminals in the others keep running."/>
+      </DockPanel>
+    </Border>
+  </Grid>
+</UserControl>

@@ -13,6 +13,8 @@ namespace Workbench.Desktop.ViewModels;
 public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : ObservableObject
 {
     static readonly ObservableCollection<TranscriptItem> Nothing = [];
+    /// <summary>The instance's projects (updated when Setup saves; a session already running keeps what it was given).</summary>
+    public IReadOnlyList<ProjectConfig> Projects { get; set; } = projects;
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Items), nameof(HasChat))] public partial AgentViewModel? Agent { get; set; }
     [ObservableProperty] public partial bool Open { get; set; }
@@ -44,7 +46,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
 
     IEnumerable<string> Args()
     {
-        var dirs = projects.SelectMany(p => new[] { p.Boards is null ? null : Path.GetDirectoryName(Path.GetFullPath(p.Boards)), p.NotesFolder() }
+        var dirs = Projects.SelectMany(p => new[] { p.Boards is null ? null : Path.GetDirectoryName(Path.GetFullPath(p.Boards)), p.NotesFolder() }
                 .Concat(p.Repos.Cast<string?>()))
             .OfType<string>().Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (var d in dirs) { yield return "--add-dir"; yield return d; }
@@ -57,7 +59,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         var sb = new StringBuilder();
         sb.AppendLine("You are Bench, the assistant inside Workbench, Philip's app for his projects. He talks to you from a small box in the corner, so keep replies short.");
         sb.AppendLine("The projects open in this Workbench:");
-        foreach (var p in projects)
+        foreach (var p in Projects)
         {
             sb.Append($"- {p.Name} (id {p.Id})");
             if (p.Boards is not null) sb.Append($"; boards in {Path.GetFullPath(p.Boards)}");
