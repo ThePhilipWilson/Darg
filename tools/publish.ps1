@@ -24,11 +24,19 @@ for ($i = 0; $walk -and $i -lt 30; $i++) {
 $running | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; Start-Sleep -Seconds 1 }
 
 $rid = if ($IsWindows) { 'win-x64' } elseif ($IsMacOS) { 'osx-arm64' } else { 'linux-x64' }
+# newest source change, in UTC ticks, taken before the build: the app compares it to the repo to say whether an update has anything in it
+$skip = '[\\/](bin|obj|\.git|\.shots|\.claude|node_modules)[\\/]'
+$stamp = (Get-ChildItem -LiteralPath (Join-Path $repo 'src') -Recurse -File | Where-Object { $_.FullName -notmatch $skip } |
+    ForEach-Object { $_.LastWriteTimeUtc.Ticks } | Measure-Object -Maximum).Maximum
+foreach ($f in 'Directory.Build.props', 'Directory.Packages.props', 'global.json') {
+    $fp = Join-Path $repo $f; if (Test-Path -LiteralPath $fp) { $stamp = [Math]::Max($stamp, (Get-Item -LiteralPath $fp).LastWriteTimeUtc.Ticks) }
+}
 dotnet publish (Join-Path $repo 'src/Darg.Desktop') -c Release -r $rid --self-contained false -o $To -v q --nologo
 if ($LASTEXITCODE -ne 0) { throw "publish failed ($LASTEXITCODE)" }
 $exe = Join-Path $To 'Darg.Desktop.exe'
 # where this build came from, so the app's ⟳ Update can rebuild it from here
 Set-Content -LiteralPath (Join-Path $To 'source.txt') -Value $repo
+Set-Content -LiteralPath (Join-Path $To 'built-from.txt') -Value $stamp
 "published to $To"
 
 if ($NoShortcuts -or -not $IsWindows) { return }

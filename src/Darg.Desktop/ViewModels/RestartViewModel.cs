@@ -19,9 +19,16 @@ public partial class RestartViewModel : ObservableObject
     /// <summary>The repo this copy was published from; null for a copy that can only restart.</summary>
     public string? Source { get; } = Updater.SourceRepo();
     public bool CanUpdate => Source is not null;
-    public string SourceNote => Source is { } repo
-        ? $"Update builds {repo} as it is on disk now (uncommitted changes too), while you carry on. Restarting into it closes and reopens Darg."
-        : "This copy wasn't installed by tools/publish.ps1, so it can restart but not update itself.";
+    /// <summary>Whether the repo has changed since this copy was built: null when it can't be told.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(SourceNote), nameof(UpdateLabel), nameof(HeaderLabel))] public partial bool? HasChanges { get; set; }
+    public string SourceNote => Source is not { } repo
+        ? "This copy wasn't installed by tools/publish.ps1, so it can restart but not update itself."
+        : HasChanges switch
+        {
+            false => $"Nothing to update: {repo} hasn't changed since this copy was built.",
+            true => $"{repo} has changes this copy doesn't. Update builds it as it is on disk now (uncommitted changes too), while you carry on. Restarting into it closes and reopens Darg.",
+            _ => $"Update builds {repo} as it is on disk now (uncommitted changes too), while you carry on. Restarting into it closes and reopens Darg. (This copy predates update checking, so it can't say whether anything changed.)",
+        };
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(UpdateLabel), nameof(HeaderLabel))] public partial bool Building { get; set; }
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(UpdateLabel), nameof(HeaderLabel))] public partial bool Built { get; set; }
@@ -36,13 +43,14 @@ public partial class RestartViewModel : ObservableObject
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(RestartLabel), nameof(UpdateLabel))] public partial bool Armed { get; set; }
 
     public string RestartLabel => Armed ? "Restart anyway" : "Restart";
-    public string UpdateLabel => Building ? "Building…" : Built ? (Armed ? "Restart into it anyway" : "Restart into the new build") : "Update and restart";
-    public string HeaderLabel => Building ? "⟳ Building…" : Built ? "⟳ Update ready" : HasFailure ? "⟳ !" : "⟳";
+    public string UpdateLabel => Building ? "Building…" : Built ? (Armed ? "Restart into it anyway" : "Restart into the new build") : (HasChanges == false ? "Rebuild and restart anyway" : "Update and restart");
+    public string HeaderLabel => Building ? "⟳ Building…" : Built ? "⟳ Update ready" : HasFailure ? "⟳ !" : HasChanges == true ? "⟳ •" : "⟳";
 
     public RestartViewModel(Func<IReadOnlyList<string>> busyAgents, Action saveAll)
     {
         _busyAgents = busyAgents;
         _saveAll = saveAll;
+        if (Source is { } repo) HasChanges = Updater.HasChanges(repo, _install);
         try { if (File.Exists(FailedFile)) Failure = File.ReadAllText(FailedFile).Trim(); }
         catch (IOException) { }
     }
@@ -51,6 +59,7 @@ public partial class RestartViewModel : ObservableObject
     public void Refresh()
     {
         Armed = false;
+        if (!Built && !Building && Source is { } repo) HasChanges = Updater.HasChanges(repo, _install);
         var busy = _busyAgents();
         Warning = busy.Count == 0 ? "" :
             $"{Plural(busy.Count, "agent is", "agents are")} mid-turn: {string.Join(", ", busy)}. Restarting stops {(busy.Count == 1 ? "it" : "them")}; " +

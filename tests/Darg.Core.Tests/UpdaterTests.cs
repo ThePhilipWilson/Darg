@@ -23,6 +23,29 @@ public sealed class UpdaterTests : IDisposable
     }
 
     [Fact]
+    public void Says_whether_the_repo_changed_since_the_build_was_made()
+    {
+        var install = Directory.CreateDirectory(Path.Combine(_dir, "install2")).FullName;
+        var repo = Path.Combine(_dir, "repo2");
+        var src = Directory.CreateDirectory(Path.Combine(repo, "src", "App")).FullName;
+        var cs = Path.Combine(src, "A.cs");
+        File.WriteAllText(cs, "class A {}");
+        Assert.Null(Updater.HasChanges(repo, install)); // no stamp: can't tell
+
+        Updater.WriteStamp(install, Updater.SourceStamp(repo));
+        Assert.False(Updater.HasChanges(repo, install));
+
+        // build output doesn't count
+        Directory.CreateDirectory(Path.Combine(src, "bin"));
+        File.WriteAllText(Path.Combine(src, "bin", "x.dll"), "x");
+        File.SetLastWriteTimeUtc(Path.Combine(src, "bin", "x.dll"), DateTime.UtcNow.AddHours(1));
+        Assert.False(Updater.HasChanges(repo, install));
+
+        File.SetLastWriteTimeUtc(cs, DateTime.UtcNow.AddMinutes(5));
+        Assert.True(Updater.HasChanges(repo, install));
+    }
+
+    [Fact]
     public void A_failed_build_shows_its_errors_once_else_its_last_lines()
     {
         var output = new[] { "Restoring...", "x.cs(3,1): error CS1002: ; expected [a.csproj]", "x.cs(3,1): error CS1002: ; expected [a.csproj]", "done" };
