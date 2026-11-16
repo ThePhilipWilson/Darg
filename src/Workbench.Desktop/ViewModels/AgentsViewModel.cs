@@ -71,6 +71,13 @@ public partial class AgentsViewModel : ObservableObject
         if (Shown == a) Shown = Selected;
     }
 
+    /// <summary>Close every agent here that's open but idle (not working, not waiting on the person).</summary>
+    [RelayCommand]
+    void CloseIdle()
+    {
+        foreach (var a in Agents.Where(a => a.State == AgentState.Idle).ToList()) a.CloseSession();
+    }
+
     void Add(AgentViewModel agent, bool select)
     {
         agent.StoreFolder ??= _store;
@@ -463,14 +470,19 @@ public partial class AgentViewModel : ObservableObject
 
     /// <summary>Close: end the Claude process but keep the agent, so sending it a message resumes the conversation.</summary>
     [RelayCommand]
-    void Close()
+    void Close() => CloseSession();
+
+    /// <summary>Close (from the button, Close idle or Fettle). False: no session was open.</summary>
+    public bool CloseSession(string? by = null)
     {
-        if (_session is null) return;
+        if (_session is null) return false;
         var mid = Working || NeedsYou;
         End();
-        Items.Add(new NoteItem(SessionId is null ? "Session closed before it began; start a new agent to carry on."
-            : mid ? "Session closed mid-turn. Send a message to carry on." : "Session closed. Send a message to carry on.", false));
+        var who = by is null ? "Session closed" : $"Session closed by {by}";
+        Items.Add(new NoteItem(SessionId is null ? $"{who} before it began; start a new agent to carry on."
+            : mid ? $"{who} mid-turn. Send a message to carry on." : $"{who}. Send a message to carry on.", false));
         Save();
+        return true;
     }
 
     /// <summary>End the session (closed on request, forgotten, or its project is closing). What it was

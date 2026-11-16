@@ -30,7 +30,11 @@ public partial class MainViewModel : ObservableObject
         Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
         Selected = Projects.FirstOrDefault();
         if (ArtifactHost.Server is { } artifacts)
+        {
             artifacts.Reply += r => Avalonia.Threading.Dispatcher.UIThread.Post(() => FromArtifact(r));
+            artifacts.ListAgents = () => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(ListAgents).GetTask();
+            artifacts.CloseAgents = ids => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => CloseAgents(ids)).GetTask();
+        }
         ArtifactHost.OpenRequested += file => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenArtifact(file));
         DevHooks();
     }
@@ -48,6 +52,28 @@ public partial class MainViewModel : ObservableObject
         }
         agent.Say($"From artifact \"{title}\":\n{r.Text}", $"From artifact \"{title}\" ({file}):\n{r.Text}");
         project.Artifacts?.Tell($"Sent to {agent.Name}.");
+    }
+
+    /// <summary>Every project's agents, for Fettle: which project, id, name, state, card, and whether a session is open.</summary>
+    string ListAgents()
+    {
+        var list = new System.Text.Json.Nodes.JsonArray();
+        foreach (var p in Projects)
+            foreach (var a in p.Agents?.Agents ?? [])
+                list.Add(new System.Text.Json.Nodes.JsonObject
+                {
+                    ["project"] = p.Config.Name, ["id"] = a.Id, ["name"] = a.Name, ["state"] = a.State.ToString().ToLowerInvariant(),
+                    ["open"] = a.Open, ["card"] = a.CardId,
+                });
+        return list.ToJsonString();
+    }
+
+    /// <summary>Fettle asked to close these agents' sessions: close them, and say what happened to each.</summary>
+    string CloseAgents(IReadOnlyList<string> ids)
+    {
+        var all = Projects.SelectMany(p => p.Agents?.Agents ?? []).ToList();
+        return string.Join(Environment.NewLine, ids.Select(id => all.FirstOrDefault(a => a.Id == id) is not { } a ? $"{id}: no such agent"
+            : a.CloseSession("Fettle") ? $"{id} ({a.Name}): closed" : $"{id} ({a.Name}): wasn't open"));
     }
 
     /// <summary>Show an artifact: its project's tab, the Artifacts section, that page.</summary>
