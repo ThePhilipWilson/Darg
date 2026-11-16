@@ -29,6 +29,8 @@ public sealed class AgentRecord
     public string Name { get; set; } = "";
     public string Cwd { get; set; } = "";
     public string? CardId { get; set; }
+    /// <summary>For a Bench chat: the project it was started in (it lists only there). Null: from before chats had one.</summary>
+    public string? Project { get; set; }
     public string? SessionId { get; set; }
     public List<string> Args { get; set; } = [];
     public DateTime Created { get; set; }

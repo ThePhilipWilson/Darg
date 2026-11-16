@@ -33,7 +33,7 @@
         </ListBox>
         <TextBlock Text="No agents yet." Classes="dim small" Margin="12,2,12,6" IsVisible="{Binding !Agents.Count}"/>
 
-        <!-- Bench's chats: the same in every project -->
+        <!-- Bench's chats started in this project (Bench lists the project on screen) -->
         <TextBlock Text="Bench chats" Classes="dim small" Margin="12,14,12,4"/>
         <ListBox ItemsSource="{Binding Mascot.Chats, FallbackValue={x:Null}}" SelectedItem="{Binding BenchChat}" Background="Transparent"
                  ScrollViewer.VerticalScrollBarVisibility="Disabled">

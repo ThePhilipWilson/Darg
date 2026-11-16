@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Workbench.Core;
@@ -10,7 +11,9 @@ namespace Workbench.Desktop.ViewModels;
 /// boards, notes, docs and repos (--add-dir) and is told how the board and note files are laid out.
 /// Every message carries a line saying what Philip is looking at (project, section, open doc or card),
 /// so "sort these into folders" means the docs he has open, not every project's. Chats are kept: New
-/// chat starts another, and the list switches back to an old one (resuming its session).</summary>
+/// chat starts another, and the list switches back to an old one (resuming its session). Each chat
+/// belongs to the project it was started in and lists only there, like a project's own agents;
+/// switching project tabs switches Bench to that project's chat, leaving the other one running.</summary>
 public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : ObservableObject
 {
     static readonly ObservableCollection<TranscriptItem> Nothing = [];
@@ -29,19 +32,66 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     /// <summary>Saved chats, newest first, to switch between.</summary>
     public ObservableCollection<ChatEntry> Chats { get; } = [];
     [ObservableProperty] public partial ChatEntry? SelectedChat { get; set; }
-    bool _listing;
+    bool _listing, _shown;
+    /// <summary>The project on screen: its chats are the ones listed. Null: no project (every chat lists).</summary>
+    public string? ProjectId { get; private set; }
+    /// <summary>The chat each project had open, kept (and running) while another project is on screen.</summary>
+    readonly Dictionary<string, AgentViewModel?> _open = new(StringComparer.OrdinalIgnoreCase);
 
     static string Store => AgentStore.Folder("~bench");
 
-    /// <summary>The chat list from disk, and the newest chat open (from an earlier run, to carry on).
-    /// Chats with no real title yet (older ones were "Bench" or a cut-off first message) get one.</summary>
+    /// <summary>Tidy the saved chats at start-up. Chats with no real title yet (older ones were "Bench" or a
+    /// cut-off first message) get one. Chats from before chats had a project get the one whose name they
+    /// mention; one that names none stays in every project's list. The list itself comes with ShowProject.</summary>
     public void Restore()
     {
-        ListChats();
-        if (Chats.FirstOrDefault() is { } newest) SelectedChat = newest;
-        foreach (var r in AgentStore.List(Store).Where(r => NeedsTitle(r.Name)))
-            if (r.Items.FirstOrDefault(i => i.Kind == "user")?.Text is { } first) _ = Retitle(r.Id, first);
+        foreach (var r in AgentStore.List(Store))
+        {
+            if (r.Project is null && Guess(r) is { } p) { r.Project = p; AgentStore.Save(Store, r); }
+            if (NeedsTitle(r.Name) && r.Items.FirstOrDefault(i => i.Kind == "user")?.Text is { } first) _ = Retitle(r.Id, first);
+        }
     }
+
+    string? Guess(AgentRecord r)
+    {
+        var text = r.Name + " " + r.Items.FirstOrDefault(i => i.Kind == "user")?.Text;
+        var named = Projects.Where(p => Regex.IsMatch(text, $@"\b{Regex.Escape(p.Name)}\b", RegexOptions.IgnoreCase)).ToList();
+        return named.Count == 1 ? named[0].Id : null;
+    }
+
+    bool Mine(string? project) => ProjectId is null || project is null || string.Equals(project, ProjectId, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The project on screen changed: Bench shows that project's chats, and the chat it had open
+    /// (the newest saved one, the first time). The chat left behind keeps running and still notifies.</summary>
+    public void ShowProject(string? projectId)
+    {
+        if (_shown && string.Equals(projectId, ProjectId, StringComparison.OrdinalIgnoreCase)) return;
+        _shown = true; // no save here: a chat saves after every turn, and saving bumps its time in the list
+        if (ProjectId is not null) _open[ProjectId] = Agent;
+        ProjectId = projectId;
+        if (projectId is not null && _open.TryGetValue(projectId, out var kept)) Agent = kept;
+        else Agent = AgentStore.List(Store).FirstOrDefault(r => Mine(r.Project)) is { } newest ? Load(newest) : null;
+        ListChats();
+    }
+
+    /// <summary>The project a Bench chat belongs to (for a notification about it), or null.</summary>
+    public string? ProjectOf(string chatId) =>
+        Live().FirstOrDefault(a => a.Id == chatId)?.Project ?? AgentStore.List(Store).FirstOrDefault(r => r.Id == chatId)?.Project;
+
+    /// <summary>Open a chat by id, in whatever project is on screen (after the caller has switched to its project).</summary>
+    public void OpenChat(string chatId)
+    {
+        if (Agent?.Id != chatId && Chats.FirstOrDefault(c => c.Id == chatId) is { } c) SelectedChat = c;
+    }
+
+    /// <summary>Save every live chat, each project's (on closing, so nothing since the last turn is lost).</summary>
+    public void SaveAll() { foreach (var a in Live()) a.Save(); }
+
+    /// <summary>A saved chat as an agent: the live one if it's already open somewhere (an untagged chat lists in every project).</summary>
+    AgentViewModel Load(AgentRecord r) => Live().FirstOrDefault(a => a.Id == r.Id) ?? Wire(new AgentViewModel(r, Store));
+
+    /// <summary>The chats running or open now: the one on screen and each other project's.</summary>
+    IEnumerable<AgentViewModel> Live() => _open.Values.Append(Agent).OfType<AgentViewModel>().Distinct();
 
     static bool NeedsTitle(string name) => name is "Bench" or "" || name.EndsWith('…');
 
@@ -49,7 +99,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     async Task Retitle(string id, string firstMessage)
     {
         var title = await ChatTitle.Make(firstMessage);
-        if (Agent?.Id == id) { Agent.Name = title; Agent.Save(); }
+        if (Live().FirstOrDefault(a => a.Id == id) is { } live) { live.Name = title; live.Save(); }
         else if (AgentStore.List(Store).FirstOrDefault(r => r.Id == id) is { } r) { r.Name = title; AgentStore.Save(Store, r); }
         ListChats();
     }
@@ -59,7 +109,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         _listing = true;
         var keep = Agent?.Id;
         Chats.Clear();
-        foreach (var r in AgentStore.List(Store)) Chats.Add(new ChatEntry(r.Id, r.Name, r.Updated));
+        foreach (var r in AgentStore.List(Store).Where(r => Mine(r.Project))) Chats.Add(new ChatEntry(r.Id, r.Name, r.Updated));
         SelectedChat = Chats.FirstOrDefault(c => c.Id == keep);
         _listing = false;
     }
@@ -69,8 +119,8 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         if (_listing || value is null || value.Id == Agent?.Id) return;
         if (AgentStore.List(Store).FirstOrDefault(r => r.Id == value.Id) is not { } r) return;
         Agent?.Save();
-        Agent?.End();
-        Agent = Wire(new AgentViewModel(r, Store));
+        if (Agent is { } left && !_open.Values.Contains(left)) left.End(); // not if another project has it open too
+        Agent = Load(r);
     }
 
     AgentViewModel Wire(AgentViewModel a)
@@ -121,12 +171,13 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
             var home = InstanceConfig.Folder();
             Directory.CreateDirectory(home);
             // a quick title from the words now, a better one from Haiku a few seconds later
-            Agent = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text) { StoreFolder = Store });
+            Agent = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text) { StoreFolder = Store, Project = ProjectId });
             Agent.Save();
             ListChats();
             _ = Retitle(Agent.Id, text);
             return;
         }
+        Agent.Project ??= ProjectId; // a chat from before chats had a project belongs where it carries on
         Agent.Say(text, sent);
     }
 
