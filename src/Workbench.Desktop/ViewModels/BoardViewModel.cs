@@ -17,8 +17,15 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     /// <summary>Set by the project: the live agent working on a card, if any.</summary>
     public Func<string, AgentViewModel?>? AgentFor { get; set; }
-    /// <summary>Set by the project: start an agent on a card (the card's file path is passed).</summary>
-    public Action<Card, string>? WorkOn { get; set; }
+    /// <summary>Set by the project: start an agent on a card. Passed: the card's file path, the ids of cards
+    /// other agents are being started on at the same time, and whether to show the agent.</summary>
+    public Action<Card, string, IReadOnlyList<string>, bool>? WorkOn { get; set; }
+    /// <summary>Picked card ids. Only ever cards that are showing: a filter that hides one unpicks it, so a
+    /// batch never touches a card you can't see.</summary>
+    readonly HashSet<string> _picked = [];
+    /// <summary>What was just done ("Started 3 agents…"): it stays in the status line through the reload
+    /// the file watcher does a moment later, until the filter changes or a card is picked.</summary>
+    string? _notice;
     /// <summary>Set by the project: show an agent.</summary>
     public Action<AgentViewModel>? OpenAgent { get; set; }
 
@@ -70,8 +77,76 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     }
 
     partial void OnSelectedBoardChanged(string? value) { Watch(); Reload(); }
-    partial void OnFilterChanged(string value) => Apply();
-    partial void OnShowCompletedChanged(bool value) => Apply();
+    partial void OnFilterChanged(string value) { _notice = null; Apply(); }
+    partial void OnShowCompletedChanged(bool value) { _notice = null; Apply(); }
+
+    public bool HasPicked => _picked.Count > 0;
+    public string PickedText => _picked.Count == 1 ? "1 picked" : $"{_picked.Count} picked";
+    IEnumerable<CardViewModel> Shown() => Lists.SelectMany(l => l.Cards);
+    int ToStart => Shown().Count(c => c.IsPicked && !c.HasAgent);
+    /// <summary>"▶ Work on 3", counting only picked cards with no agent on them yet.</summary>
+    public string WorkOnPickedText => $"▶ Work on {ToStart}";
+    public bool CanWorkOnPicked => ToStart > 0;
+
+    /// <summary>A click on a card: with Ctrl or Shift held, or once anything is picked, it picks or unpicks
+    /// the card; otherwise it opens the card.</summary>
+    public void Click(CardViewModel card, Avalonia.Input.KeyModifiers keys)
+    {
+        const Avalonia.Input.KeyModifiers pick = Avalonia.Input.KeyModifiers.Control | Avalonia.Input.KeyModifiers.Shift | Avalonia.Input.KeyModifiers.Meta;
+        if (!HasPicked && (keys & pick) == 0) { Open(card); return; }
+        Editor = null;
+        _notice = null;
+        card.IsPicked = !card.IsPicked;
+        if (card.IsPicked) _picked.Add(card.Id); else _picked.Remove(card.Id);
+        PickedChanged();
+    }
+
+    void PickedChanged()
+    {
+        OnPropertyChanged(nameof(HasPicked));
+        OnPropertyChanged(nameof(PickedText));
+        OnPropertyChanged(nameof(WorkOnPickedText));
+        OnPropertyChanged(nameof(CanWorkOnPicked));
+    }
+
+    /// <summary>Pick every card showing (the filter, and Show completed, decide what "all" is).</summary>
+    [RelayCommand]
+    void PickAll()
+    {
+        Editor = null;
+        _notice = null;
+        foreach (var c in Shown()) { c.IsPicked = true; _picked.Add(c.Id); }
+        PickedChanged();
+    }
+
+    [RelayCommand]
+    public void ClearPicked()
+    {
+        foreach (var c in Shown()) c.IsPicked = false;
+        _picked.Clear();
+        PickedChanged();
+    }
+
+    /// <summary>Start an agent on every picked card that has none, all at once in the project's folder;
+    /// each is told which other cards are being worked on beside it. The board stays showing, and each
+    /// card shows its agent's state.</summary>
+    [RelayCommand]
+    void WorkOnPicked()
+    {
+        var cards = Shown().Where(c => c.IsPicked && !c.HasAgent).Select(c => c.Card).ToList();
+        if (cards.Count == 0) return;
+        _picked.Clear();
+        var started = new List<string>();
+        foreach (var card in cards)
+        {
+            try { StartWork(card, cards.Where(c => c != card).Select(c => c.Id).ToList(), show: false, reload: false); }
+            catch (Exception e) { _notice = $"Started {Ids(started)}; stopped at {card.Id}: {e.Message}"; Reload(); return; }
+            started.Add(card.Id);
+        }
+        _notice = started.Count == 1 ? $"Started an agent on {started[0]}" : $"Started {started.Count} agents: {Ids(started)}";
+        Reload();
+        static string Ids(List<string> ids) => ids.Count == 0 ? "none" : string.Join(", ", ids);
+    }
 
     public string? Folder => SelectedBoard is null || _project.Boards is null ? null : Path.Combine(_project.Boards, SelectedBoard);
 
@@ -111,30 +186,37 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             if (id == Board.Completed && !ShowCompleted) continue;
             var cards = _board.Lists[id].Where(Keep).ToList();
             total += cards.Count;
-            Lists.Add(new ListViewModel(this, id, name, cards.Select(c => new CardViewModel(c, targets, this, AgentFor?.Invoke(c.Id))), _board.Lists[id].Count));
+            Lists.Add(new ListViewModel(this, id, name, cards.Select(c =>
+                new CardViewModel(c, targets, this, AgentFor?.Invoke(c.Id)) { IsPicked = _picked.Contains(c.Id) }), _board.Lists[id].Count));
         }
-        Status = $"{total} of {_board.AllCards.Count()} cards";
+        _picked.IntersectWith(Shown().Select(c => c.Id));
+        PickedChanged();
+        Status = _notice ?? $"{total} of {_board.AllCards.Count()} cards";
     }
 
     /// <summary>Start an agent on a card: it goes to the board's working column ("In Progress", else
     /// the first column) if it was waiting in the backlog or the first column, and the agent opens.</summary>
-    public void StartWork(CardViewModel card)
+    public void StartWork(CardViewModel card) => StartWork(card.Card, [], show: true, reload: true);
+
+    void StartWork(Card card, IReadOnlyList<string> alongside, bool show, bool reload)
     {
         if (Folder is null || _board is null || WorkOn is null) return;
         var working = _board.Columns.FirstOrDefault(c => c.Name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) ?? _board.Columns.FirstOrDefault();
-        var place = BoardStore.PlaceOf(card.Card.Status, _board.Columns);
-        WorkOn(card.Card, Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File)));
+        var place = BoardStore.PlaceOf(card.Status, _board.Columns);
+        WorkOn(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)), alongside, show);
         if (working is not null && (place == Board.Backlog || place == _board.Columns[0].Id) && place != working.Id)
-            Move(card, working.Id);
-        else Reload();
+            Move(card.Id, working.Id, reload: reload);
+        else if (reload) Reload();
     }
 
-    public void Move(CardViewModel card, string toList, string? beforeId = null)
+    public void Move(CardViewModel card, string toList, string? beforeId = null) => Move(card.Card.Id, toList, beforeId);
+
+    void Move(string id, string toList, string? beforeId = null, bool reload = true)
     {
         if (Folder is null) return;
-        try { BoardStore.Move(Folder, card.Card.Id, toList, beforeId); }
-        catch (Exception e) { Status = $"Couldn't move {card.Card.Id}: {e.Message}"; return; }
-        Reload();
+        try { BoardStore.Move(Folder, id, toList, beforeId); }
+        catch (Exception e) { Status = $"Couldn't move {id}: {e.Message}"; return; }
+        if (reload) Reload();
     }
 
     void Watch()
@@ -205,8 +287,10 @@ public sealed class ListViewModel(BoardViewModel board, string id, string name, 
     public string Count => Cards.Count == all ? $"{all}" : $"{Cards.Count} / {all}";
 }
 
-public sealed class CardViewModel
+public sealed partial class CardViewModel : ObservableObject
 {
+    /// <summary>Picked for a batch (a white frame).</summary>
+    [ObservableProperty] public partial bool IsPicked { get; set; }
     public Card Card { get; }
     public string Id => Card.Id;
     public string Title => Card.Title;
