@@ -26,6 +26,10 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>What was just done ("Started 3 agents…"): it stays in the status line through the reload
     /// the file watcher does a moment later, until the filter changes or a card is picked.</summary>
     string? _notice;
+    /// <summary>Set by the project: the flows a card can be run through.</summary>
+    public Func<IReadOnlyList<Flow>>? Flows { get; set; }
+    /// <summary>Set by the project: run a flow on a card (passed the card's file path).</summary>
+    public Action<Card, string, Flow>? RunFlow { get; set; }
     /// <summary>Set by the project: show an agent.</summary>
     public Action<AgentViewModel>? OpenAgent { get; set; }
     /// <summary>Set by the project: start an agent and show it. Passed: the prompt, its folder and its name.</summary>
@@ -410,6 +414,20 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         else if (reload) Reload();
     }
 
+    /// <summary>Run a flow on a card: like Work on, it goes to the working column if it was waiting.</summary>
+    public void StartFlow(CardViewModel card, Flow flow)
+    {
+        if (Folder is null || _board is null || RunFlow is null) return;
+        var working = _board.Columns.FirstOrDefault(c => c.Name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) ?? _board.Columns.FirstOrDefault();
+        var place = BoardStore.PlaceOf(card.Card.Status, _board.Columns);
+        RunFlow(card.Card, Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File)), flow);
+        if (working is not null && (place == Board.Backlog || place == _board.Columns[0].Id) && place != working.Id)
+            Move(card.Card.Id, working.Id);
+        else Reload();
+    }
+
+    internal IReadOnlyList<Flow> FlowList() => Flows?.Invoke() ?? [];
+
     public void Move(CardViewModel card, string toList, string? beforeId = null) => Move(card.Card.Id, toList, beforeId);
 
     void Move(string id, string toList, string? beforeId = null, bool reload = true)
@@ -545,6 +563,7 @@ public sealed partial class CardViewModel : ObservableObject
         OpenAgentCommand = new RelayCommand(() => { if (Agent is not null) board.OpenAgent?.Invoke(Agent); });
         MoveTargets = [
             new MoveTarget(agent is null ? "Work on this with an agent" : "Open its agent", agent is null ? WorkOnCommand : OpenAgentCommand),
+            .. (agent is null ? board.FlowList() : []).Select(f => new MoveTarget("Run flow: " + f.Name, new RelayCommand(() => board.StartFlow(this, f)))),
             .. lists.Select(l => new MoveTarget("Move to " + l.Name, new RelayCommand(() => board.Move(this, l.Id)))),
             // a card with a live agent stays put: the agent holds its file's path
             .. agent is null ? (otherBoards ?? []).Select(b => new MoveTarget("Move to board " + b, new RelayCommand(() => board.MoveToBoard(this, b)))) : [],
@@ -592,6 +611,8 @@ public partial class CardEditor : ObservableObject
     [ObservableProperty] public partial string Priority { get; set; }
     [ObservableProperty] public partial string Error { get; set; } = "";
     public bool CanWorkOn => _card is not null && !_card.HasAgent;
+    /// <summary>A button per flow, to run it on this card.</summary>
+    public IReadOnlyList<MoveTarget> FlowTargets { get; }
 
     public CardEditor(BoardViewModel board, CardViewModel? card)
     {
@@ -600,6 +621,11 @@ public partial class CardEditor : ObservableObject
         Description = card?.Description ?? "";
         LabelsText = card is null ? "" : string.Join(", ", card.Labels);
         Priority = card?.Priority ?? "";
+        FlowTargets = card is null || card.HasAgent ? [] : board.FlowList().Select(f => new MoveTarget("▶ " + f.Name, new RelayCommand(() =>
+        {
+            board.Editor = null;
+            board.StartFlow(card, f);
+        }))).ToList();
     }
 
     IEnumerable<string> LabelList() => LabelsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);

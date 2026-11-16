@@ -20,6 +20,7 @@ public partial class AgentsViewModel : ObservableObject
         _store = AgentStore.Folder(project.Id.Length > 0 ? project.Id : "default");
         foreach (var r in AgentStore.List(_store)) Add(new AgentViewModel(r, _store), select: false);
         Selected = Agents.FirstOrDefault();
+        ReloadFlows();
         // older agents were named by cutting off their first message: give those a proper title
         foreach (var a in Agents.Where(a => a.CardId is null && a.Name.EndsWith('…')).ToList())
             if (a.Items.OfType<UserItem>().FirstOrDefault()?.Text is { } first) _ = Retitle(a, first);
@@ -111,7 +112,51 @@ public partial class AgentsViewModel : ObservableObject
     public AgentViewModel? Find(string id) => Agents.FirstOrDefault(a => a.Id == id);
     /// <summary>The newest agent started on a card that hasn't ended.</summary>
     public AgentViewModel? ForCard(string cardId) =>
-        Agents.LastOrDefault(a => a.CardId == cardId && a.State != AgentState.Exited);
+        Agents.FirstOrDefault(a => a.CardId == cardId && a.State != AgentState.Exited);
+
+    /// <summary>The flows on file (the instance's flows folder), read again on Reload.</summary>
+    public ObservableCollection<Flow> Flows { get; } = [];
+    [ObservableProperty] public partial Flow? SelectedFlow { get; set; }
+
+    public void ReloadFlows()
+    {
+        var keep = SelectedFlow?.Name;
+        Flows.Clear();
+        try { foreach (var f in FlowStore.List()) Flows.Add(f); } catch (Exception) { }
+        SelectedFlow = Flows.FirstOrDefault(f => f.Name == keep) ?? Flows.FirstOrDefault();
+    }
+
+    /// <summary>Open the flows folder to add or edit one (each is a markdown file), and read them again.</summary>
+    [RelayCommand]
+    void EditFlows()
+    {
+        ReloadFlows();
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(FlowStore.Folder()) { UseShellExecute = true }); } catch (Exception) { }
+    }
+
+    [RelayCommand]
+    void StartFlow()
+    {
+        var task = NewPrompt.Trim();
+        if (task.Length == 0 || SelectedFlow is null) return;
+        RunFlow(SelectedFlow, task, name: ChatTitle.Guess(task));
+        NewPrompt = "";
+    }
+
+    /// <summary>Run a flow on a task: each stage an agent named for the task and its role ("WOR-0023 … · QA"), started when the one
+    /// before it hands on.</summary>
+    public FlowRun RunFlow(Flow flow, string task, string name, string? cwd = null, string? cardId = null)
+    {
+        var run = new FlowRun(flow, task, (r, stage, prompt) =>
+        {
+            var a = Start(prompt, cwd, cardId, $"{name} · {flow.Stages[stage].Role}");
+            a.Flow = r;
+            return a;
+        });
+        run.Finished += (a, how, ok) => { if (a is not null) Notify?.Invoke(a, ok ? "flow finished" : "flow stopped", $"{flow.Name}: {how}"); };
+        run.Begin();
+        return run;
+    }
 
     [RelayCommand]
     void StartAgent()
@@ -211,6 +256,11 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>The board card this agent was started on, if any.</summary>
     public string? CardId { get; }
     public event Action<string, string>? Notify;
+    /// <summary>The flow this agent is a stage of, while this run of Workbench lasts.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(InFlow))] public partial FlowRun? Flow { get; set; }
+    public bool InFlow => Flow is not null;
+    /// <summary>A turn has ended (true: with an error), or the session has (Exited): what a flow waits on.</summary>
+    public event Action<bool>? TurnEnded;
     [ObservableProperty] public partial string Name { get; set; }
     public string Cwd { get; }
     /// <summary>Claude Code's id for the conversation: what --resume takes.</summary>
@@ -463,6 +513,7 @@ public partial class AgentViewModel : ObservableObject
                 Activity = OneLine(f.IsError ? f.Text : Items.OfType<TextItem>().LastOrDefault()?.Text ?? f.Text);
                 State = AgentState.Idle;
                 Save();
+                TurnEnded?.Invoke(f.IsError);
                 Notify?.Invoke(f.IsError ? "stopped with an error" : "finished",
                     Items.OfType<TextItem>().LastOrDefault()?.Text ?? f.Text);
                 break;
@@ -473,6 +524,7 @@ public partial class AgentViewModel : ObservableObject
                 if (x.ExitCode != 0) Activity = OneLine($"Session ended ({x.ExitCode}) {Last(x.Stderr)}");
                 State = SessionId is not null && x.ExitCode == 0 ? AgentState.Saved : AgentState.Exited;
                 Save();
+                TurnEnded?.Invoke(true);
                 break;
         }
     }
@@ -485,6 +537,20 @@ public partial class AgentViewModel : ObservableObject
         return line.Length > max ? line[..max].TrimEnd() + "…" : line;
     }
     static readonly char[] NewLines = [(char)13, (char)10];
+    /// <summary>What the agent said in its last turn: its text since the last message it was sent.</summary>
+    public string LastReply()
+    {
+        var since = Items.Count;
+        while (since > 0 && Items[since - 1] is not UserItem) since--;
+        return string.Join("\n\n", Items.Skip(since).OfType<TextItem>().Select(t => t.Text));
+    }
+
+    /// <summary>A line in the transcript from Workbench itself (a flow saying where it is).</summary>
+    public void AddNote(string text, bool bad = false)
+    {
+        Items.Add(new NoteItem(text, bad));
+        Save();
+    }
 
     static string Last(string s) => string.Join(" ", s.Split('\n', StringSplitOptions.RemoveEmptyEntries).TakeLast(3));
 
