@@ -128,6 +128,7 @@ public partial class AgentsViewModel : ObservableObject
     void Add(AgentViewModel agent, bool select)
     {
         agent.StoreFolder ??= _store;
+        agent.CardDone = IsCardDone(agent.CardId);
         agent.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AgentViewModel.CanContinueAfterReset)) AnyOutOfUsage = Agents.Any(a => a.CanContinueAfterReset);
@@ -144,6 +145,13 @@ public partial class AgentsViewModel : ObservableObject
     }
 
     public void SaveAll() { foreach (var a in Agents) a.Save(); }
+
+    /// <summary>Whether a board card is done: set by the project (the board's view), null: no board here.</summary>
+    public Func<string, bool>? CardIsDone { get; set; }
+    bool IsCardDone(string? cardId) => cardId is not null && CardIsDone?.Invoke(cardId) == true;
+
+    /// <summary>Re-read every card agent's card after the boards change (a card moved to Done shows on its agent).</summary>
+    public void RefreshCards() { foreach (var a in Agents) if (a.CardId is not null) a.CardDone = IsCardDone(a.CardId); }
     [ObservableProperty] public partial AgentViewModel? Selected { get; set; }
     [ObservableProperty] public partial string NewPrompt { get; set; } = "";
     public string Folder => project.WorkingFolder();
@@ -410,8 +418,15 @@ public partial class AgentViewModel : ObservableObject
         AgentState.Idle or AgentState.Saved when ContinueAt is { } at => $"out of usage · carries on {When(at)}",
         AgentState.Idle when LimitHit => "out of usage",
         AgentState.Idle => TurnFailed ? "stopped with an error" : "done",
+        AgentState.Saved when CardDone && FinishedTurn => "Complete, pending removal",
         AgentState.Saved => "saved · send to carry on", _ => "ended",
     };
+
+    /// <summary>Its card is done (in Completed or the board's last column). Set by the project as boards load.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText))] public partial bool CardDone { get; set; }
+
+    /// <summary>Its last turn ended normally ("Turn done" is the transcript's last line), so it wasn't stopped partway.</summary>
+    public bool FinishedTurn => Items.LastOrDefault() is NoteItem { Bad: false } n && n.Text.StartsWith("Turn done", StringComparison.Ordinal);
 
     /// <summary>A turn starts: progress counts from nothing again.</summary>
     void TurnBegins(string what)

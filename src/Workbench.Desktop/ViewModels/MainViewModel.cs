@@ -329,6 +329,10 @@ public partial class ProjectViewModel : ObservableObject
         if (Board is not null && Agents is not null)
         {
             Board.AgentFor = Agents.ForCard;
+            // a card agent shows its card's state: "Complete, pending removal" once the card is done
+            Agents.CardIsDone = Board.IsDone;
+            Board.Reloaded += Agents.RefreshCards;
+            Agents.RefreshCards();
             Board.OpenAgent = a => { Agents.Selected = a; Section = Section.Agents; };
             Board.StartAgent = (prompt, cwd, name) => { Agents.Start(prompt, cwd, name: name); Section = Section.Agents; };
             string CardPrompt(Card card, string file, IReadOnlyList<string> alongside)
