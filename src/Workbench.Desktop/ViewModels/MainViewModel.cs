@@ -232,13 +232,23 @@ public partial class ProjectViewModel : ObservableObject
             Board.OpenAgent = a => { Agents.Selected = a; Section = Section.Agents; };
             Board.WorkOn = (card, file, alongside, show) =>
             {
-                var a = Agents.Start(AgentsViewModel.CardPrompt(Name, card, file, alongside), cardId: card.Id, name: $"{card.Id} {card.Title}");
+                // everyone at work in this folder: the batch this card was started with, and agents busy here now
+                var folder = Config.WorkingFolder();
+                var busy = Agents.Agents
+                    .Where(x => x.State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou && SameFolder(x.Cwd, folder))
+                    .Select(x => x.CardId ?? $"\"{x.Name}\"");
+                var others = alongside.Concat(busy).Where(x => x != card.Id).Distinct().ToList();
+                var repo = Directory.Exists(Path.Combine(folder, ".git")) || File.Exists(Path.Combine(folder, ".git")) ? folder : null;
+                var a = Agents.Start(AgentsViewModel.CardPrompt(Name, card, file, others, repo), cardId: card.Id, name: $"{card.Id} {card.Title}");
                 // the card shows the agent's state; when the agent ends, the card drops its link
                 a.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State) && a.State == AgentState.Exited) Board.Reload(); };
                 if (show) Section = Section.Agents;
             };
         }
     }
+
+    static bool SameFolder(string a, string b) =>
+        string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 
     partial void OnSectionChanged(Section value)
     {
