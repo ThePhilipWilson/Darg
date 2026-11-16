@@ -3,6 +3,12 @@
              xmlns:vm="using:Workbench.Desktop.ViewModels"
              x:Class="Workbench.Desktop.Views.BoardView"
              x:DataType="vm:BoardViewModel">
+  <UserControl.Styles>
+    <!-- a column's Pick all: faint until the pointer is on the column, or while the column is all picked -->
+    <Style Selector="Border.list:pointerover Button.colpick, Button.colpick.on">
+      <Setter Property="Opacity" Value="1"/>
+    </Style>
+  </UserControl.Styles>
   <Panel>
   <Grid ColumnDefinitions="*,Auto">
   <Grid RowDefinitions="Auto,Auto,*">
@@ -18,7 +24,7 @@
                   ToolTip.Tip="Start an agent on each picked card, all at once in the project's folder; each is told which others are running beside it. Cards that already have an agent are skipped."/>
           <Button Content="Unpick" Command="{Binding ClearPickedCommand}" IsVisible="{Binding HasPicked}" ToolTip.Tip="Unpick every card (Esc)"/>
           <Button Content="Pick all" Command="{Binding PickAllCommand}"
-                  ToolTip.Tip="Pick every card showing (Ctrl+A). Ctrl- or Shift-click picks one at a time."/>
+                  ToolTip.Tip="Pick every card showing (Ctrl+A). A column's own Pick all picks just that column; Ctrl- or Shift-click picks one at a time."/>
         </StackPanel>
         <TextBox Text="{Binding Filter}" PlaceholderText="Filter by ID, title or description…" MaxWidth="460" HorizontalAlignment="Left" MinWidth="280"/>
       </DockPanel>
@@ -46,8 +52,11 @@
               <DockPanel>
                 <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="10,8">
                   <DockPanel>
-                    <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding Count}"/>
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource Dim}"/>
+                    <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding Count}" VerticalAlignment="Center"/>
+                    <Button DockPanel.Dock="Right" Classes="workon colpick" Classes.on="{Binding AllPicked}" Content="{Binding PickText}"
+                            Command="{Binding PickCommand}" IsVisible="{Binding HasCards}" Margin="0,0,6,0"
+                            ToolTip.Tip="Pick every card showing in this column (click again to unpick them)"/>
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource Dim}" VerticalAlignment="Center"/>
                   </DockPanel>
                 </Border>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
