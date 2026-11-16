@@ -63,7 +63,7 @@
       <Button Classes="primary" Content="⚙ Set up projects" Command="{Binding OpenSetupCommand}" HorizontalAlignment="Center"/>
     </StackPanel>
 
-    <!-- Bench, the mascot: a box for talking to an assistant that can act on any project -->
+    <!-- Fettle, the mascot: a box for talking to an assistant that can act on any project -->
     <!-- sits above the agents view's message bar, so it never covers Send -->
     <StackPanel Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,22,78" Spacing="10">
       <Border Width="400" IsVisible="{Binding Mascot.Open}" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}"
@@ -73,26 +73,26 @@
             <StackPanel Spacing="6">
               <DockPanel>
                 <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent"
-                        AutomationProperties.Name="Hide Bench"/>
+                        AutomationProperties.Name="Hide Fettle"/>
                 <Button DockPanel.Dock="Right" Content="+ New chat" Command="{Binding Mascot.FreshCommand}" Padding="8,0" Background="Transparent"
                         FontSize="11" IsVisible="{Binding Mascot.HasChat}"/>
                 <TextBlock Classes="dim small" VerticalAlignment="Center"
-                           Text="{Binding Mascot.Agent.StateText, StringFormat='Bench · {0}', FallbackValue='Bench · new chat'}"/>
+                           Text="{Binding Mascot.Agent.StateText, StringFormat='Fettle · {0}', FallbackValue='Fettle · new chat'}"/>
               </DockPanel>
               <!-- earlier chats: pick one to carry on with it -->
               <DockPanel IsVisible="{Binding Mascot.Chats.Count}">
                 <Button DockPanel.Dock="Right" Content="×" Command="{Binding Mascot.ForgetCommand}" IsVisible="{Binding Mascot.HasChat}"
                         Padding="6,0" Background="Transparent" ToolTip.Tip="Forget this chat" AutomationProperties.Name="Forget chat"/>
                 <ComboBox ItemsSource="{Binding Mascot.Chats}" SelectedItem="{Binding Mascot.SelectedChat}" HorizontalAlignment="Stretch"
-                          PlaceholderText="Earlier chats…" FontSize="12" AutomationProperties.Name="Bench chats"/>
+                          PlaceholderText="Earlier chats…" FontSize="12" AutomationProperties.Name="Fettle chats"/>
               </DockPanel>
             </StackPanel>
           </Border>
           <DockPanel DockPanel.Dock="Bottom">
             <Button DockPanel.Dock="Right" Content="➤" Command="{Binding Mascot.SendCommand}" Background="Transparent"
-                    AutomationProperties.Name="Send to Bench" VerticalAlignment="Bottom" Margin="0,0,6,6"/>
+                    AutomationProperties.Name="Send to Fettle" VerticalAlignment="Bottom" Margin="0,0,6,6"/>
             <TextBox x:Name="MascotBox" Text="{Binding Mascot.Compose}" BorderThickness="0,1,0,0" CornerRadius="0,0,0,14"
-                     PlaceholderText="Ask, or tell me to do something…" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" Padding="12,9"/>
+                     PlaceholderText="What needs fettling?" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" Padding="12,9"/>
           </DockPanel>
           <ScrollViewer x:Name="MascotScroll" MaxHeight="380" IsVisible="{Binding Mascot.HasChat}">
             <ItemsControl ItemsSource="{Binding Mascot.Items}" Margin="12,10" FontSize="13">
@@ -102,25 +102,40 @@
         </DockPanel>
       </Border>
 
-      <Button Classes="critter" HorizontalAlignment="Right" Command="{Binding Mascot.ToggleCommand}" ToolTip.Tip="Bench: ask or tell it anything"
-              AutomationProperties.Name="Bench"
+      <Button Classes="critter" HorizontalAlignment="Right" Command="{Binding Mascot.ToggleCommand}" ToolTip.Tip="Fettle: ask it anything, or give it a job"
+              AutomationProperties.Name="Fettle"
               Classes.working="{Binding Mascot.Agent.Working, FallbackValue=False}" Classes.needs="{Binding Mascot.Agent.NeedsYou, FallbackValue=False}">
-        <Panel Width="58" Height="58">
-          <Ellipse Width="58" Height="58">
-            <Ellipse.Fill>
-              <RadialGradientBrush GradientOrigin="35%,30%" Center="40%,35%" RadiusX="70%" RadiusY="70%">
-                <GradientStop Color="#f5c56b" Offset="0"/>
-                <GradientStop Color="#d08a2e" Offset="1"/>
-              </RadialGradientBrush>
-            </Ellipse.Fill>
-          </Ellipse>
-          <Ellipse Classes="eye" Width="8" Height="10" Fill="#2a1a08" Margin="-18,-6,0,0"/>
-          <Ellipse Classes="eye" Width="8" Height="10" Fill="#2a1a08" Margin="18,-6,0,0"/>
-          <Border Width="14" Height="6" Background="#2a1a08" CornerRadius="0,0,8,8" Margin="0,22,0,0"/>
-          <Border Classes="badge" Width="18" Height="18" CornerRadius="9" Background="{StaticResource Bad}"
-                  HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0">
-            <TextBlock Text="!" Foreground="White" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
+        <Panel Classes="body" Width="58" Height="70">
+          <Panel Width="58" Height="58" VerticalAlignment="Bottom">
+            <Ellipse Width="58" Height="58">
+              <Ellipse.Fill>
+                <RadialGradientBrush GradientOrigin="35%,30%" Center="40%,35%" RadiusX="70%" RadiusY="70%">
+                  <GradientStop Color="#f5c56b" Offset="0"/>
+                  <GradientStop Color="#d08a2e" Offset="1"/>
+                </RadialGradientBrush>
+              </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse Classes="cheek" Margin="-30,12,0,0"/>
+            <Ellipse Classes="cheek" Margin="30,12,0,0"/>
+            <Panel Classes="eye" Margin="-18,-6,0,0">
+              <Ellipse Fill="#2a1a08"/>
+              <Ellipse Classes="glint"/>
+            </Panel>
+            <Panel Classes="eye" Margin="18,-6,0,0">
+              <Ellipse Fill="#2a1a08"/>
+              <Ellipse Classes="glint"/>
+            </Panel>
+            <!-- one mouth shows at a time: a smile, a flat line while it works, an "oh" when it needs you -->
+            <Border Classes="mouth smile" Width="14" Height="6" Background="#2a1a08" CornerRadius="0,0,8,8" Margin="0,22,0,0"/>
+            <Border Classes="mouth flat" Width="10" Height="3" Background="#2a1a08" CornerRadius="2" Margin="0,22,0,0"/>
+            <Ellipse Classes="mouth oh" Width="8" Height="9" Stroke="#2a1a08" StrokeThickness="2.5" Margin="0,24,0,0"/>
+            <Border Classes="badge" Width="18" Height="18" CornerRadius="9" Background="{StaticResource Bad}"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0">
+              <TextBlock Text="!" Foreground="White" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </Panel>
+          <!-- a curl of wood shaving on its head: it lives on a workbench -->
+          <Path Classes="shaving" Data="M 26,15 C 23,5 36,1 38,9 C 39,14 33,15 32,11" HorizontalAlignment="Left" VerticalAlignment="Top"/>
         </Panel>
       </Button>
     </StackPanel>

@@ -294,7 +294,8 @@
     <Style Selector="Button.agentline.needs Ellipse.dot">
       <Setter Property="Fill" Value="{StaticResource Accent}"/>
     </Style>
-    <!-- Bench: bobs gently; bobs quicker while it works; shows a badge when it needs you -->
+    <!-- Fettle: bobs gently and blinks; squishes under the pointer; while it works it bobs quicker,
+         glances about and purses its mouth; when it needs you it says "oh" and shows a badge -->
     <Style Selector="Button.critter">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Padding" Value="0"/>
@@ -316,6 +317,83 @@
           <KeyFrame Cue="100%"><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
         </Animation>
       </Style.Animations>
+    </Style>
+    <Style Selector="Button.critter /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.critter Panel.body">
+      <Setter Property="RenderTransformOrigin" Value="50%,100%"/>
+      <Setter Property="RenderTransform" Value="scale(1, 1)"/>
+      <Setter Property="Transitions">
+        <Transitions><TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.18" Easing="BackEaseOut"/></Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button.critter:pointerover Panel.body">
+      <Setter Property="RenderTransform" Value="scale(1.07, 0.94)"/>
+    </Style>
+    <Style Selector="Button.critter:pressed Panel.body">
+      <Setter Property="RenderTransform" Value="scale(0.93, 1.06)"/>
+    </Style>
+    <Style Selector="Button.critter Path.shaving">
+      <Setter Property="Stroke" Value="#b8741f"/>
+      <Setter Property="StrokeThickness" Value="3"/>
+      <Setter Property="StrokeLineCap" Value="Round"/>
+    </Style>
+    <Style Selector="Button.critter Ellipse.cheek">
+      <Setter Property="Width" Value="9"/>
+      <Setter Property="Height" Value="5"/>
+      <Setter Property="Fill" Value="#e07a4a"/>
+      <Setter Property="Opacity" Value="0.45"/>
+    </Style>
+    <Style Selector="Button.critter Panel.eye">
+      <Setter Property="Width" Value="8"/>
+      <Setter Property="Height" Value="10"/>
+      <Setter Property="RenderTransform">
+        <TransformGroup><ScaleTransform/><TranslateTransform/></TransformGroup>
+      </Setter>
+      <Style.Animations>
+        <!-- a blink every few seconds -->
+        <Animation Duration="0:0:4.3" IterationCount="Infinite">
+          <KeyFrame Cue="0%"><Setter Property="ScaleTransform.ScaleY" Value="1"/></KeyFrame>
+          <KeyFrame Cue="93%"><Setter Property="ScaleTransform.ScaleY" Value="1"/></KeyFrame>
+          <KeyFrame Cue="95.5%"><Setter Property="ScaleTransform.ScaleY" Value="0.1"/></KeyFrame>
+          <KeyFrame Cue="98%"><Setter Property="ScaleTransform.ScaleY" Value="1"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="ScaleTransform.ScaleY" Value="1"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="Button.critter.working Panel.eye">
+      <Style.Animations>
+        <!-- glances side to side while it thinks -->
+        <Animation Duration="0:0:2.4" IterationCount="Infinite" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%"><Setter Property="TranslateTransform.X" Value="0"/></KeyFrame>
+          <KeyFrame Cue="20%"><Setter Property="TranslateTransform.X" Value="-3"/></KeyFrame>
+          <KeyFrame Cue="45%"><Setter Property="TranslateTransform.X" Value="-3"/></KeyFrame>
+          <KeyFrame Cue="65%"><Setter Property="TranslateTransform.X" Value="3"/></KeyFrame>
+          <KeyFrame Cue="90%"><Setter Property="TranslateTransform.X" Value="3"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="TranslateTransform.X" Value="0"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="Button.critter Ellipse.glint">
+      <Setter Property="Width" Value="3"/>
+      <Setter Property="Height" Value="3"/>
+      <Setter Property="Fill" Value="#fff4dc"/>
+      <Setter Property="HorizontalAlignment" Value="Right"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+      <Setter Property="Margin" Value="0,2,1,0"/>
+    </Style>
+    <Style Selector="Button.critter :is(Control).mouth">
+      <Setter Property="IsVisible" Value="False"/>
+    </Style>
+    <Style Selector="Button.critter:not(.working):not(.needs) :is(Control).smile">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="Button.critter.working:not(.needs) :is(Control).flat">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="Button.critter.needs :is(Control).oh">
+      <Setter Property="IsVisible" Value="True"/>
     </Style>
     <Style Selector="Button.critter Border.badge">
       <Setter Property="IsVisible" Value="False"/>

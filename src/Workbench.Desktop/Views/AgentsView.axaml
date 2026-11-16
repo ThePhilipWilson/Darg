@@ -33,20 +33,20 @@
         </ListBox>
         <TextBlock Text="No agents yet." Classes="dim small" Margin="12,2,12,6" IsVisible="{Binding !Agents.Count}"/>
 
-        <!-- Bench's chats started in this project (Bench lists the project on screen) -->
-        <TextBlock Text="Bench chats" Classes="dim small" Margin="12,14,12,4"/>
+        <!-- Fettle's chats started in this project (Fettle lists the project on screen) -->
+        <TextBlock Text="Fettle chats" Classes="dim small" Margin="12,14,12,4"/>
         <ListBox ItemsSource="{Binding Mascot.Chats, FallbackValue={x:Null}}" SelectedItem="{Binding BenchChat}" Background="Transparent"
                  ScrollViewer.VerticalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ChatEntry">
               <StackPanel Spacing="2">
                 <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Classes="dim small" Text="{Binding When, StringFormat='Bench · {0}'}"/>
+                <TextBlock Classes="dim small" Text="{Binding When, StringFormat='Fettle · {0}'}"/>
               </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
-        <TextBlock Text="None yet: talk to Bench (bottom right)." Classes="dim small" Margin="12,2,12,6"
+        <TextBlock Text="None yet: talk to Fettle (bottom right)." Classes="dim small" Margin="12,2,12,6"
                    IsVisible="{Binding !Mascot.Chats.Count, FallbackValue=True}"/>
         </StackPanel>
         </ScrollViewer>

@@ -7,7 +7,7 @@ using Workbench.Core;
 
 namespace Workbench.Desktop.ViewModels;
 
-/// <summary>Bench, the mascot: Claude sessions for the whole instance. It can see every project's
+/// <summary>Fettle (once called Bench), the mascot: Claude sessions for the whole instance. It can see every project's
 /// boards, notes, docs and repos (--add-dir) and is told how the board and note files are laid out.
 /// Every message carries a line saying what Philip is looking at (project, section, open doc or card),
 /// so "sort these into folders" means the docs he has open, not every project's. Chats are kept: New
@@ -61,7 +61,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
 
     bool Mine(string? project) => ProjectId is null || project is null || string.Equals(project, ProjectId, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The project on screen changed: Bench shows that project's chats, and the chat it had open
+    /// <summary>The project on screen changed: Fettle shows that project's chats, and the chat it had open
     /// (the newest saved one, the first time). The chat left behind keeps running and still notifies.</summary>
     public void ShowProject(string? projectId)
     {
@@ -194,7 +194,8 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     string Briefing()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("You are Bench, the assistant inside Workbench, Philip's app for his projects. He talks to you from a small box in the corner, so keep replies short.");
+        sb.AppendLine("You are Fettle, the assistant inside Workbench, Philip's app for his projects: a small round amber creature who lives in the corner of the window. He talks to you from a little box there, so keep replies short.");
+        sb.AppendLine("Your manner is dry and wry: understated British humour, the odd quip when one comes naturally (\"Done. Three cards, none of them on fire.\"), never at the expense of the answer or of brevity. No exclamation marks, no cheerleading, no apologising for being an AI. When something's wrong or risky, say so plainly and drop the jokes.");
         sb.AppendLine("Each of his messages starts with [Philip is looking at: ...]: the project, the section and what's open there. Read his words against it: \"these\", \"them\", \"here\", \"the docs\", \"this card\" mean what's in that context, and changes stay inside it (that project, that folder) unless he names something else. If his words could reach further than what he's looking at, ask with AskUserQuestion first.");
         sb.AppendLine("The projects open in this Workbench:");
         foreach (var p in Projects)
