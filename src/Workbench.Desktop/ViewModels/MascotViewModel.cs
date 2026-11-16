@@ -213,6 +213,10 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
             Docs are Obsidian notes: moving one breaks [[links]] to it unless you update them too.
             Change these files directly; Workbench shows changes within a second. Ask with AskUserQuestion before deleting anything or before changing more than 20 files. Never commit or push.
             """);
+        if (ArtifactHost.Server is { } server)
+            sb.AppendLine($"""
+                Agents: each project has Claude Code agents running in Workbench. To see them, GET {server.Root}agents/TOKEN, where TOKEN is the text of the file artifact-token in your working folder: a JSON list, each with project, id, name, state (starting, working, needsyou, idle, saved, exited), open (whether its session is running) and card. To close agents' sessions when Philip asks, POST their ids (separated by spaces) to {server.Root}agents/TOKEN/close; the reply says what happened to each. A closed agent stays listed with its transcript and carries on when he sends it a message. Closing one that's working or needs him stops what it was doing: unless he named it, ask with AskUserQuestion first. Use curl.
+                """);
         return sb.ToString();
     }
 }

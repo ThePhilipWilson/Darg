@@ -79,6 +79,32 @@ public sealed class ArtifactTests : IDisposable
     }
 
     [Fact]
+    public async Task Lists_and_closes_agents_only_with_the_token()
+    {
+        using var server = ArtifactServer.Start(_home, FreePort());
+        var token = File.ReadAllText(Path.Combine(_home, "artifact-token")).Trim();
+        List<string>? closed = null;
+        server.ListAgents = () => Task.FromResult("[{\"id\":\"a1\"}]");
+        server.CloseAgents = ids => { closed = [.. ids]; return Task.FromResult($"Closed {ids.Count}"); };
+
+        Assert.Equal("[{\"id\":\"a1\"}]", await Http.GetStringAsync($"{server.Root}agents/{token}"));
+        var r = await Http.PostAsync($"{server.Root}agents/{token}/close", new StringContent("[\"a1\", \"b2\"]"));
+        Assert.Equal("Closed 2", await r.Content.ReadAsStringAsync());
+        Assert.Equal(["a1", "b2"], closed);
+
+        var bad = new string('0', 32);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Http.GetAsync($"{server.Root}agents/{bad}")).StatusCode);
+        closed = null;
+        Assert.Equal(HttpStatusCode.Forbidden, (await Http.PostAsync($"{server.Root}agents/{bad}/close", new StringContent("a1"))).StatusCode);
+        Assert.Null(closed);
+        Assert.Equal(HttpStatusCode.NotFound, (await Http.GetAsync($"{server.Root}agents/{token}/close")).StatusCode);
+    }
+
+    [Fact]
+    public void Agent_ids_come_out_of_any_list() =>
+        Assert.Equal(["a1", "b2", "c3"], ArtifactServer.Ids("a1, b2\nc3 a1"));
+
+    [Fact]
     public void The_token_is_kept_across_restarts()
     {
         using (ArtifactServer.Start(_home, FreePort())) { }

@@ -116,6 +116,11 @@ public sealed class ArtifactServer : IDisposable
     public int Port { get; }
     public string Root => $"http://localhost:{Port}/";
     public event Action<ArtifactReply>? Reply;
+    /// <summary>Set by the app: the agents it runs, as JSON (GET /agents/&lt;token&gt;). Fettle reads it.</summary>
+    public Func<Task<string>>? ListAgents { get; set; }
+    /// <summary>Set by the app: close these agents' sessions and say what happened (POST /agents/&lt;token&gt;/close,
+    /// the ids in the body). Fettle closes agents through it when Philip asks.</summary>
+    public Func<IReadOnlyList<string>, Task<string>>? CloseAgents { get; set; }
 
     ArtifactServer(string instance, int port, string token)
     {
@@ -180,6 +185,8 @@ public sealed class ArtifactServer : IDisposable
                 await ServeImage(res, string.Join('/', parts[1..]));
             else if (parts.Length == 5 && parts[0] == "reply" && ctx.Request.HttpMethod == "POST")
                 await TakeReply(ctx, parts[1], parts[2], parts[3], parts[4]);
+            else if (parts.Length is 2 or 3 && parts[0] == "agents")
+                await Agents(ctx, parts[1], parts.Length == 3 ? parts[2] : null);
             else res.StatusCode = 404;
         }
         catch (Exception) { try { res.StatusCode = 500; } catch (Exception) { } }
@@ -211,10 +218,37 @@ public sealed class ArtifactServer : IDisposable
         await Write(res, await File.ReadAllBytesAsync(full), ContentType(full));
     }
 
+    bool Allowed(string token) => CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(token), Encoding.UTF8.GetBytes(_token));
+
+    /// <summary>The agents: listed (GET), or the ids in the body closed (POST .../close). Needs the token.</summary>
+    async Task Agents(HttpListenerContext ctx, string token, string? action)
+    {
+        var res = ctx.Response;
+        if (!Allowed(token)) { res.StatusCode = 403; return; }
+        var method = ctx.Request.HttpMethod;
+        if (action is null && method == "GET")
+        {
+            if (ListAgents is null) { res.StatusCode = 503; return; }
+            await Write(res, Encoding.UTF8.GetBytes(await ListAgents()), "application/json");
+        }
+        else if (action == "close" && method == "POST")
+        {
+            if (CloseAgents is null) { res.StatusCode = 503; return; }
+            using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
+            var body = await reader.ReadToEndAsync();
+            if (body.Length > MaxReply) { res.StatusCode = 413; return; }
+            await Write(res, Encoding.UTF8.GetBytes(await CloseAgents(Ids(body))), "text/plain; charset=utf-8");
+        }
+        else res.StatusCode = 404;
+    }
+
+    /// <summary>Agent ids out of a body however it's written: spaces, commas, lines or a JSON array.</summary>
+    public static IReadOnlyList<string> Ids(string body) =>
+        Regex.Matches(body, "[A-Za-z0-9_-]+").Select(m => m.Value).Distinct().ToList();
+
     async Task TakeReply(HttpListenerContext ctx, string token, string project, string agent, string file)
     {
-        if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(token), Encoding.UTF8.GetBytes(_token)))
-        { ctx.Response.StatusCode = 403; return; }
+        if (!Allowed(token)) { ctx.Response.StatusCode = 403; return; }
         var buf = new byte[MaxReply + 1];
         int n = 0, r;
         while (n <= MaxReply && (r = await ctx.Request.InputStream.ReadAsync(buf.AsMemory(n, buf.Length - n))) > 0) n += r;

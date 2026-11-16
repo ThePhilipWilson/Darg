@@ -14,7 +14,11 @@
         </StackPanel>
         <ScrollViewer>
         <StackPanel>
-        <TextBlock Text="This project" Classes="dim small" Margin="12,10,12,4"/>
+        <DockPanel Margin="12,6,8,0">
+          <Button DockPanel.Dock="Right" Content="Close idle" FontSize="11" Padding="6,1" MinHeight="0" Background="Transparent"
+                  Command="{Binding CloseIdleCommand}" ToolTip.Tip="Close the session of every idle agent here. They stay listed; send one a message to carry on."/>
+          <TextBlock Text="This project" Classes="dim small" VerticalAlignment="Center"/>
+        </DockPanel>
         <ListBox ItemsSource="{Binding Agents}" SelectedItem="{Binding Selected}" Background="Transparent"
                  ScrollViewer.VerticalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
