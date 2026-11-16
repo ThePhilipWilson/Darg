@@ -11,6 +11,9 @@ public sealed class InstanceConfig
     public List<ProjectConfig> Projects { get; set; } = [];
     /// <summary>This machine's local tools (Forge, ComfyUI, Ollama, Pinokio…); the usual four when not set.</summary>
     public List<ToolConfig>? Tools { get; set; }
+    /// <summary>The shell a new console opens (a name from <see cref="Shells"/>, e.g. "Git Bash"); the
+    /// platform's usual one when not set or not installed here. The last one picked from the console menu.</summary>
+    public string? Shell { get; set; }
     public List<ToolConfig> ToolsOrDefaults() => Tools is { Count: > 0 } t ? t : ToolConfig.Defaults();
 
     static readonly JsonSerializerOptions Json = new()

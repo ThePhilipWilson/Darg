@@ -16,7 +16,23 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <Button DockPanel.Dock="Left" Content="+ Shell" Command="{Binding NewShellCommand}" Margin="0,0,8,0"/>
+        <!-- + Shell opens the default shell; ▾ lists every shell installed here, and the one picked becomes the default -->
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="0,0,8,0">
+          <Button Content="+ Shell" Command="{Binding NewShellCommand}" ToolTip.Tip="{Binding NewShellTip}"/>
+          <Button Content="▾" Padding="6,0" Margin="1,0,0,0" ToolTip.Tip="Open another shell" AutomationProperties.Name="Choose shell">
+            <Button.Flyout>
+              <MenuFlyout ItemsSource="{Binding ShellChoices}" Placement="BottomEdgeAlignedLeft">
+                <MenuFlyout.ItemContainerTheme>
+                  <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}" x:DataType="vm:ConsolesViewModel+ShellChoice">
+                    <Setter Property="Header" Value="{Binding Name}"/>
+                    <Setter Property="Command" Value="{Binding OpenCommand}"/>
+                    <Setter Property="ToolTip.Tip" Value="{Binding Tip}"/>
+                  </ControlTheme>
+                </MenuFlyout.ItemContainerTheme>
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
         <ListBox x:Name="ConsoleTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Selected}" Background="Transparent">
           <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
           <ListBox.ItemTemplate>
