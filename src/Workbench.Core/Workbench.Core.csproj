@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Review.html" LogicalName="Workbench.Core.Review.html" />
+  </ItemGroup>
+
 </Project>

@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace Workbench.Core;
@@ -36,8 +38,8 @@ public static class ArtifactStore
         var all = new List<Artifact>();
         if (!Directory.Exists(root)) return all;
         foreach (var dir in Directory.EnumerateDirectories(root))
-            foreach (var f in Directory.EnumerateFiles(dir, "*.htm*"))
-                if (Read(projectId, f) is { } a) all.Add(a);
+            foreach (var f in Directory.EnumerateFiles(dir))
+                if (IsArtifact(f) && Read(projectId, f) is { } a) all.Add(a);
         return all.OrderByDescending(a => a.Modified).ToList();
     }
 
@@ -49,9 +51,30 @@ public static class ArtifactStore
         return new Artifact(projectId, agent, Path.GetFullPath(file), Title(file), File.GetLastWriteTime(file));
     }
 
-    /// <summary>The page's &lt;title&gt;, else its file name made readable ("art-review" → "art review").</summary>
+    /// <summary>The ending of an image review: rows of pictures that Workbench shows as a picker of its own
+    /// (<see cref="ArtifactServer.ReviewPage"/>), so an agent doesn't write one each time.</summary>
+    public const string ReviewSuffix = ".review.json";
+
+    /// <summary>An HTML page or an image review.</summary>
+    public static bool IsArtifact(string file) =>
+        file.EndsWith(".html", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".htm", StringComparison.OrdinalIgnoreCase) || IsReview(file);
+
+    public static bool IsReview(string file) => file.EndsWith(ReviewSuffix, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The page's &lt;title&gt; (a review's "title"), else its file name made readable ("art-review" → "art review").</summary>
     public static string Title(string file)
     {
+        if (IsReview(file))
+        {
+            try
+            {
+                if (JsonNode.Parse(File.ReadAllText(file)) is JsonObject o && o["title"] is JsonValue v && v.TryGetValue<string>(out var t) && t.Trim().Length > 0)
+                    return Regex.Replace(t.Trim(), @"\s+", " ");
+            }
+            catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
+            var bare = Path.GetFileName(file);
+            return bare[..^ReviewSuffix.Length].Replace('-', ' ').Replace('_', ' ');
+        }
         try
         {
             using var r = new StreamReader(file);
@@ -70,7 +93,7 @@ public static class ArtifactStore
     {
         string full;
         try { full = Path.GetFullPath(path); } catch (Exception) { return null; }
-        if (!full.EndsWith(".html", StringComparison.OrdinalIgnoreCase) && !full.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)) return null;
+        if (!IsArtifact(full)) return null;
         var projects = Path.GetFullPath(Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "projects")) + Path.DirectorySeparatorChar;
         if (!full.StartsWith(projects, StringComparison.OrdinalIgnoreCase)) return null;
         var parts = full[projects.Length..].Split(Path.DirectorySeparatorChar);
@@ -89,7 +112,13 @@ public static class ArtifactStore
         "It is two-way: the page can call workbench.send(data) (a string, or anything JSON can carry; it returns a promise of true " +
         "once delivered) and that arrives to you as a message starting From artifact. Use it for picks, approvals, ratings and comments: " +
         "give the page a clear Send button, show on the page that it was sent, and keep the page's own state so the person can send more than once. " +
-        "To change an artifact, edit its file; the person reloads it.";
+        "To change an artifact, edit its file; the person reloads it. " +
+        "For picking between images (art candidates, renders, variants) don't write a page: Workbench has a picker of its own. " +
+        $"Write a JSON file whose name ends in {ReviewSuffix} into that folder, holding an object with title, an optional note, " +
+        "an optional folder (relative image paths are taken from it), and rows: a list of objects each with id, an optional note, " +
+        "an optional original (the image in use now, shown first) and candidates (a list of image paths). " +
+        "The person picks one image per row, or none for another pass, adds a note per row, and sends. The reply is one line per row: " +
+        "the id, a colon, then the picked file's name, or original, or NEEDS PASS, then optionally a vertical bar and the note.";
 
     static string Safe(string s) => string.Concat(s.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
 }
@@ -200,9 +229,12 @@ public sealed class ArtifactServer : IDisposable
         // nothing outside that agent's folder, however the path is spelled
         if (!file.StartsWith(dir, StringComparison.OrdinalIgnoreCase) || !File.Exists(file)) { res.StatusCode = 404; return; }
         res.Headers["Cache-Control"] = "no-store";
-        if (Path.GetExtension(file).ToLowerInvariant() is ".html" or ".htm")
+        var reply = $"/reply/{_token}/{Esc(project)}/{Esc(agent)}/{Esc(Path.GetRelativePath(dir, file).Replace('\\', '/'))}";
+        if (ArtifactStore.IsReview(file))
+            await Write(res, Encoding.UTF8.GetBytes(WithBridge(ReviewPage(await File.ReadAllTextAsync(file), ArtifactStore.Title(file)), reply)), "text/html; charset=utf-8");
+        else if (Path.GetExtension(file).ToLowerInvariant() is ".html" or ".htm")
         {
-            var html = WithBridge(await File.ReadAllTextAsync(file), $"/reply/{_token}/{Esc(project)}/{Esc(agent)}/{Esc(Path.GetRelativePath(dir, file).Replace('\\', '/'))}");
+            var html = WithBridge(await File.ReadAllTextAsync(file), reply);
             await Write(res, Encoding.UTF8.GetBytes(html), "text/html; charset=utf-8");
         }
         else await Write(res, await File.ReadAllBytesAsync(file), ContentType(file));
@@ -267,6 +299,29 @@ public sealed class ArtifactServer : IDisposable
                      ".then(function(r){return r.ok},function(){return false})}};</script>";
         var head = Regex.Match(html, @"<head(\s[^>]*)?>", RegexOptions.IgnoreCase);
         return head.Success ? html.Insert(head.Index + head.Length, script) : script + html;
+    }
+
+    static readonly Lazy<string> ReviewTemplate = new(() =>
+    {
+        using var s = typeof(ArtifactServer).Assembly.GetManifestResourceStream("Workbench.Core.Review.html")
+                      ?? throw new InvalidOperationException("Review.html isn't embedded");
+        return new StreamReader(s, Encoding.UTF8).ReadToEnd();
+    });
+
+    /// <summary>The picker page for an image review's JSON. JSON that doesn't read still gives a page saying why,
+    /// so the person sees the fault rather than a blank.</summary>
+    public static string ReviewPage(string json, string title)
+    {
+        string data = "null", error = "null";
+        try
+        {
+            var node = JsonNode.Parse(json);
+            if (node is JsonObject o && (o["rows"] ?? o["jobs"]) is JsonArray) data = node.ToJsonString();
+            else error = JsonSerializer.Serialize("This review has no rows: it needs an object with a rows list.");
+        }
+        catch (JsonException e) { error = JsonSerializer.Serialize("This review's JSON doesn't read: " + e.Message); }
+        // the default encoder writes < > & as \u escapes, so nothing in the data can end the script element
+        return ReviewTemplate.Value.Replace("__TITLE__", WebUtility.HtmlEncode(title)).Replace("__DATA__", data).Replace("__ERROR__", error);
     }
 
     static string Js(string s) => "'" + s.Replace("\\", "\\\\").Replace("'", "\\'") + "'";
