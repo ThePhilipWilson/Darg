@@ -28,6 +28,9 @@
         <ScrollViewer>
         <StackPanel>
         <DockPanel Margin="12,6,8,0">
+          <ToggleButton DockPanel.Dock="Right" Content="By status" FontSize="11" Padding="6,1" MinHeight="0" Background="Transparent"
+                        IsChecked="{Binding SortByStatus}" Margin="0,0,4,0" AutomationProperties.Name="Sort agents by status"
+                        ToolTip.Tip="Group the list by status: needs you, working, failed, done, saved. Off: newest first."/>
           <Button DockPanel.Dock="Right" Content="Close idle" FontSize="11" Padding="6,1" MinHeight="0" Background="Transparent"
                   Command="{Binding CloseIdleCommand}" ToolTip.Tip="Close the session of every idle agent here. They stay listed; send one a message to carry on."/>
           <Button DockPanel.Dock="Right" Content="↻ Continue all" FontSize="11" Padding="6,1" MinHeight="0" Background="Transparent"
@@ -35,7 +38,7 @@
                   ToolTip.Tip="Continue all after reset: every agent here that ran out of usage carries on when the limit resets."/>
           <TextBlock Text="This project" Classes="dim small" VerticalAlignment="Center"/>
         </DockPanel>
-        <ListBox ItemsSource="{Binding Agents}" SelectedItem="{Binding Selected}" Background="Transparent"
+        <ListBox ItemsSource="{Binding Listed}" SelectedItem="{Binding Selected}" Background="Transparent"
                  ScrollViewer.VerticalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:AgentViewModel">
