@@ -1,0 +1,468 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:views="using:Darg.Desktop.Views"
+             x:Class="Darg.Desktop.App"
+             RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <SolidColorBrush x:Key="Bg" Color="#14161a"/>
+    <SolidColorBrush x:Key="Chrome" Color="#0f1114"/>
+    <SolidColorBrush x:Key="Panel" Color="#1b1e24"/>
+    <SolidColorBrush x:Key="Panel2" Color="#22262e"/>
+    <SolidColorBrush x:Key="Line" Color="#2e333d"/>
+    <SolidColorBrush x:Key="Dim" Color="#8b93a1"/>
+    <SolidColorBrush x:Key="Accent" Color="#e0a84a"/>
+    <SolidColorBrush x:Key="Ok" Color="#5fbf7f"/>
+    <SolidColorBrush x:Key="Bad" Color="#e06464"/>
+    <SolidColorBrush x:Key="Info" Color="#6aa5e8"/>
+    <SolidColorBrush x:Key="AddBg" Color="#1f3a27"/>
+    <SolidColorBrush x:Key="DelBg" Color="#3a1f22"/>
+    <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
+  </Application.Resources>
+
+  <!-- how an agent transcript draws, wherever one is shown (the agents view, the mascot) -->
+  <Application.DataTemplates>
+    <DataTemplate DataType="vm:UserItem">
+      <Border Background="#2b2a22" BorderBrush="#4a4330" BorderThickness="1" CornerRadius="10" Padding="12,8" HorizontalAlignment="Right" MaxWidth="700">
+        <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+      </Border>
+    </DataTemplate>
+    <DataTemplate DataType="vm:TextItem">
+      <views:MarkdownView Markdown="{Binding Text}"/>
+    </DataTemplate>
+    <DataTemplate DataType="vm:NoteItem">
+      <TextBlock Text="{Binding Text}" Classes="dim small" TextWrapping="Wrap" Classes.bad="{Binding Bad}"/>
+    </DataTemplate>
+    <DataTemplate DataType="vm:ToolItem">
+      <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6">
+        <StackPanel>
+          <DockPanel Margin="9,5">
+            <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" Foreground="{StaticResource Info}" FontWeight="SemiBold" Classes="mono" Margin="0,0,8,0"/>
+            <TextBlock DockPanel.Dock="Right" Text="✓" Foreground="{StaticResource Ok}" IsVisible="{Binding Done}" Margin="8,0,0,0"/>
+            <TextBlock Text="{Binding Summary}" Classes="dim mono" TextTrimming="CharacterEllipsis"/>
+          </DockPanel>
+          <Image Source="{Binding Image}" IsVisible="{Binding HasImage}" MaxHeight="420" HorizontalAlignment="Left" Margin="9,0,9,9" Stretch="Uniform"/>
+          <!-- what the step made: thumbnails, click for the full image -->
+          <ItemsControl ItemsSource="{Binding Gallery}" IsVisible="{Binding HasGallery}" Margin="9,0,9,9">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:PreviewImage">
+                <Button Command="{Binding OpenCommand}" Padding="0" Margin="0,0,8,8" Background="Transparent" Cursor="Hand"
+                        ToolTip.Tip="{Binding Path}" AutomationProperties.Name="{Binding Name}">
+                  <Border CornerRadius="4" ClipToBounds="True" BorderBrush="{StaticResource Line}" BorderThickness="1">
+                    <Image Source="{Binding Thumb}" Height="260" Stretch="Uniform"/>
+                  </Border>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel IsVisible="{Binding HasDiff}">
+            <Border Background="{StaticResource DelBg}" Padding="10,4" IsVisible="{Binding Removed, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <SelectableTextBlock Classes="mono" Foreground="#f0a0a0" Text="{Binding Removed}" TextWrapping="Wrap"/>
+            </Border>
+            <Border Background="{StaticResource AddBg}" Padding="10,4" IsVisible="{Binding Added, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <SelectableTextBlock Classes="mono" Foreground="#a8e6b8" Text="{Binding Added}" TextWrapping="Wrap"/>
+            </Border>
+          </StackPanel>
+          <Button IsVisible="{Binding HasArtifact}" Command="{Binding OpenArtifactCommand}" Content="Open artifact" Margin="9,0,9,9"
+                  ToolTip.Tip="Open this page in Artifacts, where what it sends comes back to this agent"/>
+          <Border IsVisible="{Binding HasPreview}" Background="#15171b" Padding="10,6">
+            <SelectableTextBlock Classes="mono" Text="{Binding Preview}" TextWrapping="Wrap"/>
+          </Border>
+          <Border IsVisible="{Binding Result, Converter={x:Static ObjectConverters.IsNotNull}}" Background="#101215" Padding="10,6">
+            <SelectableTextBlock Classes="mono" Text="{Binding Result}" TextWrapping="Wrap" Foreground="{StaticResource Dim}"/>
+          </Border>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+    <DataTemplate DataType="vm:PermissionItem">
+      <Border BorderBrush="{StaticResource Accent}" BorderThickness="1" CornerRadius="8" Background="#2a2416" Padding="12,10">
+        <StackPanel Spacing="8">
+          <TextBlock><Run Text="Allow "/><Run Text="{Binding Tool}" FontWeight="SemiBold"/><Run Text="?"/></TextBlock>
+          <SelectableTextBlock Classes="mono" Text="{Binding Summary}" TextWrapping="Wrap"/>
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Pending}">
+            <Button Classes="primary" Content="Allow" Command="{Binding AllowCommand}"/>
+            <Button Content="Deny" Command="{Binding DenyCommand}"/>
+          </StackPanel>
+          <TextBlock Classes="dim small" Text="{Binding Decision}" IsVisible="{Binding !Pending}"/>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+    <DataTemplate DataType="vm:QuestionItem">
+      <Border BorderBrush="{StaticResource Accent}" BorderThickness="1" CornerRadius="8" Background="#2a2416" Padding="12,10">
+        <ItemsControl ItemsSource="{Binding Questions}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="12"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:QuestionGroup">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="dim small" Text="{Binding Header}"/>
+                <TextBlock Text="{Binding Question}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNull}}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:QuestionOption">
+                      <Button Command="{Binding Command}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                          <!-- a multiSelect question: a box per option, ticked while it is picked -->
+                          <CheckBox IsChecked="{Binding IsSelected}" IsHitTestVisible="False" IsVisible="{Binding MultiSelect}" VerticalAlignment="Top"/>
+                          <StackPanel Grid.Column="1" Spacing="2">
+                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap"/>
+                          </StackPanel>
+                        </Grid>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Classes="primary" Content="Send picks" HorizontalAlignment="Left" Command="{Binding SendPicksCommand}" IsVisible="{Binding ShowSendPicks}"/>
+                <!-- or answer in your own words: Enter sends, Shift+Enter starts a new line -->
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNull}}">
+                  <TextBox Text="{Binding OwnAnswer}" PlaceholderText="Or type your own answer…" AcceptsReturn="True" TextWrapping="Wrap"
+                           MinHeight="60" MaxHeight="200" views:EnterSends.Command="{Binding SendOwnCommand}"/>
+                  <Button Grid.Column="1" Classes="primary" Content="Send" VerticalAlignment="Bottom" Command="{Binding SendOwnCommand}"/>
+                </Grid>
+                <TextBlock IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNotNull}}" TextWrapping="Wrap"
+                           Text="{Binding Chosen, StringFormat='You picked: {0}'}" Foreground="{StaticResource Accent}"/>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+    </DataTemplate>
+  </Application.DataTemplates>
+
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"/>
+    <Style Selector="TextBlock.dir">
+      <Setter Property="Foreground" Value="#c9a86a"/>
+    </Style>
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{StaticResource Bg}"/>
+    </Style>
+    <Style Selector="TextBlock.dim, SelectableTextBlock.dim">
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+    </Style>
+    <Style Selector="Ellipse.status">
+      <Setter Property="Fill" Value="#5a606c"/>
+    </Style>
+    <Style Selector="Ellipse.status.up">
+      <Setter Property="Fill" Value="{StaticResource Ok}"/>
+    </Style>
+    <Style Selector="TextBlock.good">
+      <Setter Property="Foreground" Value="{StaticResource Ok}"/>
+    </Style>
+    <Style Selector="TextBlock.bad">
+      <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector="TextBlock.small">
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style Selector="TextBlock.mono, SelectableTextBlock.mono">
+      <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{StaticResource Panel2}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Padding" Value="9,7"/>
+    </Style>
+    <!-- a text box written on paper (the post-it editor): the paper shows through when focused or hovered,
+         and the ink stays dark; Fluent's own focus look is a dark box with light text -->
+    <Style Selector="TextBox.paper /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="TextBox.paper:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="TextBox.paper:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="TextBox.paper, TextBox.paper:focus, TextBox.paper:pointerover">
+      <Setter Property="Foreground" Value="#2a2620"/>
+      <Setter Property="CaretBrush" Value="#2a2620"/>
+      <Setter Property="SelectionBrush" Value="#55000000"/>
+      <Setter Property="SelectionForegroundBrush" Value="#2a2620"/>
+      <!-- the "Write it down…" hint: ink (Fluent fades placeholders itself), not Fluent's light grey that vanishes on yellow -->
+      <Setter Property="PlaceholderForeground" Value="#2a2620"/>
+    </Style>
+    <Style Selector="TextBox.paper /template/ :is(TextBlock)#PART_Placeholder">
+      <Setter Property="Foreground" Value="#2a2620"/>
+    </Style>
+    <Style Selector="Button.onpaper">
+      <Setter Property="Background" Value="#22000000"/>
+      <Setter Property="Foreground" Value="#2a2620"/>
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Padding" Value="6,1"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+
+    <!-- where a dragged card or post-it would land -->
+    <Style Selector="Border.list.droptarget">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+      <Setter Property="Background" Value="#20242c"/>
+    </Style>
+    <!-- a post-it picked for a batch (Ctrl- or Shift-click, Pick all) -->
+    <Style Selector="Border.postit">
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="3"/>
+    </Style>
+    <!-- white: it shows against the dark wall whatever colour the paper is -->
+    <Style Selector="Border.postit.picked">
+      <Setter Property="BorderBrush" Value="#f4f4f4"/>
+    </Style>
+    <Style Selector="Border.wallcol.droptarget">
+      <Setter Property="Background" Value="#22e0a84a"/>
+      <Setter Property="CornerRadius" Value="8"/>
+    </Style>
+    <Style Selector="Border.card:pointerover">
+      <Setter Property="BorderBrush" Value="#4a5160"/>
+    </Style>
+    <!-- a card picked for a batch (Ctrl- or Shift-click, Pick all), as on the notes wall -->
+    <Style Selector="Border.card.picked">
+      <Setter Property="BorderBrush" Value="#f4f4f4"/>
+      <Setter Property="BorderThickness" Value="2"/>
+      <Setter Property="Padding" Value="8,6"/>
+    </Style>
+    <Style Selector="Border.label">
+      <Setter Property="Background" Value="#2a2f39"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="6,0"/>
+      <Setter Property="Margin" Value="0,0,4,2"/>
+    </Style>
+    <Style Selector="ToggleButton.chip">
+      <Setter Property="Padding" Value="8,2"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Margin" Value="0,0,5,5"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+    <!-- filter chips: plain = off, outlined = any of these (OR), filled with + = must have (AND) -->
+    <Style Selector="Button.chip">
+      <Setter Property="Padding" Value="8,2"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Margin" Value="0,0,5,5"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.chip.any">
+      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+      <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+      <Setter Property="Background" Value="#3a3020"/>
+    </Style>
+    <Style Selector="Button.chip.all">
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+      <Setter Property="Foreground" Value="#1a1408"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <Style Selector="Button.chip.all:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#f0bc5e"/>
+      <Setter Property="Foreground" Value="#1a1408"/>
+    </Style>
+    <Style Selector="Button.rail, ToggleButton.rail">
+      <Setter Property="Width" Value="48"/>
+      <Setter Property="Height" Value="48"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="0,2"/>
+      <Setter Property="CornerRadius" Value="10"/>
+    </Style>
+    <Style Selector="Button.workon">
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="Padding" Value="6,1"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="Opacity" Value="0.35"/>
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Border.card:pointerover Button.workon">
+      <Setter Property="Opacity" Value="1"/>
+    </Style>
+    <Style Selector="Button.agentline">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="0,2"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+    <!-- An agent's state, wherever it shows (agents list, its header, a board card): put .agentstate on the
+         container with .working / .needs / .done / .failed bound to the agent, and the Ellipse.dot, Border.bar
+         and TextBlock.state inside take the colour. Grey: saved or ended. Working pulses; needs you is a
+         filled row, as it's the one to act on; .unseen (news not yet opened) makes the name bold. -->
+    <Style Selector=".agentstate Ellipse.dot">
+      <Setter Property="Fill" Value="#5a606c"/>
+    </Style>
+    <Style Selector=".agentstate Border.bar">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector=".agentstate TextBlock.state">
+      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+    </Style>
+    <Style Selector=".agentstate.working Ellipse.dot">
+      <Setter Property="Fill" Value="{StaticResource Info}"/>
+      <Style.Animations>
+        <Animation Duration="0:0:1.2" IterationCount="Infinite" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+          <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.25"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector=".agentstate.working Border.bar">
+      <Setter Property="Background" Value="{StaticResource Info}"/>
+    </Style>
+    <Style Selector=".agentstate.working TextBlock.state">
+      <Setter Property="Foreground" Value="{StaticResource Info}"/>
+    </Style>
+    <Style Selector=".agentstate.needs Ellipse.dot">
+      <Setter Property="Fill" Value="{StaticResource Accent}"/>
+    </Style>
+    <Style Selector=".agentstate.needs Border.bar">
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+    </Style>
+    <Style Selector=".agentstate.needs TextBlock.state">
+      <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="ListBoxItem:not(:selected) DockPanel.agentstate.needs">
+      <Setter Property="Background" Value="#2a2418"/>
+    </Style>
+    <Style Selector=".agentstate.done Ellipse.dot">
+      <Setter Property="Fill" Value="{StaticResource Ok}"/>
+    </Style>
+    <Style Selector=".agentstate.done Border.bar">
+      <Setter Property="Background" Value="{StaticResource Ok}"/>
+    </Style>
+    <Style Selector=".agentstate.done TextBlock.state">
+      <Setter Property="Foreground" Value="{StaticResource Ok}"/>
+    </Style>
+    <Style Selector=".agentstate.failed Ellipse.dot">
+      <Setter Property="Fill" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector=".agentstate.failed Border.bar">
+      <Setter Property="Background" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector=".agentstate.failed TextBlock.state">
+      <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector=".agentstate.unseen TextBlock.name">
+      <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <!-- Fettle: bobs gently and blinks; squishes under the pointer; while it works it bobs quicker,
+         glances about and purses its mouth; when it needs you it says "oh" and shows a badge -->
+    <Style Selector="Button.critter">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="29"/>
+      <Setter Property="RenderTransform" Value="translate(0px, 0px)"/>
+      <Style.Animations>
+        <Animation Duration="0:0:2.6" IterationCount="Infinite" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%"><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+          <KeyFrame Cue="50%"><Setter Property="TranslateTransform.Y" Value="-4"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="Button.critter.working">
+      <Style.Animations>
+        <Animation Duration="0:0:0.7" IterationCount="Infinite" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%"><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+          <KeyFrame Cue="50%"><Setter Property="TranslateTransform.Y" Value="-6"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="TranslateTransform.Y" Value="0"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="Button.critter /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.critter Panel.body">
+      <Setter Property="RenderTransformOrigin" Value="50%,100%"/>
+      <Setter Property="RenderTransform" Value="scale(1, 1)"/>
+      <Setter Property="Transitions">
+        <Transitions><TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.18" Easing="BackEaseOut"/></Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button.critter:pointerover Panel.body">
+      <Setter Property="RenderTransform" Value="scale(1.07, 0.94)"/>
+    </Style>
+    <Style Selector="Button.critter:pressed Panel.body">
+      <Setter Property="RenderTransform" Value="scale(0.93, 1.06)"/>
+    </Style>
+    <Style Selector="Button.critter Path.shaving">
+      <Setter Property="Stroke" Value="#b8741f"/>
+      <Setter Property="StrokeThickness" Value="3"/>
+      <Setter Property="StrokeLineCap" Value="Round"/>
+    </Style>
+    <Style Selector="Button.critter Ellipse.cheek">
+      <Setter Property="Width" Value="9"/>
+      <Setter Property="Height" Value="5"/>
+      <Setter Property="Fill" Value="#e07a4a"/>
+      <Setter Property="Opacity" Value="0.45"/>
+    </Style>
+    <Style Selector="Button.critter Panel.eye">
+      <Setter Property="Width" Value="8"/>
+      <Setter Property="Height" Value="10"/>
+      <Setter Property="RenderTransform">
+        <TransformGroup><ScaleTransform/><TranslateTransform/></TransformGroup>
+      </Setter>
+      <Style.Animations>
+        <!-- a blink every few seconds -->
+        <Animation Duration="0:0:4.3" IterationCount="Infinite">
+          <KeyFrame Cue="0%"><Setter Property="ScaleTransform.ScaleY" Value="1"/></KeyFrame>
+          <KeyFrame Cue="93%"><Setter Property="ScaleTransform.ScaleY" Value="1"/></KeyFrame>
+          <KeyFrame Cue="95.5%"><Setter Property="ScaleTransform.ScaleY" Value="0.1"/></KeyFrame>
+          <KeyFrame Cue="98%"><Setter Property="ScaleTransform.ScaleY" Value="1"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="ScaleTransform.ScaleY" Value="1"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="Button.critter.working Panel.eye">
+      <Style.Animations>
+        <!-- glances side to side while it thinks -->
+        <Animation Duration="0:0:2.4" IterationCount="Infinite" Easing="SineEaseInOut">
+          <KeyFrame Cue="0%"><Setter Property="TranslateTransform.X" Value="0"/></KeyFrame>
+          <KeyFrame Cue="20%"><Setter Property="TranslateTransform.X" Value="-3"/></KeyFrame>
+          <KeyFrame Cue="45%"><Setter Property="TranslateTransform.X" Value="-3"/></KeyFrame>
+          <KeyFrame Cue="65%"><Setter Property="TranslateTransform.X" Value="3"/></KeyFrame>
+          <KeyFrame Cue="90%"><Setter Property="TranslateTransform.X" Value="3"/></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="TranslateTransform.X" Value="0"/></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="Button.critter Ellipse.glint">
+      <Setter Property="Width" Value="3"/>
+      <Setter Property="Height" Value="3"/>
+      <Setter Property="Fill" Value="#fff4dc"/>
+      <Setter Property="HorizontalAlignment" Value="Right"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+      <Setter Property="Margin" Value="0,2,1,0"/>
+    </Style>
+    <Style Selector="Button.critter :is(Control).mouth">
+      <Setter Property="IsVisible" Value="False"/>
+    </Style>
+    <Style Selector="Button.critter:not(.working):not(.needs) :is(Control).smile">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="Button.critter.working:not(.needs) :is(Control).flat">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="Button.critter.needs :is(Control).oh">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="Button.critter Border.badge">
+      <Setter Property="IsVisible" Value="False"/>
+    </Style>
+    <Style Selector="Button.critter.needs Border.badge">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+      <Setter Property="Foreground" Value="#1a1408"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+  </Application.Styles>
+</Application>

@@ -1,0 +1,89 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:views="using:Darg.Desktop.Views"
+             x:Class="Darg.Desktop.Views.ToolsView"
+             x:DataType="vm:ToolsViewModel"
+             Background="{StaticResource Bg}">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+          <Button Content="↻ Check again" Command="{Binding RefreshCommand}"/>
+          <Button Content="Close" Command="{Binding CloseCommand}"/>
+        </StackPanel>
+        <TextBlock Text="Tools on this machine" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+      </DockPanel>
+    </Border>
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Cards}" Margin="16">
+        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ToolCard">
+            <Border Width="560" Margin="0,0,16,16" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="10" Padding="14">
+              <StackPanel Spacing="10">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                    <Button Classes="primary" Content="Start" Command="{Binding StartCommand}" IsVisible="{Binding ShowStart}"/>
+                    <Button Content="Open ↗" Command="{Binding OpenCommand}" IsVisible="{Binding Up}"/>
+                  </StackPanel>
+                  <Ellipse Width="9" Height="9" Margin="0,0,8,0" VerticalAlignment="Center" Classes="status" Classes.up="{Binding Up}"/>
+                  <StackPanel>
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15"/>
+                    <TextBlock Classes="dim small" Text="{Binding Detail}" TextWrapping="Wrap"/>
+                    <TextBlock Classes="dim small mono" Text="{Binding Url}"/>
+                  </StackPanel>
+                </DockPanel>
+
+                <!-- Forge: a prompt, an image -->
+                <StackPanel Spacing="8" IsVisible="{Binding IsForge}" IsEnabled="{Binding Up}">
+                  <TextBox Text="{Binding Prompt}" PlaceholderText="Prompt" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60"/>
+                  <TextBox Text="{Binding Negative}" PlaceholderText="Negative prompt (optional)"/>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <NumericUpDown Value="{Binding Width}" Minimum="256" Maximum="2048" Increment="64" FormatString="0" Width="120" ToolTip.Tip="Width"/>
+                    <NumericUpDown Value="{Binding Height}" Minimum="256" Maximum="2048" Increment="64" FormatString="0" Width="120" ToolTip.Tip="Height"/>
+                    <NumericUpDown Value="{Binding Steps}" Minimum="1" Maximum="80" FormatString="0" Width="100" ToolTip.Tip="Steps"/>
+                    <Button Classes="primary" Content="Draw" Command="{Binding GenerateCommand}"/>
+                    <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}" Width="80" VerticalAlignment="Center"/>
+                  </StackPanel>
+                  <Image Source="{Binding Picture}" MaxHeight="520" HorizontalAlignment="Left" IsVisible="{Binding Picture, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                  <SelectableTextBlock Classes="dim small mono" Text="{Binding SavedTo}" IsVisible="{Binding SavedTo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                </StackPanel>
+
+                <!-- Ollama: a model, a question, an answer -->
+                <StackPanel Spacing="8" IsVisible="{Binding IsOllama}" IsEnabled="{Binding Up}">
+                  <ComboBox ItemsSource="{Binding Models}" SelectedItem="{Binding Model}" HorizontalAlignment="Stretch" PlaceholderText="Model"/>
+                  <DockPanel>
+                    <Button DockPanel.Dock="Right" Classes="primary" Content="Ask" Command="{Binding AskCommand}" Margin="8,0,0,0" VerticalAlignment="Bottom"/>
+                    <TextBox Text="{Binding Question}" PlaceholderText="Ask the local model…" AcceptsReturn="True" TextWrapping="Wrap"/>
+                  </DockPanel>
+                  <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}"/>
+                  <views:MarkdownView Markdown="{Binding Answer}"/>
+                </StackPanel>
+
+                <!-- claude-draw: agents ask for drawings themselves; this is drawing unasked -->
+                <StackPanel Spacing="8" IsVisible="{Binding IsDraw}">
+                  <TextBlock Classes="dim" TextWrapping="Wrap"
+                             Text="Sketch or mark something up for an agent. Agents put their own questions on the canvas; New canvas is for drawing unasked: send it, then tell an agent you've sent it something. ✎ Draw beside an agent's Send asks that agent for a canvas."/>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="primary" Content="New canvas" Command="{Binding NewCanvasCommand}"/>
+                  </StackPanel>
+                </StackPanel>
+
+                <!-- ComfyUI: the newest images -->
+                <ItemsControl ItemsSource="{Binding Recent}" IsVisible="{Binding IsComfy}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate><Image Source="{Binding}" Height="120" Margin="0,0,6,6"/></DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Classes="bad" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>
