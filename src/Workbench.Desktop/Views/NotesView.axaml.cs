@@ -7,7 +7,7 @@ using Workbench.Desktop.ViewModels;
 namespace Workbench.Desktop.Views;
 
 /// <summary>Post-its are picked up and carried to another column (DragLift); a click opens one to edit,
-/// Ctrl- or Shift-click picks it. Ctrl+A picks every note showing, Escape unpicks them.</summary>
+/// Ctrl- or Shift-click picks it; dragging a picked note carries every picked note with it. Ctrl+A picks every note showing, Escape unpicks them.</summary>
 public partial class NotesView : UserControl
 {
     static NotesView() => RenameBox.Hook();
@@ -17,9 +17,10 @@ public partial class NotesView : UserControl
         InitializeComponent();
         _ = new DragLift(this, Overlay, "postit", "wallcol",
             itemsOf: col => (col as NoteColumn)?.Notes.Cast<object>().ToList() ?? [],
-            drop: (item, column, _) => { if (DataContext is NotesViewModel wall && item is NoteViewModel n) wall.Move(n.Id, column); },
+            drop: (items, column, _) => { if (DataContext is NotesViewModel wall) wall.Move(items.OfType<NoteViewModel>().Select(n => n.Id), column); },
             click: (item, keys) => { if (DataContext is NotesViewModel wall && item is NoteViewModel n) wall.Click(n, keys); },
-            ordered: false); // notes sit newest first in a column; only the column matters
+            ordered: false, // notes sit newest first in a column; only the column matters
+            carried: item => DataContext is NotesViewModel wall && item is NoteViewModel n ? wall.Carried(n) : [item]);
         BoardView.ChipDoubleClicks(this);
         // a column's name: double-click to rename; in the box, Enter saves and Esc leaves it as it was
         AddHandler(DoubleTappedEvent, (_, e) =>

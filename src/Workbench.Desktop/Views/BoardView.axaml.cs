@@ -6,7 +6,8 @@ using Workbench.Desktop.ViewModels;
 namespace Workbench.Desktop.Views;
 
 /// <summary>Cards are picked up and carried (DragLift): drop on a list to move there, the line shows
-/// where; a click opens the card, Ctrl- or Shift-click picks it (then a plain click picks too). Ctrl+A
+/// where; a click opens the card, Ctrl- or Shift-click picks it (then a plain click picks too); dragging a picked
+/// card carries every picked card with it. Ctrl+A
 /// picks every card showing (a column header's Pick all, just that column), Escape unpicks them; picked cards can each be given an agent in one go.</summary>
 public partial class BoardView : UserControl
 {
@@ -17,12 +18,13 @@ public partial class BoardView : UserControl
         InitializeComponent();
         _ = new DragLift(this, Overlay, "card", "list",
             itemsOf: list => (list as ListViewModel)?.Cards.Cast<object>().ToList() ?? [],
-            drop: (item, list, before) =>
+            drop: (items, list, before) =>
             {
-                if (DataContext is BoardViewModel board && item is CardViewModel card)
-                    board.Move(card, list, (before as CardViewModel)?.Id);
+                if (DataContext is BoardViewModel board)
+                    board.Move(items.OfType<CardViewModel>().ToList(), list, (before as CardViewModel)?.Id);
             },
-            click: (item, keys) => { if (DataContext is BoardViewModel board && item is CardViewModel card) board.Click(card, keys); });
+            click: (item, keys) => { if (DataContext is BoardViewModel board && item is CardViewModel card) board.Click(card, keys); },
+            carried: item => DataContext is BoardViewModel board && item is CardViewModel card ? board.Carried(card) : [item]);
         ChipDoubleClicks(this);
         // a column's name: double-click to rename; in the box, Enter saves and Esc leaves it as it was
         AddHandler(DoubleTappedEvent, (_, e) =>
