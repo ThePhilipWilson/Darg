@@ -30,9 +30,9 @@ public partial class AgentsView : UserControl
         if (DataContext is not AgentsViewModel vm) return;
         vm.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName != nameof(AgentsViewModel.Selected)) return;
+            if (e.PropertyName != nameof(AgentsViewModel.Shown)) return;
             if (_shown is not null) _shown.Items.CollectionChanged -= Grew;
-            _shown = vm.Selected;
+            _shown = vm.Shown;
             if (_shown is not null) _shown.Items.CollectionChanged += Grew;
             ScrollSoon();
         };

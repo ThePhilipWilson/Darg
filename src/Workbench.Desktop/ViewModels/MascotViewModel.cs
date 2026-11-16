@@ -62,7 +62,14 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     AgentViewModel Wire(AgentViewModel a)
     {
         a.Notify += (what, detail) => Notify?.Invoke(a, what, detail);
+        a.Wrap = WithContext; // typed in the Agents view too, it still hears where Philip is
         return a;
+    }
+
+    string WithContext(string text)
+    {
+        var where = Context?.Invoke() ?? "";
+        return where.Length > 0 ? $"[Philip is looking at: {where}]{Environment.NewLine}{Environment.NewLine}{text}" : text;
     }
 
     /// <summary>Start a new chat. The current one is kept in the list.</summary>
@@ -94,8 +101,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         var text = Compose.Trim();
         if (text.Length == 0) return;
         Compose = "";
-        var where = Context?.Invoke() ?? "";
-        var sent = where.Length > 0 ? $"[Philip is looking at: {where}]{Environment.NewLine}{Environment.NewLine}{text}" : text;
+        var sent = WithContext(text);
         if (Agent is null || (Agent.State == AgentState.Exited && Agent.SessionId is null))
         {
             var home = InstanceConfig.Folder();

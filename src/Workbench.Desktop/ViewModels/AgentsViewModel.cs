@@ -24,6 +24,31 @@ public partial class AgentsViewModel : ObservableObject
 
     public ObservableCollection<AgentViewModel> Agents { get; } = [];
 
+    /// <summary>Bench, shared by every project: its chats are listed here too, under their own heading.</summary>
+    [ObservableProperty] public partial MascotViewModel? Mascot { get; set; }
+    /// <summary>The Bench chat open in this view (null while a project agent is).</summary>
+    [ObservableProperty] public partial ChatEntry? BenchChat { get; set; }
+
+    /// <summary>The agent in the right-hand pane: the project agent picked in the list, or the Bench chat
+    /// picked under it. (Kept apart from Selected, which the project list owns: a Bench chat isn't in
+    /// that list, so the list would clear it.)</summary>
+    [ObservableProperty] public partial AgentViewModel? Shown { get; set; }
+
+    partial void OnBenchChatChanged(ChatEntry? value)
+    {
+        if (value is null || Mascot is null) return;
+        Mascot.SelectedChat = value;
+        Selected = null;
+        Shown = Mascot.Agent;
+    }
+
+    partial void OnSelectedChanged(AgentViewModel? value)
+    {
+        if (value is null) return;
+        BenchChat = null; // picking one of this project's agents leaves the Bench chat
+        Shown = value;
+    }
+
     /// <summary>Forget an agent: off the list and its saved file gone (Claude Code's own history stays).</summary>
     [RelayCommand]
     void Forget(AgentViewModel? a)
@@ -33,6 +58,7 @@ public partial class AgentsViewModel : ObservableObject
         AgentStore.Delete(_store, a.Id);
         Agents.Remove(a);
         if (Selected == a) Selected = Agents.FirstOrDefault();
+        if (Shown == a) Shown = Selected;
     }
 
     void Add(AgentViewModel agent, bool select)
@@ -141,6 +167,9 @@ public partial class AgentViewModel : ObservableObject
         Items.Add(new UserItem(visible));
         Begin(prompt, resume: false);
     }
+
+    /// <summary>Set for Bench's chats: turns what the person typed into what's sent (adds where they are).</summary>
+    public Func<string, string>? Wrap { get; set; }
 
     /// <summary>Send a message that shows as <paramref name="shown"/> but goes to Claude as <paramref name="sent"/>.</summary>
     public void Say(string shown, string sent)
@@ -277,6 +306,7 @@ public partial class AgentViewModel : ObservableObject
         var text = Compose.Trim();
         if (text.Length == 0) return;
         Compose = "";
+        if (Wrap is not null) { Say(text, Wrap(text)); return; } // a Bench chat: it hears where Philip is
         Items.Add(new UserItem(text));
         if (_session is null)
         {

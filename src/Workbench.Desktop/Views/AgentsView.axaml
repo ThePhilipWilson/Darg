@@ -12,7 +12,11 @@
           <TextBlock Classes="dim small" Text="{Binding Folder, StringFormat='Runs in {0}'}" TextWrapping="Wrap"/>
           <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="+ New agent" Command="{Binding StartAgentCommand}"/>
         </StackPanel>
-        <ListBox ItemsSource="{Binding Agents}" SelectedItem="{Binding Selected}" Background="Transparent">
+        <ScrollViewer>
+        <StackPanel>
+        <TextBlock Text="This project" Classes="dim small" Margin="12,10,12,4"/>
+        <ListBox ItemsSource="{Binding Agents}" SelectedItem="{Binding Selected}" Background="Transparent"
+                 ScrollViewer.VerticalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:AgentViewModel">
               <DockPanel>
@@ -27,12 +31,31 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+        <TextBlock Text="No agents yet." Classes="dim small" Margin="12,2,12,6" IsVisible="{Binding !Agents.Count}"/>
+
+        <!-- Bench's chats: the same in every project -->
+        <TextBlock Text="Bench chats" Classes="dim small" Margin="12,14,12,4"/>
+        <ListBox ItemsSource="{Binding Mascot.Chats, FallbackValue={x:Null}}" SelectedItem="{Binding BenchChat}" Background="Transparent"
+                 ScrollViewer.VerticalScrollBarVisibility="Disabled">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ChatEntry">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Classes="dim small" Text="{Binding When, StringFormat='Bench · {0}'}"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Text="None yet: talk to Bench (bottom right)." Classes="dim small" Margin="12,2,12,6"
+                   IsVisible="{Binding !Mascot.Chats.Count, FallbackValue=True}"/>
+        </StackPanel>
+        </ScrollViewer>
       </DockPanel>
     </Border>
 
     <!-- the selected agent -->
-    <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" DataContext="{Binding Selected}" x:DataType="vm:AgentViewModel"
-          IsVisible="{Binding $parent[UserControl].((vm:AgentsViewModel)DataContext).Selected, Converter={x:Static ObjectConverters.IsNotNull}}">
+    <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" DataContext="{Binding Shown}" x:DataType="vm:AgentViewModel"
+          IsVisible="{Binding $parent[UserControl].((vm:AgentsViewModel)DataContext).Shown, Converter={x:Static ObjectConverters.IsNotNull}}">
       <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
         <DockPanel>
           <Button DockPanel.Dock="Right" Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding Working}"/>
@@ -61,7 +84,7 @@
     </Grid>
 
     <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6"
-                IsVisible="{Binding Selected, Converter={x:Static ObjectConverters.IsNull}}">
+                IsVisible="{Binding Shown, Converter={x:Static ObjectConverters.IsNull}}">
       <TextBlock Text="No agent selected" FontSize="16" HorizontalAlignment="Center"/>
       <TextBlock Classes="dim" Text="Describe a job on the left to start one." HorizontalAlignment="Center"/>
     </StackPanel>

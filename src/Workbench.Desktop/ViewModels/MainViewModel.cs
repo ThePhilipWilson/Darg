@@ -22,6 +22,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var p in config.Projects) Projects.Add(Make(p));
         Mascot = new MascotViewModel(config.Projects) { Context = Where };
         Mascot.Restore();
+        foreach (var p in Projects) if (p.Agents is { } a) a.Mascot = Mascot;
         Mascot.Notify += (agent, what, detail) =>
         {
             if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, $"Bench: {what}", "", detail);
@@ -35,7 +36,10 @@ public partial class MainViewModel : ObservableObject
     {
         var vm = new ProjectViewModel(p);
         if (vm.Agents is { } agents)
+        {
             agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
+            agents.Mascot = Mascot; // null while the app starts; set just after Bench is made
+        }
         return vm;
     }
 
@@ -65,7 +69,7 @@ public partial class MainViewModel : ObservableObject
                 s.Append($", repos {string.Join(", ", p.Config.Repos)}");
                 if (p.Code.Current is { } f) s.Append($", file {f.FullPath} open");
                 break;
-            case Section.Agents when p.Agents?.Selected is { } a:
+            case Section.Agents when p.Agents?.Shown is { } a:
                 s.Append($", agent \"{a.Name}\" working in {a.Cwd}");
                 break;
             case Section.GitHub:
@@ -134,7 +138,7 @@ public partial class MainViewModel : ObservableObject
     /// <summary>A notification, unless the person is already looking at that agent.</summary>
     void Tell(ProjectViewModel project, AgentViewModel agent, string what, string detail)
     {
-        var looking = WindowActive && Selected == project && project.OnAgents && project.Agents?.Selected == agent;
+        var looking = WindowActive && Selected == project && project.OnAgents && project.Agents?.Shown == agent;
         if (!looking) Notifier.Show(project.Config.Id, agent.Id, $"{project.Name}: {what}", agent.Name, detail);
     }
 
