@@ -74,10 +74,15 @@
                  ScrollViewer.VerticalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ChatEntry">
-              <StackPanel Spacing="2">
-                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Classes="dim small" Text="{Binding When, StringFormat='Fettle · {0}'}"/>
-              </StackPanel>
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="×" Padding="6,0" Background="Transparent" MinHeight="0" VerticalAlignment="Center"
+                        Command="{Binding $parent[UserControl].((vm:AgentsViewModel)DataContext).ForgetChatCommand}" CommandParameter="{Binding}"
+                        ToolTip.Tip="Forget this Fettle chat (Claude Code keeps its own history)" AutomationProperties.Name="Forget chat"/>
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Classes="dim small" Text="{Binding When, StringFormat='Fettle · {0}'}"/>
+                </StackPanel>
+              </DockPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>

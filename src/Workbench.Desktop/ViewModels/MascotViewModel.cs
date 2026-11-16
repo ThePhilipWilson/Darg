@@ -154,11 +154,22 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     [RelayCommand]
     void Forget()
     {
-        if (Agent is null) return;
-        Agent.End();
-        AgentStore.Delete(Store, Agent.Id);
-        Agent = null;
+        if (Agent is not null) ForgetChat(Agent.Id);
+    }
+
+    /// <summary>A chat was forgotten (its id): a view showing it lets go.</summary>
+    public event Action<string>? ChatForgotten;
+
+    /// <summary>Forget a chat by id, open or not (the × in the Agents view's Fettle chats): its session ends
+    /// wherever it's open, in any project, and its saved file goes. Claude Code keeps its own history.</summary>
+    public void ForgetChat(string id)
+    {
+        foreach (var a in Live().Where(a => a.Id == id).ToList()) a.End();
+        foreach (var k in _open.Where(kv => kv.Value?.Id == id).Select(kv => kv.Key).ToList()) _open[k] = null;
+        AgentStore.Delete(Store, id);
+        if (Agent?.Id == id) Agent = null;
         ListChats();
+        ChatForgotten?.Invoke(id);
     }
 
     [RelayCommand] void Toggle() => Open = !Open;
