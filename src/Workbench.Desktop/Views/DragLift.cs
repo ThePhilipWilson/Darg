@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
@@ -16,14 +17,18 @@ namespace Workbench.Desktop.Views;
 /// Items are Borders with <paramref name="itemClass"/> whose Tag is the item; lists are Borders with
 /// <paramref name="listClass"/> whose Tag is the list's id and whose DataContext gives its items in
 /// order (<paramref name="itemsOf"/>). A press and release with no drag is a click, passed with the keys
-/// held at the press (Ctrl or Shift for picking more than one).</summary>
+/// held at the press (Ctrl or Shift for picking more than one).
+///
+/// An item can carry others with it (<paramref name="carried"/>: the picked items, when the one pressed
+/// is picked): they all dim, the picture says how many, and the drop is passed the lot.</summary>
 public sealed class DragLift
 {
     readonly Control _host;
     readonly Canvas _overlay;
     readonly string _itemClass, _listClass;
     readonly Func<object?, IReadOnlyList<object>> _itemsOf;
-    readonly Action<object, string, object?> _drop;
+    readonly Action<IReadOnlyList<object>, string, object?> _drop;
+    readonly Func<object, IReadOnlyList<object>>? _carried;
     readonly Action<object, KeyModifiers> _click;
     readonly bool _ordered;
 
@@ -36,13 +41,17 @@ public sealed class DragLift
     Border? _target;
     string? _targetList;
     object? _before;
+    /// <summary>What is being carried: the item pressed and any others going with it, in their order.</summary>
+    List<object> _carry = [];
+    readonly List<Border> _dimmed = [];
 
     /// <param name="ordered">Whether the drop place within a list matters (a line is shown and "before" passed).</param>
     public DragLift(Control host, Canvas overlay, string itemClass, string listClass, Func<object?, IReadOnlyList<object>> itemsOf,
-        Action<object, string, object?> drop, Action<object, KeyModifiers> click, bool ordered = true)
+        Action<IReadOnlyList<object>, string, object?> drop, Action<object, KeyModifiers> click, bool ordered = true,
+        Func<object, IReadOnlyList<object>>? carried = null)
     {
         _host = host; _overlay = overlay; _itemClass = itemClass; _listClass = listClass;
-        _itemsOf = itemsOf; _drop = drop; _click = click; _ordered = ordered;
+        _itemsOf = itemsOf; _drop = drop; _click = click; _ordered = ordered; _carried = carried;
         host.AddHandler(InputElement.PointerPressedEvent, Pressed, RoutingStrategies.Tunnel);
         host.AddHandler(InputElement.PointerMovedEvent, Moved, RoutingStrategies.Tunnel);
         host.AddHandler(InputElement.PointerReleasedEvent, Released, RoutingStrategies.Tunnel);
@@ -87,23 +96,51 @@ public sealed class DragLift
     {
         _dragging = true;
         var card = _pressed!;
+        // the carried items in their own order (so they land in it), the pressed one always among them
+        _carry = [.. _carried?.Invoke(card.Tag!) ?? []];
+        if (!_carry.Contains(card.Tag!)) _carry.Insert(0, card.Tag!);
+        var others = _carry.Count - 1;
         _grab = _pressAt - (card.TranslatePoint(new Point(0, 0), _host) ?? default);
         // a picture of the item, drawn at the screen's scale so it stays sharp
         var scale = TopLevel.GetTopLevel(_host)?.RenderScaling ?? 1;
         var size = card.Bounds.Size;
         var bmp = new RenderTargetBitmap(new PixelSize(Math.Max(1, (int)(size.Width * scale)), Math.Max(1, (int)(size.Height * scale))), new Vector(96 * scale, 96 * scale));
         bmp.Render(card);
-        _ghost = new Border
+        var picture = new Border
         {
             Width = size.Width, Height = size.Height, CornerRadius = new CornerRadius(6), Opacity = 0.95,
             BoxShadow = BoxShadows.Parse("0 12 28 0 #A0000000"),
             Child = new Image { Source = bmp, Width = size.Width, Height = size.Height },
-            RenderTransform = new RotateTransform(2.5), IsHitTestVisible = false,
         };
+        if (others == 0) { picture.RenderTransform = new RotateTransform(2.5); picture.IsHitTestVisible = false; _ghost = picture; }
+        else
+        {
+            // a stack: a plain sheet behind the picture for the others, and a badge with how many
+            var grid = new Panel { Width = size.Width + 8, Height = size.Height + 8, IsHitTestVisible = false, RenderTransform = new RotateTransform(2.5) };
+            grid.Children.Add(new Border
+            {
+                Width = size.Width, Height = size.Height, Margin = new Thickness(8, 8, 0, 0), CornerRadius = new CornerRadius(6),
+                Background = new SolidColorBrush(Color.Parse("#3a3d44")), BorderBrush = new SolidColorBrush(Color.Parse("#60ffffff")), BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
+                BoxShadow = BoxShadows.Parse("0 12 28 0 #A0000000"),
+            });
+            picture.HorizontalAlignment = HorizontalAlignment.Left; picture.VerticalAlignment = VerticalAlignment.Top;
+            grid.Children.Add(picture);
+            grid.Children.Add(new Border
+            {
+                Background = new SolidColorBrush(Color.Parse("#e0a84a")), CornerRadius = new CornerRadius(10), Padding = new Thickness(7, 1),
+                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, -8, -8, 0),
+                Child = new TextBlock { Text = _carry.Count.ToString(), Foreground = Brushes.Black, FontWeight = FontWeight.Bold, FontSize = 12 },
+            });
+            _ghost = grid;
+        }
         _overlay.Children.Add(_ghost);
         _line = new Rectangle { Height = 3, Fill = new SolidColorBrush(Color.Parse("#e0a84a")), RadiusX = 2, RadiusY = 2, IsVisible = false, IsHitTestVisible = false };
         _overlay.Children.Add(_line);
-        card.Opacity = 0.3;
+        _dimmed.Clear();
+        _dimmed.AddRange(_host.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains(_itemClass) && b.Tag is not null && _carry.Contains(b.Tag)));
+        if (!_dimmed.Contains(card)) _dimmed.Add(card);
+        foreach (var b in _dimmed) b.Opacity = 0.3;
         e.Pointer.Capture(_host);
     }
 
@@ -126,9 +163,9 @@ public sealed class DragLift
         if (list is null || !_ordered) { _line!.IsVisible = false; return; }
 
         // where in the list: before the item under the pointer (upper half) or the one after it
-        var items = _itemsOf(list.DataContext).Where(i => i != _pressed!.Tag).ToList();
+        // (never next to something being carried: it is leaving its place too)
         var borders = list.GetVisualDescendants().OfType<Border>()
-            .Where(b => b.Classes.Contains(_itemClass) && b.Tag is not null && b.Tag != _pressed!.Tag).ToList();
+            .Where(b => b.Classes.Contains(_itemClass) && b.Tag is not null && !_carry.Contains(b.Tag)).ToList();
         Border? lineAt = null; var above = true;
         foreach (var b in borders)
         {
@@ -150,16 +187,18 @@ public sealed class DragLift
 
     void Finish(bool drop)
     {
-        var item = _pressed?.Tag;
+        var carry = _carry;
         var list = _targetList;
         var before = _before;
-        if (_pressed is not null) _pressed.Opacity = 1;
+        foreach (var b in _dimmed) b.Opacity = 1;
+        _dimmed.Clear();
+        _carry = [];
         if (_ghost is not null) _overlay.Children.Remove(_ghost);
         if (_line is not null) _overlay.Children.Remove(_line);
         _target?.Classes.Remove("droptarget");
         _ghost = null; _line = null; _target = null; _targetList = null; _before = null;
         _dragging = false;
         _pressed = null;
-        if (drop && item is not null && list is not null) _drop(item, list, before);
+        if (drop && carry.Count > 0 && list is not null) _drop(carry, list, before);
     }
 }

@@ -333,6 +333,25 @@ public partial class NotesViewModel : ObservableObject
     [RelayCommand] void NewNote() => Editor = new NoteEditor(this, null);
     public void Edit(Note n) => Editor = new NoteEditor(this, n);
 
+    /// <summary>What a drag of this note carries: every picked note showing if it is picked; otherwise just it.</summary>
+    public IReadOnlyList<NoteViewModel> Carried(NoteViewModel n) =>
+        n.IsPicked ? Shown().Where(v => v.IsPicked).ToList() : [n];
+
+    /// <summary>Move several notes to a column together (those with a ticket stay where their ticket puts them).</summary>
+    public void Move(IEnumerable<string> noteIds, string column)
+    {
+        if (column.Equals(NoteStore.Ticketed, StringComparison.OrdinalIgnoreCase) || column == "Archive") return;
+        var moved = false;
+        foreach (var id in noteIds)
+        {
+            var n = _all.FirstOrDefault(x => x.Id == id);
+            if (n is null || n.Ticket.Length > 0 || n.Column == column) continue;
+            NoteStore.Save(Folder, n with { Column = column });
+            moved = true;
+        }
+        if (moved) Reload();
+    }
+
     public void Move(string noteId, string column)
     {
         // Ticketed and the archive follow the ticket, not where a note is dropped

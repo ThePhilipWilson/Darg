@@ -456,6 +456,26 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     public void Move(CardViewModel card, string toList, string? beforeId = null) => Move(card.Card.Id, toList, beforeId);
 
+    /// <summary>What a drag of this card carries: every picked card showing, in board order, if it is
+    /// picked; otherwise just it.</summary>
+    public IReadOnlyList<CardViewModel> Carried(CardViewModel card) =>
+        card.IsPicked ? Shown().Where(c => c.IsPicked).ToList() : [card];
+
+    /// <summary>Move several cards to a list together, in the order given, all landing before
+    /// <paramref name="beforeId"/> (or at the end); one reload after.</summary>
+    public void Move(IReadOnlyList<CardViewModel> cards, string toList, string? beforeId = null)
+    {
+        if (cards.Count == 1) { Move(cards[0], toList, beforeId); return; }
+        if (Folder is null || cards.Count == 0) return;
+        foreach (var c in cards)
+        {
+            try { BoardStore.Move(Folder, c.Card.Id, toList, beforeId); }
+            catch (Exception e) { _notice = $"Couldn't move {c.Card.Id}: {e.Message}"; break; }
+        }
+        Reload();
+        _notice = null;
+    }
+
     void Move(string id, string toList, string? beforeId = null, bool reload = true)
     {
         if (Folder is null) return;
