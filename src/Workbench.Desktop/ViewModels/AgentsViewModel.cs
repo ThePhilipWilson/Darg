@@ -287,7 +287,9 @@ public partial class AgentViewModel : ObservableObject
     // Model, effort and permission mode, changeable mid-chat. A running session is told at once (it takes
     // effect from its next turn); a saved one starts with them when it resumes. Only what the person picked
     // is saved: a mode the session reports (their default, or one the agent switched to) shows but isn't kept.
-    public IReadOnlyList<AgentChoice> ModelChoices => AgentChoices.Models;
+    /// <summary>The models, the first naming what "default" is here: from the settings Claude Code reads, then
+    /// from what a session started on the default reports.</summary>
+    [ObservableProperty] public partial IReadOnlyList<AgentChoice> ModelChoices { get; set; } = AgentChoices.Models;
     public IReadOnlyList<AgentChoice> EffortChoices => AgentChoices.Efforts;
     public IReadOnlyList<AgentChoice> ModeChoices => AgentChoices.Modes;
     [ObservableProperty] public partial AgentChoice ModelChoice { get; set; } = AgentChoices.Models[0];
@@ -306,6 +308,17 @@ public partial class AgentViewModel : ObservableObject
         field = value.Value == AgentChoices.Default ? null : value.Value;
         if (_session is not null) tell(_session);
         Save();
+    }
+
+    /// <summary>Say in the model picker what "default" is, keeping the pick as it was.</summary>
+    void NameDefaultModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return;
+        var keep = ModelChoice;
+        _fromSession = true;
+        ModelChoices = AgentChoices.ModelsWithDefault(model);
+        ModelChoice = keep is null || keep.Value == AgentChoices.Default ? ModelChoices[0] : AgentChoices.Find(ModelChoices, keep.Value);
+        _fromSession = false;
     }
 
     /// <summary>Show what the session reports without sending it back as a change.</summary>
@@ -352,6 +365,7 @@ public partial class AgentViewModel : ObservableObject
         Cwd = cwd;
         CardId = cardId;
         _args = args?.ToList() ?? [];
+        NameDefaultModel(AgentChoices.DefaultModel(cwd));
         var visible = shown ?? prompt;
         Name = name ?? (visible.Length > 40 ? visible[..40].TrimEnd() + "…" : visible);
         Items.Add(new UserItem(visible));
@@ -383,8 +397,9 @@ public partial class AgentViewModel : ObservableObject
         Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; SessionId = r.SessionId; Project = r.Project;
         _args = r.Args; _created = r.Created; StoreFolder = storeFolder;
         _model = r.Model; _effort = r.Effort; _mode = r.Mode;
+        NameDefaultModel(AgentChoices.DefaultModel(Cwd));
         _fromSession = true;
-        ModelChoice = AgentChoices.Find(AgentChoices.Models, r.Model);
+        ModelChoice = AgentChoices.Find(ModelChoices, r.Model);
         EffortChoice = AgentChoices.Find(AgentChoices.Efforts, r.Effort);
         ModeChoice = AgentChoices.Find(AgentChoices.Modes, r.Mode);
         _fromSession = false;
@@ -458,6 +473,7 @@ public partial class AgentViewModel : ObservableObject
         {
             case SessionStarted s:
                 Model = s.Model;
+                if (_model is null && !_args.Contains("--model")) NameDefaultModel(s.Model); // on the default: this is what it is
                 SessionId = s.SessionId;
                 OnSubscription = s.OnSubscription;
                 Billing = s.OnSubscription ? "on your subscription" : $"API key ({s.ApiKeySource})";
