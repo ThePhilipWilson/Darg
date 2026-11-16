@@ -13,6 +13,14 @@ public partial class MainViewModel : ObservableObject
     public string InstanceFile { get; }
     public bool Empty => Projects.Count == 0;
     public MascotViewModel Mascot { get; }
+    static readonly IBrush FettleLightDefault = new SolidColorBrush(Color.Parse("#f5c56b"));
+    static readonly IBrush FettleDarkDefault = new SolidColorBrush(Color.Parse("#d08a2e"));
+    static readonly IBrush FettleShavingDefault = new SolidColorBrush(Color.Parse("#b8741f"));
+    /// <summary>Fettle takes the colour of the project on screen.</summary>
+    public Color FettleLight => (Selected?.LightBrush ?? FettleLightDefault) is SolidColorBrush b ? b.Color : Colors.Orange;
+    public Color FettleDark => (Selected?.DarkBrush ?? FettleDarkDefault) is SolidColorBrush b ? b.Color : Colors.Orange;
+    public IBrush FettleShaving => Selected?.ShavingBrush ?? FettleShavingDefault;
+    public IBrush FettleEdge => Selected?.Brush ?? Brushes.Orange;
     const string MascotId = "~bench";
 
     public MainViewModel()
@@ -307,6 +315,8 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedChanged(ProjectViewModel? value)
     {
         foreach (var p in Projects) p.IsActive = p == value;
+        OnPropertyChanged(nameof(FettleLight)); OnPropertyChanged(nameof(FettleDark));
+        OnPropertyChanged(nameof(FettleShaving)); OnPropertyChanged(nameof(FettleEdge));
         Mascot?.ShowProject(value?.Config.Id); // Bench lists the chats of the project on screen
         LastProject.Write(value?.Config.Id);
         NavMoved();
@@ -327,6 +337,10 @@ public partial class ProjectViewModel : ObservableObject
     public ProjectConfig Config { get; }
     public string Name => Config.Name;
     public IBrush Brush { get; }
+    /// <summary>The project colour, lightened and darkened: Fettle wears it.</summary>
+    public IBrush LightBrush { get; }
+    public IBrush DarkBrush { get; }
+    public IBrush ShavingBrush { get; }
     public BoardViewModel? Board { get; }
     public NotesViewModel? Notes { get; }
     public DocsViewModel? Docs { get; }
@@ -359,10 +373,17 @@ public partial class ProjectViewModel : ObservableObject
     public bool OnMistakes => Section == Section.Mistakes;
     public bool OnTerminal => Section == Section.Terminal;
 
+    static Color Mix(Color a, Color b, double t) => Color.FromRgb(
+        (byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
+
     public ProjectViewModel(ProjectConfig config)
     {
         Config = config;
         Brush = Color.TryParse(config.Color, out var c) ? new SolidColorBrush(c) : Brushes.Orange;
+        var baseColour = Color.TryParse(config.Color, out var bc) ? bc : Colors.Orange;
+        LightBrush = new SolidColorBrush(Mix(baseColour, Colors.White, 0.35));
+        DarkBrush = new SolidColorBrush(Mix(baseColour, Colors.Black, 0.25));
+        ShavingBrush = new SolidColorBrush(Mix(baseColour, Colors.Black, 0.4));
         if (config.Uses(Features.Board)) Board = new BoardViewModel(config);
         if (config.Uses(Features.Agents))
         {

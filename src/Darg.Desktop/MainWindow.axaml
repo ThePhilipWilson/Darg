@@ -94,7 +94,7 @@
     <!-- sits above the agents view's message bar, so it never covers Send -->
     <StackPanel Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,22,78" Spacing="10">
       <!-- the box moves where you drag its header (MainWindow.axaml.cs); a double-click on the header puts it back -->
-      <Border x:Name="MascotBubble" Width="400" IsVisible="{Binding Mascot.Open}" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}"
+      <Border x:Name="MascotBubble" Width="400" IsVisible="{Binding Mascot.Open}" Background="{StaticResource Panel}" BorderBrush="{Binding FettleEdge}"
               BorderThickness="1" CornerRadius="14" BoxShadow="0 14 40 0 #90000000" HorizontalAlignment="Right">
         <DockPanel>
           <Border x:Name="MascotHeader" DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,8"
@@ -168,8 +168,8 @@
             <Ellipse Width="58" Height="58">
               <Ellipse.Fill>
                 <RadialGradientBrush GradientOrigin="35%,30%" Center="40%,35%" RadiusX="70%" RadiusY="70%">
-                  <GradientStop Color="#f5c56b" Offset="0"/>
-                  <GradientStop Color="#d08a2e" Offset="1"/>
+                  <GradientStop Color="{Binding FettleLight}" Offset="0"/>
+                  <GradientStop Color="{Binding FettleDark}" Offset="1"/>
                 </RadialGradientBrush>
               </Ellipse.Fill>
             </Ellipse>
@@ -193,7 +193,7 @@
             </Border>
           </Panel>
           <!-- a curl of wood shaving on its head: it lives on a workbench -->
-          <Path Classes="shaving" Data="M 26,15 C 23,5 36,1 38,9 C 39,14 33,15 32,11" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+          <Path Classes="shaving" Stroke="{Binding FettleShaving}" Data="M 26,15 C 23,5 36,1 38,9 C 39,14 33,15 32,11" HorizontalAlignment="Left" VerticalAlignment="Top"/>
         </Panel>
       </Button>
     </StackPanel>
