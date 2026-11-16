@@ -53,6 +53,9 @@ public partial class MainViewModel : ObservableObject
     /// <summary>The header's ⟳ menu: restart, or update from the repo and restart.</summary>
     public RestartViewModel Restart { get; }
 
+    /// <summary>The header's usage bar and timer (WOR-0069).</summary>
+    public UsageViewModel Usage { get; } = new();
+
     /// <summary>Agents in the middle of a turn, by name (Fettle's chats as "Fettle: name"): what a restart would cut off.</summary>
     IReadOnlyList<string> BusyAgents()
     {

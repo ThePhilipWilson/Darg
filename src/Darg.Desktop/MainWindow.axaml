@@ -59,6 +59,28 @@
         </Button>
         <Button DockPanel.Dock="Right" Content="🔧 Tools" Command="{Binding OpenToolsCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Forge, ComfyUI, Ollama, Pinokio and claude-draw on this machine"/>
+        <!-- Claude usage (WOR-0069): the 5-hour window as a bar, the time until it resets, and the week -->
+        <Border DockPanel.Dock="Right" IsVisible="{Binding Usage.Visible}" Background="Transparent" VerticalAlignment="Center"
+                Margin="0,0,12,0" Padding="4,2" ToolTip.Tip="{Binding Usage.Tip}" AutomationProperties.Name="Claude usage"
+                Opacity="{Binding Usage.Opacity}">
+          <StackPanel Orientation="Horizontal" Spacing="7">
+            <Border Width="64" Height="6" CornerRadius="3" Background="{DynamicResource Line}" VerticalAlignment="Center" ClipToBounds="True">
+              <Panel>
+                <Border HorizontalAlignment="Left" Width="{Binding Usage.FillWidth}" CornerRadius="3"
+                        Background="{DynamicResource Accent}" IsVisible="{Binding !Usage.High}"/>
+                <Border HorizontalAlignment="Left" Width="{Binding Usage.FillWidth}" CornerRadius="3"
+                        Background="{DynamicResource Bad}" IsVisible="{Binding Usage.High}"/>
+              </Panel>
+            </Border>
+            <TextBlock Classes="small" Text="{Binding Usage.Percent}" VerticalAlignment="Center"
+                       Foreground="{DynamicResource Ink}" IsVisible="{Binding !Usage.High}"/>
+            <TextBlock Classes="small" Text="{Binding Usage.Percent}" VerticalAlignment="Center" FontWeight="Bold"
+                       Foreground="{DynamicResource Bad}" IsVisible="{Binding Usage.High}"/>
+            <TextBlock Classes="dim small" Text="{Binding Usage.Timer, StringFormat='⏱ {0}'}" VerticalAlignment="Center"
+                       IsVisible="{Binding Usage.Timer, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            <TextBlock Classes="dim small" Text="{Binding Usage.Week}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Border>
         <ListBox x:Name="ProjectTabs" ItemsSource="{Binding Projects}" SelectedItem="{Binding Selected}" Background="Transparent"
                  VerticalAlignment="Bottom">
           <ListBox.ItemsPanel>
