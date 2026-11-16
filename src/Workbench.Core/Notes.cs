@@ -120,7 +120,10 @@ public static class NoteStore
         return map;
     }
 
-    public static bool IsCompleted(string status) => BoardStore.PlaceOf(status, []) == Board.Completed;
+    /// <summary>Finished: the board's Completed list, or a column called Done (boards that end in their own
+    /// Done column, as Workbench's does, never use Completed).</summary>
+    public static bool IsCompleted(string status) =>
+        BoardStore.PlaceOf(status, []) == Board.Completed || status.Trim().Equals("Done", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Keep the archive in step with the tickets: a note whose ticket is completed moves to the
     /// archive, an archived note whose ticket is open again comes back. A ticket that can't be found leaves
