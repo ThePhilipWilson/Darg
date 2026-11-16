@@ -32,8 +32,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public Action<Card, string, Flow>? RunFlow { get; set; }
     /// <summary>Set by the project: show an agent.</summary>
     public Action<AgentViewModel>? OpenAgent { get; set; }
-    /// <summary>Set by the project: start an agent and show it. Passed: the prompt, its folder and its name.</summary>
-    public Action<string, string, string>? StartAgent { get; set; }
+    /// <summary>Set by the project: start an agent and show it. Passed: the prompt, its folder, its name and more
+    /// folders it may work in.</summary>
+    public Action<string, string, string, IReadOnlyList<string>>? StartAgent { get; set; }
     /// <summary>Set by the project: start an agent that rounds a thin card out (passed the card's file path).</summary>
     public Action<Card, string>? Improve { get; set; }
     FileSystemWatcher? _watchBoards;
@@ -82,8 +83,25 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             .SelectMany(b => BoardStore.ReadCards(Path.Combine(_project.Boards, b)))
             .Where(c => AgentFor?.Invoke(c.Id) is not null).Select(c => c.Id).ToList();
         StartAgent(SortPrompt(_project.Name, _project.Boards, BoardStore.List(_project.Boards), busy, hint, Core.Commits.For(_project, _project.Boards)),
-            _project.Boards, $"Sort {_project.Name}'s cards into boards");
+            _project.Boards, $"Sort {_project.Name}'s cards into boards", []);
         Maker = null;
+    }
+
+    /// <summary>Start an agent that groups the done column's cards into stories (WOR-0074): a doc each in the
+    /// project's docs folder and a Story card in the column, the cards themselves to Completed. It asks first.</summary>
+    public void WrapUp()
+    {
+        if (Folder is not { } folder || _board?.Columns.LastOrDefault() is not { } done || StartAgent is null) return;
+        var inColumn = _board.Lists.GetValueOrDefault(done.Id) ?? [];
+        var busy = inColumn.Where(c => AgentFor?.Invoke(c.Id) is not null).Select(c => c.Id).ToList();
+        var cards = Stories.ToWrap(inColumn, busy);
+        if (cards.Count == 0) { _notice = $"Nothing in {done.Name} to wrap up: only stories are there."; Apply(); return; }
+        var stories = Directory.Exists(_project.Docs) ? Stories.Folder(_project) : null;
+        string? reports = ReportStore.FolderFor(_project.Id);
+        if (!Directory.Exists(reports)) reports = null;
+        StartAgent(Stories.Prompt(_project.Name, folder, done, cards, inColumn.Where(c => c.IsStory).ToList(), busy, stories, reports,
+                _project.ExistingRepos(), Core.Commits.For(_project, folder), stories is null ? null : Core.Commits.For(_project, stories)),
+            folder, $"Wrap up {_project.Name}'s {done.Name} into stories", stories is null ? [] : [_project.Docs!]);
     }
 
     /// <summary>What the sorting agent is asked: read the cards, propose boards, ask, then make them in
@@ -592,6 +610,9 @@ public sealed partial class ListViewModel(BoardViewModel board, string id, strin
 
     public int All => all;
     public bool IsColumn => Id is not (Core.Board.Backlog or Core.Board.Completed or Core.Board.Unsorted);
+    /// <summary>The board's last column, its done column: the one that can be wrapped up into stories.</summary>
+    public bool IsDoneColumn => IsColumn && Board.Columns.LastOrDefault()?.Id == Id;
+    [RelayCommand] void WrapUp() => Board.WrapUp();
     public bool IsMinimized { get; } = minimized;
     public bool IsOpen => !IsMinimized;
 

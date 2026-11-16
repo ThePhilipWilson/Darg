@@ -327,14 +327,16 @@ public partial class AgentsViewModel : ObservableObject
 
     /// <param name="job">What it's for, which picks its model profile; a chat with the prompt when not given.</param>
     /// <param name="id">The agent's id, when its prompt has to name it (a card agent's report does); a new one otherwise.</param>
-    public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null, AgentJob? job = null, string? id = null)
+    /// <param name="dirs">More folders it may work in (--add-dir), beyond the project's repos.</param>
+    public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null, AgentJob? job = null, string? id = null,
+        IReadOnlyList<string>? dirs = null)
     {
         id ??= NewId();
         job ??= new AgentJob(JobKinds.Chat, prompt);
         var profile = ModelProfiles.Pick(ModelProfiles.Load(), job with { Project = job.Project ?? project.Id });
         var folder = string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd;
         var agent = new AgentViewModel(folder, prompt, cardId, name ?? ChatTitle.Guess(prompt),
-            args: [.. ArtifactArgs(id), .. RepoArgs(folder)], id: id, profile: profile) { StoreFolder = _store };
+            args: [.. ArtifactArgs(id), .. RepoArgs(folder), .. (dirs ?? []).SelectMany(d => new[] { "--add-dir", d })], id: id, profile: profile) { StoreFolder = _store };
         Add(agent, select: true);
         agent.Save();
         if (name is null) _ = Retitle(agent, prompt); // a card's agent is already named for the card
