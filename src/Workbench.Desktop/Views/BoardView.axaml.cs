@@ -6,7 +6,7 @@ namespace Workbench.Desktop.Views;
 
 /// <summary>Cards are picked up and carried (DragLift): drop on a list to move there, the line shows
 /// where; a click opens the card, Ctrl- or Shift-click picks it (then a plain click picks too). Ctrl+A
-/// picks every card showing, Escape unpicks them; picked cards can each be given an agent in one go.</summary>
+/// picks every card showing (a column header's Pick all, just that column), Escape unpicks them; picked cards can each be given an agent in one go.</summary>
 public partial class BoardView : UserControl
 {
     public BoardView()

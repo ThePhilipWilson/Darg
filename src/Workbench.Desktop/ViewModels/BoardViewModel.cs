@@ -107,6 +107,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(PickedText));
         OnPropertyChanged(nameof(WorkOnPickedText));
         OnPropertyChanged(nameof(CanWorkOnPicked));
+        foreach (var l in Lists) l.PickedChanged();
     }
 
     /// <summary>Pick every card showing (the filter, and Show completed, decide what "all" is).</summary>
@@ -116,6 +117,21 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         Editor = null;
         _notice = null;
         foreach (var c in Shown()) { c.IsPicked = true; _picked.Add(c.Id); }
+        PickedChanged();
+    }
+
+    /// <summary>Pick every card showing in one column, or unpick them all if they already are.</summary>
+    public void PickList(ListViewModel list)
+    {
+        if (list.Cards.Count == 0) return;
+        Editor = null;
+        _notice = null;
+        var pick = !list.AllPicked;
+        foreach (var c in list.Cards)
+        {
+            c.IsPicked = pick;
+            if (pick) _picked.Add(c.Id); else _picked.Remove(c.Id);
+        }
         PickedChanged();
     }
 
@@ -278,13 +294,20 @@ public partial class LabelChip(string name) : ObservableObject
         chips.Where(c => c.IsAll).Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase));
 }
 
-public sealed class ListViewModel(BoardViewModel board, string id, string name, IEnumerable<CardViewModel> cards, int all)
+public sealed partial class ListViewModel(BoardViewModel board, string id, string name, IEnumerable<CardViewModel> cards, int all) : ObservableObject
 {
     public BoardViewModel Board { get; } = board;
     public string Id { get; } = id;
     public string Name { get; } = name;
     public ObservableCollection<CardViewModel> Cards { get; } = new(cards);
     public string Count => Cards.Count == all ? $"{all}" : $"{Cards.Count} / {all}";
+    public bool HasCards => Cards.Count > 0;
+    /// <summary>Every card showing in this column is picked.</summary>
+    public bool AllPicked => Cards.Count > 0 && Cards.All(c => c.IsPicked);
+    /// <summary>The column's own pick button: "Pick all" here, or "Unpick" once they all are.</summary>
+    public string PickText => AllPicked ? "Unpick" : "Pick all";
+    [RelayCommand] void Pick() => Board.PickList(this);
+    public void PickedChanged() { OnPropertyChanged(nameof(AllPicked)); OnPropertyChanged(nameof(PickText)); }
 }
 
 public sealed partial class CardViewModel : ObservableObject
