@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Workbench.Desktop.ViewModels;
 
 namespace Workbench.Desktop.Views;
@@ -35,6 +37,22 @@ public partial class NotesView : UserControl
             if (e.Key == Key.A && e.KeyModifiers.HasFlag(KeyModifiers.Control)) { wall.PickAllCommand.Execute(null); e.Handled = true; }
             else if (e.Key == Key.Escape && wall.HasPicked) { wall.ClearPicked(); e.Handled = true; }
         };
+        DataContextChanged += (_, _) =>
+        {
+            if (_wall is not null) _wall.PropertyChanged -= WallChanged;
+            _wall = DataContext as NotesViewModel;
+            if (_wall is not null) _wall.PropertyChanged += WallChanged;
+        };
+    }
+
+    NotesViewModel? _wall;
+
+    /// <summary>+ Post-it puts the caret in the new note's text, so typing starts at once. Posted at
+    /// Loaded priority: the editor panel only becomes visible on this change, and an invisible box takes no focus.</summary>
+    void WallChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(NotesViewModel.Editor) || _wall?.Editor is not { IsNew: true }) return;
+        Dispatcher.UIThread.Post(() => PaperBox.Focus(), DispatcherPriority.Loaded);
     }
 
     /// <summary>Puts a line break at the caret (over any selection); with <paramref name="backslash"/>, the
