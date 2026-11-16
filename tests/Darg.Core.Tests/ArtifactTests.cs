@@ -41,7 +41,7 @@ public sealed class ArtifactTests : IDisposable
         var out_ = ArtifactServer.WithBridge(html, "/reply/t/p/a/f.html");
         Assert.Contains(startsWith, out_);
         Assert.Contains("window.darg", out_);
-        Assert.Contains("window.darg", out_); // pages written before the rename still work
+        Assert.Contains("window.workbench", out_); // pages written before the rename still work
         Assert.Contains("'/reply/t/p/a/f.html'", out_);
         Assert.Single(System.Text.RegularExpressions.Regex.Matches(out_, "window.darg"));
     }
