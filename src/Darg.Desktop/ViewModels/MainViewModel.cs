@@ -151,6 +151,9 @@ public partial class MainViewModel : ObservableObject
         var s = new System.Text.StringBuilder($"{p.Name} › {p.Section}");
         switch (p.Section)
         {
+            case Section.Home:
+                s.Append(p.Home.ReadmePath is { } readme ? $", its home page showing {readme}" : ", its home page (no README)");
+                break;
             case Section.Board when p.Board is not null:
                 s.Append($", board {p.Board.SelectedBoard} in {p.Board.Folder}");
                 if (p.Board.Filter.Length > 0) s.Append($", filtered by \"{p.Board.Filter}\"");
@@ -331,7 +334,7 @@ public record NotificationEntry(string ProjectId, string AgentId, string Project
     public string Sub => string.IsNullOrWhiteSpace(Agent) ? $"{At:HH:mm}" : $"{Agent} · {At:HH:mm}";
 }
 
-public enum Section { Board, Notes, Docs, Agents, Artifacts, Mistakes, Code, GitHub, Preview, Terminal }
+public enum Section { Home, Board, Notes, Docs, Agents, Artifacts, Mistakes, Code, GitHub, Preview, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -354,15 +357,18 @@ public partial class ProjectViewModel : ObservableObject
     public ArtifactsViewModel? Artifacts { get; }
     /// <summary>The project's mistake log, read and counted (there with the agents feature, which writes it).</summary>
     public MistakesViewModel? Mistakes { get; }
+    /// <summary>Where a project opens: its README and what's going on (every project has one).</summary>
+    public HomeViewModel Home { get; }
     public bool UsesTerminal => Consoles is not null;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
     [ObservableProperty] public partial bool IsActive { get; set; }
     public string StatusLine => $"{Name} · {Config.WorkingFolder()}" + (Board?.SelectedBoard is { } b ? $" · board {b}" : "");
 
+    public bool OnHome => Section == Section.Home;
     public bool OnBoard => Section == Section.Board;
     public bool OnNotes => Section == Section.Notes;
     public bool OnDocs => Section == Section.Docs;
@@ -403,7 +409,9 @@ public partial class ProjectViewModel : ObservableObject
         if (config.Uses(Features.Code) && config.Repos.Count > 0) Code = new CodeViewModel(config);
         if (config.Uses(Features.GitHub) && config.Repos.Count > 0) Hub = new GitHubViewModel(config, () => Board?.Folder);
         if (config.Uses(Features.Preview) && Core.Preview.For(config) is { } preview) Preview = new PreviewViewModel(preview);
-        Section = Board is not null ? Section.Board : Agents is not null ? Section.Agents : Section.Terminal;
+        Home = new HomeViewModel(this);
+        // every project opens to Home (Section's default), read in the background
+        _ = Home.Load();
         if (Board is not null && Agents is not null)
         {
             Board.AgentFor = Agents.ForCard;
@@ -457,8 +465,12 @@ public partial class ProjectViewModel : ObservableObject
     static bool SameFolder(string a, string b) =>
         string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
 
+    // coming back to a tab on Home: the README or commits may have changed meanwhile
+    partial void OnIsActiveChanged(bool value) { if (value && OnHome) _ = Home.Load(); }
+
     partial void OnSectionChanged(Section value)
     {
+        if (value == Section.Home) _ = Home.Load();
         if (value == Section.Terminal) { TerminalStarted = true; Consoles?.EnsureOne(); }
         if (value == Section.Code) Code?.Load();
         if (value == Section.GitHub) Hub?.Load();
@@ -478,7 +490,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>Whether this project has a section (its feature ticked and what it needs set up).</summary>
     public bool Has(Section s) => s switch
     {
-        Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null,
+        Section.Home => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null,
         Section.Code => Code is not null, Section.GitHub => Hub is not null, Section.Preview => Preview is not null, _ => Consoles is not null,
     };
 

@@ -10,6 +10,9 @@ public sealed record RepoStatus(string Branch, int Ahead, int Behind, IReadOnlyD
     public static readonly RepoStatus None = new("", 0, 0, new Dictionary<string, string>());
 }
 
+/// <summary>A commit as the Home page lists it: short hash, subject line, author, when.</summary>
+public sealed record Commit(string Hash, string Subject, string Author, DateTimeOffset When);
+
 /// <summary>Reading a repo for the code view: its files (git's own list, so ignored folders stay out)
 /// and its status. Read-only: nothing here changes a repo.</summary>
 public static class Repo
@@ -82,6 +85,27 @@ public static class Repo
             if (xy[0] is 'R' or 'C') i++; // a rename's old path follows; skip it
         }
         return new RepoStatus(branch, ahead, behind, changed);
+    }
+
+    /// <summary>The last commits on the checked-out branch, newest first; none outside git or in a repo without any.</summary>
+    public static List<Commit> Log(string root, int count = 5)
+    {
+        if (!IsGit(root)) return [];
+        var (code, output) = Git(root, "log", $"-n{count}", "--format=%h%x1f%s%x1f%an%x1f%cI%x1e");
+        return code == 0 ? ParseLog(output) : [];
+    }
+
+    /// <summary>`git log --format=%h%x1f%s%x1f%an%x1f%cI%x1e` output, parsed.</summary>
+    public static List<Commit> ParseLog(string output)
+    {
+        var list = new List<Commit>();
+        foreach (var record in output.Split('\x1e', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var f = record.Split('\x1f');
+            if (f.Length < 4 || !DateTimeOffset.TryParse(f[3], out var when)) continue;
+            list.Add(new Commit(f[0], f[1], f[2], when));
+        }
+        return list;
     }
 
     /// <summary>A file's text for viewing, or null with a reason when it's binary or too big.</summary>

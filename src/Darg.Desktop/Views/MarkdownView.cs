@@ -18,6 +18,10 @@ public sealed class MarkdownView : StackPanel
 {
     public static readonly StyledProperty<string?> MarkdownProperty = AvaloniaProperty.Register<MarkdownView, string?>(nameof(Markdown));
     public string? Markdown { get => GetValue(MarkdownProperty); set => SetValue(MarkdownProperty, value); }
+    /// <summary>The folder a picture's relative path is taken from (a README's repo, a doc's folder). Unset, only
+    /// pictures with a full path show; the rest are links.</summary>
+    public static readonly StyledProperty<string?> BaseFolderProperty = AvaloniaProperty.Register<MarkdownView, string?>(nameof(BaseFolder));
+    public string? BaseFolder { get => GetValue(BaseFolderProperty); set => SetValue(BaseFolderProperty, value); }
 
     static readonly FontFamily Mono = new("Cascadia Mono, Consolas, Menlo, monospace");
     static readonly IBrush CodeBg = new SolidColorBrush(Color.Parse("#101215"));
@@ -35,7 +39,7 @@ public sealed class MarkdownView : StackPanel
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == MarkdownProperty) Build();
+        if (change.Property == MarkdownProperty || change.Property == BaseFolderProperty) Build();
     }
 
     void Build()
@@ -56,8 +60,84 @@ public sealed class MarkdownView : StackPanel
             Child = Text(q.Spans, brush: Dim),
         },
         MdTable t => Table(t),
+        MdImages i => Pictures(i),
         _ => new Border { Height = 1, Background = Line, Margin = new Thickness(0, 4) },
     };
+
+    static readonly HashSet<string> Drawable = new(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp" };
+
+    /// <summary>A row of pictures: each one on this machine drawn (no wider than the page, never blown up), a click
+    /// opening its link or the picture itself; one on the web or in a format Avalonia can't draw (SVG badges) is a
+    /// link named by its alt text.</summary>
+    Control Pictures(MdImages row)
+    {
+        var panel = new WrapPanel { ItemSpacing = 8, LineSpacing = 8, HorizontalAlignment = row.Centred ? HorizontalAlignment.Center : HorizontalAlignment.Left };
+        foreach (var image in row.Images)
+        {
+            var file = LocalFile(image.Src);
+            var bitmap = file is not null && Drawable.Contains(Path.GetExtension(file)) ? Load(file) : null;
+            var target = image.Link ?? file ?? image.Src;
+            Control shown;
+            if (bitmap is not null)
+            {
+                // one picture alone may fill the page; several in a row stay small enough to sit together
+                shown = new Image
+                {
+                    Source = bitmap, Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly,
+                    MaxHeight = row.Images.Count == 1 ? 560 : 220,
+                    // the width an HTML img asks for, as GitHub shows it
+                    MaxWidth = image.Width ?? (row.Images.Count == 1 ? double.PositiveInfinity : 420),
+                };
+            }
+            else
+            {
+                var name = image.Alt.Length > 0 ? image.Alt : Path.GetFileName(image.Src.Split('?')[0]);
+                shown = new Border
+                {
+                    BorderBrush = Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Padding = new Thickness(6, 2),
+                    Child = new TextBlock { Text = "🖼 " + name, Foreground = Link, FontSize = 12 },
+                };
+            }
+            ToolTip.SetTip(shown, image.Alt.Length > 0 && image.Alt != target ? $"{image.Alt}\n{target}" : target);
+            shown.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+            shown.PointerReleased += (_, e) =>
+            {
+                if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Left) return;
+                e.Handled = true;
+                if (image.Link is not null) Open(image.Link);
+                else Shell(file ?? image.Src); // the picture itself, full size, in the person's viewer
+            };
+            panel.Children.Add(shown);
+        }
+        return panel;
+    }
+
+    /// <summary>A picture's file on this machine: a full path, or one relative to <see cref="BaseFolder"/>
+    /// ("/docs/x.png" too, as GitHub reads it from the repo's top). Null for a URL or a file that isn't there.</summary>
+    string? LocalFile(string src)
+    {
+        if (src.Contains("://", StringComparison.Ordinal) || src.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return null;
+        try
+        {
+            var path = Uri.UnescapeDataString(src.Split('?', '#')[0]);
+            var full = Path.IsPathRooted(path) && File.Exists(path) ? path
+                : BaseFolder is { } b ? Path.GetFullPath(Path.Combine(b, path.TrimStart('/', '\\'))) : null;
+            return full is not null && File.Exists(full) ? full : null;
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { return null; }
+    }
+
+    static Avalonia.Media.Imaging.Bitmap? Load(string file)
+    {
+        try { using var f = File.OpenRead(file); return Avalonia.Media.Imaging.Bitmap.DecodeToWidth(f, 1400); }
+        catch (Exception) { return null; }
+    }
+
+    static void Shell(string target)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true }); }
+        catch (Exception) { }
+    }
 
     Control CodeBlock(string text)
     {
@@ -98,7 +178,8 @@ public sealed class MarkdownView : StackPanel
 
     SelectableTextBlock Text(IReadOnlyList<Span> spans, double size = 0, bool bold = false, IBrush? brush = null)
     {
-        var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, LineHeight = size > 0 ? double.NaN : 21 };
+        // a fixed line height clips the descenders of a line holding a link (an embedded control), so those size themselves
+        var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, LineHeight = size > 0 || spans.Any(s => s.Link is not null) ? double.NaN : 21 };
         var codes = new List<(int Start, int End, string Text)>();
         var at = 0;
         if (size > 0) tb.FontSize = size;
