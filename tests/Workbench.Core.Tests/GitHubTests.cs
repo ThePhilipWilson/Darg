@@ -18,6 +18,22 @@ public sealed class GitHubTests
     [InlineData("")]
     public void Other_remotes_are_not_github(string url) => Assert.Null(GitHub.ParseRemote(url));
 
+    [Theory]
+    [InlineData("git@gitlab.com:team/thing.git", "gitlab.com", "team/thing")]
+    [InlineData("https://gitlab.example.co.uk/group/sub/proj.git", "gitlab.example.co.uk", "group/sub/proj")]
+    [InlineData("ssh://git@gitlab.work.local:2222/a/b.git", "gitlab.work.local", "a/b")]
+    public void GitLab_remotes(string url, string host, string path) => Assert.Equal((host, path), GitLab.ParseRemote(url));
+
+    [Fact]
+    public void GitLab_pipelines_read_as_runs()
+    {
+        var failed = GitLab.Run(JsonNode.Parse("""{"id":7,"ref":"main","status":"failed","web_url":"https://g/p/7","updated_at":"2026-11-16T01:00:00Z"}"""));
+        Assert.Equal(("pipeline #7", "main", "failure"), (failed.Name, failed.Branch, failed.State));
+        Assert.Equal("in_progress", GitLab.Run(JsonNode.Parse("""{"status":"running"}""")).State);
+        var mr = GitLab.Item(JsonNode.Parse("""{"iid":12,"title":"Fix","author":{"username":"pw"},"web_url":"u","labels":["bug"],"description":"d"}"""), "iid", "web_url");
+        Assert.Equal((12, "pw", "bug", "d"), (mr.Number, mr.Author, mr.Labels[0], mr.Body));
+    }
+
     [Fact]
     public void Items_read_from_the_api_shape()
     {

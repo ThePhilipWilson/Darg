@@ -40,7 +40,13 @@ public static class GitHub
     public static HubRepo Load(string repoPath, string? account)
     {
         var repo = RepoOf(repoPath);
-        if (repo is null) return new HubRepo("", Path.GetFileName(repoPath), [], [], [], "Its origin isn't on GitHub.");
+        if (repo is null)
+        {
+            // not GitHub: GitLab, if the origin is there
+            var (code, origin) = Run(repoPath, null, "git", "remote", "get-url", "origin");
+            if (code == 0 && GitLab.ParseRemote(origin) is { } lab) return GitLab.Load(repoPath, lab.Host, lab.Path);
+            return new HubRepo("", Path.GetFileName(repoPath), [], [], [], "Its origin isn't on GitHub or GitLab.");
+        }
         var (owner, name) = repo.Value;
         var token = account is { Length: > 0 } ? Tokens.GetOrAdd(account, TokenFor) : null;
         if (account is { Length: > 0 } && token is null)
