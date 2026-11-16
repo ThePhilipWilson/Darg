@@ -10,7 +10,7 @@
       <Setter Property="Padding" Value="6,0"/>
       <Setter Property="MinHeight" Value="0"/>
       <Setter Property="FontSize" Value="13"/>
-      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
       <Setter Property="Opacity" Value="0.4"/>
     </Style>
     <Style Selector="Border.wallcol:pointerover Button.head"><Setter Property="Opacity" Value="1"/></Style>
@@ -18,14 +18,14 @@
   <Panel>
   <Grid ColumnDefinitions="*,Auto">
     <Grid RowDefinitions="Auto,Auto,*">
-      <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
+      <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
         <DockPanel>
           <Button DockPanel.Dock="Right" Classes="primary" Content="+ Post-it" Command="{Binding NewNoteCommand}" Margin="12,0,0,0"/>
           <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0"/>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
             <Slider Minimum="160" Maximum="560" Value="{Binding ColumnWidth}" Width="110" VerticalAlignment="Center"
                     AutomationProperties.Name="Post-it width" ToolTip.Tip="How wide the columns and their post-its are"/>
-            <TextBlock Text="{Binding PickedText}" IsVisible="{Binding HasPicked}" VerticalAlignment="Center" Foreground="{StaticResource Accent}"/>
+            <TextBlock Text="{Binding PickedText}" IsVisible="{Binding HasPicked}" VerticalAlignment="Center" Foreground="{DynamicResource Accent}"/>
             <Button Classes="primary" Content="{Binding MakeTicketsText}" Command="{Binding MakeTicketsCommand}" IsVisible="{Binding CanMakeTickets}"
                     ToolTip.Tip="Each picked note becomes a card on the board's backlog: first line as the title, tags as labels. Notes that already have a ticket are skipped."/>
             <Button Content="Unpick" Command="{Binding ClearPickedCommand}" IsVisible="{Binding HasPicked}" ToolTip.Tip="Unpick every note (Esc)"/>
@@ -40,7 +40,7 @@
         </DockPanel>
       </Border>
 
-      <Border Grid.Row="1" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8,14,3">
+      <Border Grid.Row="1" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8,14,3">
         <WrapPanel>
           <ItemsControl ItemsSource="{Binding Tags}">
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -62,7 +62,7 @@
         </WrapPanel>
       </Border>
 
-      <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Background="#16181c">
+      <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Background="{DynamicResource Wall}">
         <StackPanel Orientation="Horizontal">
         <ItemsControl ItemsSource="{Binding Columns}" Margin="16">
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="18"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -91,7 +91,7 @@
                     <StackPanel Spacing="6" IsVisible="{Binding ConfirmingRemove}">
                       <TextBlock Text="{Binding RemoveQuestion}" TextWrapping="Wrap" FontSize="12"/>
                       <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Remove" Command="{Binding RemoveCommand}" Foreground="{StaticResource Bad}"/>
+                        <Button Content="Remove" Command="{Binding RemoveCommand}" Foreground="{DynamicResource Bad}"/>
                         <Button Content="Keep it" Command="{Binding KeepItCommand}"/>
                       </StackPanel>
                     </StackPanel>
@@ -141,8 +141,8 @@
     </Grid>
 
     <!-- editor -->
-    <Border Grid.Column="1" Width="320" IsVisible="{Binding IsEditing}" Background="{StaticResource Panel}"
-            BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+    <Border Grid.Column="1" Width="320" IsVisible="{Binding IsEditing}" Background="{DynamicResource Panel}"
+            BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
       <StackPanel DataContext="{Binding Editor}" x:DataType="vm:NoteEditor" Margin="14" Spacing="10">
         <TextBlock Text="{Binding Heading}" FontWeight="SemiBold"/>
         <Border Background="{Binding Brush}" CornerRadius="2" Padding="8">
@@ -176,7 +176,7 @@
         <Button Content="Make it a ticket" Command="{Binding MakeTicketCommand}" IsVisible="{Binding CanMakeTicket}"
                 ToolTip.Tip="Saves this note as a card on the board's backlog: first line as the title, tags as labels"/>
         <Button Content="{Binding Ticket, StringFormat='Go to ticket {0} →'}" Command="{Binding GoToTicketCommand}" IsVisible="{Binding HasTicket}"/>
-        <Button Content="Delete" Command="{Binding DeleteCommand}" IsVisible="{Binding !IsNew}" Foreground="{StaticResource Bad}"/>
+        <Button Content="Delete" Command="{Binding DeleteCommand}" IsVisible="{Binding !IsNew}" Foreground="{DynamicResource Bad}"/>
       </StackPanel>
     </Border>
   </Grid>

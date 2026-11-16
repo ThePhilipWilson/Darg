@@ -7,12 +7,15 @@
         Icon="/darg.png" Title="Darg" Width="1500" Height="920" MinWidth="900" MinHeight="560">
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- project tabs -->
-    <Border Grid.Row="0" Background="{StaticResource Chrome}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+    <Border Grid.Row="0" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
       <DockPanel Height="40">
-        <TextBlock DockPanel.Dock="Left" Text="◆ Darg" FontWeight="Bold" Foreground="{StaticResource Accent}"
+        <TextBlock DockPanel.Dock="Left" Text="{Binding Mark}" FontWeight="Bold" Foreground="{DynamicResource Accent}"
                    VerticalAlignment="Center" Margin="14,0,16,0"/>
+        <Button DockPanel.Dock="Right" Content="🎨 Settings" Command="{Binding OpenSettingsCommand}" Background="Transparent"
+                VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Darg's own settings: the theme (dark, light, girlypop)"
+                AutomationProperties.Name="Settings"/>
         <Button DockPanel.Dock="Right" Content="⚙ Setup" Command="{Binding OpenSetupCommand}" Background="Transparent"
-                VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Which projects this instance has, and which features each uses"/>
+                VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Which projects this instance has, and which features each uses"/>
         <!-- restart, or update from the repo and restart: the build runs while Darg stays open -->
         <Button x:Name="RestartButton" DockPanel.Dock="Right" Content="{Binding Restart.HeaderLabel}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Restart Darg, or update it from its repo and restart"
@@ -23,7 +26,7 @@
                 <TextBlock Text="Restart Darg" FontWeight="Bold"/>
                 <TextBlock Classes="dim small" Text="{Binding SourceNote}" TextWrapping="Wrap"/>
                 <TextBlock Classes="small" Text="{Binding Warning}" IsVisible="{Binding HasWarning}" TextWrapping="Wrap"
-                           Foreground="{StaticResource Accent}"/>
+                           Foreground="{DynamicResource Accent}"/>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <Button Content="{Binding RestartLabel}" Command="{Binding RestartCommand}" ToolTip.Tip="Close and reopen this build"/>
                   <Button Classes="primary" Content="{Binding UpdateLabel}" Command="{Binding UpdateCommand}" IsVisible="{Binding CanUpdate}"
@@ -34,7 +37,7 @@
                 <DockPanel IsVisible="{Binding HasFailure}">
                   <Button DockPanel.Dock="Right" Content="×" Command="{Binding DismissCommand}" Background="Transparent" Padding="6,0"
                           VerticalAlignment="Top" ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss update error"/>
-                  <SelectableTextBlock Classes="small" Text="{Binding Failure}" TextWrapping="Wrap" Foreground="{StaticResource Bad}"/>
+                  <SelectableTextBlock Classes="small" Text="{Binding Failure}" TextWrapping="Wrap" Foreground="{DynamicResource Bad}"/>
                 </DockPanel>
               </StackPanel>
             </Flyout>
@@ -54,7 +57,7 @@
               <Setter Property="CornerRadius" Value="8,8,0,0"/>
             </Style>
             <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-              <Setter Property="Background" Value="{StaticResource Panel}"/>
+              <Setter Property="Background" Value="{DynamicResource Panel}"/>
             </Style>
           </ListBox.Styles>
           <ListBox.ItemTemplate>
@@ -62,9 +65,9 @@
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <Ellipse Width="8" Height="8" Fill="{Binding Brush}" VerticalAlignment="Center"/>
                 <TextBlock Text="{Binding Name}"/>
-                <Border IsVisible="{Binding Agents.NeedingYou, FallbackValue=False}" Background="{StaticResource Accent}"
+                <Border IsVisible="{Binding Agents.NeedingYou, FallbackValue=False}" Background="{DynamicResource Accent}"
                         CornerRadius="8" Padding="5,0" VerticalAlignment="Center">
-                  <TextBlock Text="!" Foreground="#1a1408" FontSize="11" FontWeight="Bold"/>
+                  <TextBlock Text="!" Foreground="{DynamicResource OnAccent}" FontSize="11" FontWeight="Bold"/>
                 </Border>
               </StackPanel>
             </DataTemplate>
@@ -94,10 +97,10 @@
     <!-- sits above the agents view's message bar, so it never covers Send -->
     <StackPanel Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,22,78" Spacing="10">
       <!-- the box moves where you drag its header (MainWindow.axaml.cs); a double-click on the header puts it back -->
-      <Border x:Name="MascotBubble" Width="400" IsVisible="{Binding Mascot.Open}" Background="{StaticResource Panel}" BorderBrush="{Binding FettleEdge}"
+      <Border x:Name="MascotBubble" Width="400" IsVisible="{Binding Mascot.Open}" Background="{DynamicResource Panel}" BorderBrush="{Binding FettleEdge}"
               BorderThickness="1" CornerRadius="14" BoxShadow="0 14 40 0 #90000000" HorizontalAlignment="Right">
         <DockPanel>
-          <Border x:Name="MascotHeader" DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,8"
+          <Border x:Name="MascotHeader" DockPanel.Dock="Top" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="12,8"
                   Background="Transparent" Cursor="SizeAll" ToolTip.Tip="Drag to move · double-click to put it back">
             <StackPanel Spacing="6">
               <DockPanel>
@@ -127,7 +130,7 @@
                      PlaceholderText="What needs fettling?" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" Padding="12,9"/>
           </DockPanel>
           <!-- every notification agents have raised; click one to open that agent -->
-          <Border DockPanel.Dock="Top" IsVisible="{Binding ShowNotifications}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
+          <Border DockPanel.Dock="Top" IsVisible="{Binding ShowNotifications}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
             <StackPanel>
               <DockPanel Margin="12,6">
                 <Button DockPanel.Dock="Right" Content="Clear" Command="{Binding ClearNotificationsCommand}" Padding="6,0" Background="Transparent" FontSize="11"/>
@@ -187,7 +190,7 @@
             <Border Classes="mouth smile" Width="14" Height="6" Background="#2a1a08" CornerRadius="0,0,8,8" Margin="0,22,0,0"/>
             <Border Classes="mouth flat" Width="10" Height="3" Background="#2a1a08" CornerRadius="2" Margin="0,22,0,0"/>
             <Ellipse Classes="mouth oh" Width="8" Height="9" Stroke="#2a1a08" StrokeThickness="2.5" Margin="0,24,0,0"/>
-            <Border Classes="badge" Width="18" Height="18" CornerRadius="9" Background="{StaticResource Bad}"
+            <Border Classes="badge" Width="18" Height="18" CornerRadius="9" Background="{DynamicResource Bad}"
                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0">
               <TextBlock Text="!" Foreground="White" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
@@ -209,8 +212,13 @@
         <DataTemplate DataType="vm:ToolsViewModel"><views:ToolsView/></DataTemplate>
       </ContentControl.DataTemplates>
     </ContentControl>
+    <ContentControl Grid.Row="1" Content="{Binding SettingsPage}" IsVisible="{Binding SettingsPage, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <ContentControl.DataTemplates>
+        <DataTemplate DataType="vm:SettingsViewModel"><views:SettingsView/></DataTemplate>
+      </ContentControl.DataTemplates>
+    </ContentControl>
 
-    <Border Grid.Row="2" Background="{StaticResource Chrome}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+    <Border Grid.Row="2" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
       <TextBlock Classes="dim small" Text="{Binding Selected.StatusLine, FallbackValue=''}"/>
     </Border>
   </Grid>

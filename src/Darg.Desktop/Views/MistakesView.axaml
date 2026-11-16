@@ -6,7 +6,7 @@
              x:DataType="vm:MistakesViewModel">
   <Grid ColumnDefinitions="240,*" RowDefinitions="*,Auto">
     <!-- each category counted; one that has come up often enough for a gate is red -->
-    <Border Grid.RowSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+    <Border Grid.RowSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
         <TextBlock DockPanel.Dock="Top" Text="By category" Classes="dim small" Margin="12,10,12,4"/>
         <ListBox ItemsSource="{Binding Tally}" SelectedItem="{Binding SelectedCategory}" Background="Transparent">
@@ -21,7 +21,7 @@
           </ListBox.ItemTemplate>
           <ListBox.Styles>
             <Style Selector="TextBlock.due">
-              <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+              <Setter Property="Foreground" Value="{DynamicResource Bad}"/>
               <Setter Property="FontWeight" Value="SemiBold"/>
             </Style>
           </ListBox.Styles>
@@ -30,7 +30,7 @@
     </Border>
 
     <DockPanel Grid.Column="1">
-      <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
+      <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
         <DockPanel>
           <Button DockPanel.Dock="Right" Content="Open log" Command="{Binding OpenFileCommand}" ToolTip.Tip="{Binding File}"
                   AutomationProperties.Name="Open mistake log"/>
@@ -46,7 +46,7 @@
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="12"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:MistakeEntry">
-                <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6" Padding="12,9">
+                <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6" Padding="12,9">
                   <StackPanel Spacing="4">
                     <SelectableTextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                     <TextBlock Text="{Binding Meta}" Classes="dim small" TextWrapping="Wrap"/>
@@ -63,7 +63,7 @@
       </Panel>
     </DockPanel>
 
-    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+    <Border Grid.Row="1" Grid.Column="1" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
       <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}"/>
     </Border>
   </Grid>

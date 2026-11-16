@@ -4,26 +4,16 @@
              xmlns:views="using:Darg.Desktop.Views"
              x:Class="Darg.Desktop.App"
              RequestedThemeVariant="Dark">
+  <!-- the colours (Bg, Panel, Accent…) come from the theme picked in Settings: Darg.Core's Themes, put here
+       as brushes by ThemeManager before the window opens. Views take them with DynamicResource so a switch shows at once. -->
   <Application.Resources>
-    <SolidColorBrush x:Key="Bg" Color="#14161a"/>
-    <SolidColorBrush x:Key="Chrome" Color="#0f1114"/>
-    <SolidColorBrush x:Key="Panel" Color="#1b1e24"/>
-    <SolidColorBrush x:Key="Panel2" Color="#22262e"/>
-    <SolidColorBrush x:Key="Line" Color="#2e333d"/>
-    <SolidColorBrush x:Key="Dim" Color="#8b93a1"/>
-    <SolidColorBrush x:Key="Accent" Color="#e0a84a"/>
-    <SolidColorBrush x:Key="Ok" Color="#5fbf7f"/>
-    <SolidColorBrush x:Key="Bad" Color="#e06464"/>
-    <SolidColorBrush x:Key="Info" Color="#6aa5e8"/>
-    <SolidColorBrush x:Key="AddBg" Color="#1f3a27"/>
-    <SolidColorBrush x:Key="DelBg" Color="#3a1f22"/>
     <FontFamily x:Key="Mono">Cascadia Mono, Consolas, Menlo, monospace</FontFamily>
   </Application.Resources>
 
   <!-- how an agent transcript draws, wherever one is shown (the agents view, the mascot) -->
   <Application.DataTemplates>
     <DataTemplate DataType="vm:UserItem">
-      <Border Background="#2b2a22" BorderBrush="#4a4330" BorderThickness="1" CornerRadius="10" Padding="12,8" HorizontalAlignment="Right" MaxWidth="700">
+      <Border Background="{DynamicResource UserBubble}" BorderBrush="{DynamicResource UserBubbleLine}" BorderThickness="1" CornerRadius="10" Padding="12,8" HorizontalAlignment="Right" MaxWidth="700">
         <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
       </Border>
     </DataTemplate>
@@ -34,11 +24,11 @@
       <TextBlock Text="{Binding Text}" Classes="dim small" TextWrapping="Wrap" Classes.bad="{Binding Bad}"/>
     </DataTemplate>
     <DataTemplate DataType="vm:ToolItem">
-      <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6">
+      <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6">
         <StackPanel>
           <DockPanel Margin="9,5">
-            <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" Foreground="{StaticResource Info}" FontWeight="SemiBold" Classes="mono" Margin="0,0,8,0"/>
-            <TextBlock DockPanel.Dock="Right" Text="✓" Foreground="{StaticResource Ok}" IsVisible="{Binding Done}" Margin="8,0,0,0"/>
+            <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" Foreground="{DynamicResource Info}" FontWeight="SemiBold" Classes="mono" Margin="0,0,8,0"/>
+            <TextBlock DockPanel.Dock="Right" Text="✓" Foreground="{DynamicResource Ok}" IsVisible="{Binding Done}" Margin="8,0,0,0"/>
             <TextBlock Text="{Binding Summary}" Classes="dim mono" TextTrimming="CharacterEllipsis"/>
           </DockPanel>
           <Image Source="{Binding Image}" IsVisible="{Binding HasImage}" MaxHeight="420" HorizontalAlignment="Left" Margin="9,0,9,9" Stretch="Uniform"/>
@@ -49,7 +39,7 @@
               <DataTemplate x:DataType="vm:PreviewImage">
                 <Button Command="{Binding OpenCommand}" Padding="0" Margin="0,0,8,8" Background="Transparent" Cursor="Hand"
                         ToolTip.Tip="{Binding Path}" AutomationProperties.Name="{Binding Name}">
-                  <Border CornerRadius="4" ClipToBounds="True" BorderBrush="{StaticResource Line}" BorderThickness="1">
+                  <Border CornerRadius="4" ClipToBounds="True" BorderBrush="{DynamicResource Line}" BorderThickness="1">
                     <Image Source="{Binding Thumb}" Height="260" Stretch="Uniform"/>
                   </Border>
                 </Button>
@@ -57,26 +47,26 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
           <StackPanel IsVisible="{Binding HasDiff}">
-            <Border Background="{StaticResource DelBg}" Padding="10,4" IsVisible="{Binding Removed, Converter={x:Static ObjectConverters.IsNotNull}}">
-              <SelectableTextBlock Classes="mono" Foreground="#f0a0a0" Text="{Binding Removed}" TextWrapping="Wrap"/>
+            <Border Background="{DynamicResource DelBg}" Padding="10,4" IsVisible="{Binding Removed, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <SelectableTextBlock Classes="mono" Foreground="{DynamicResource DelInk}" Text="{Binding Removed}" TextWrapping="Wrap"/>
             </Border>
-            <Border Background="{StaticResource AddBg}" Padding="10,4" IsVisible="{Binding Added, Converter={x:Static ObjectConverters.IsNotNull}}">
-              <SelectableTextBlock Classes="mono" Foreground="#a8e6b8" Text="{Binding Added}" TextWrapping="Wrap"/>
+            <Border Background="{DynamicResource AddBg}" Padding="10,4" IsVisible="{Binding Added, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <SelectableTextBlock Classes="mono" Foreground="{DynamicResource AddInk}" Text="{Binding Added}" TextWrapping="Wrap"/>
             </Border>
           </StackPanel>
           <Button IsVisible="{Binding HasArtifact}" Command="{Binding OpenArtifactCommand}" Content="Open artifact" Margin="9,0,9,9"
                   ToolTip.Tip="Open this page in Artifacts, where what it sends comes back to this agent"/>
-          <Border IsVisible="{Binding HasPreview}" Background="#15171b" Padding="10,6">
+          <Border IsVisible="{Binding HasPreview}" Background="{DynamicResource Sunk2}" Padding="10,6">
             <SelectableTextBlock Classes="mono" Text="{Binding Preview}" TextWrapping="Wrap"/>
           </Border>
-          <Border IsVisible="{Binding Result, Converter={x:Static ObjectConverters.IsNotNull}}" Background="#101215" Padding="10,6">
-            <SelectableTextBlock Classes="mono" Text="{Binding Result}" TextWrapping="Wrap" Foreground="{StaticResource Dim}"/>
+          <Border IsVisible="{Binding Result, Converter={x:Static ObjectConverters.IsNotNull}}" Background="{DynamicResource Sunk}" Padding="10,6">
+            <SelectableTextBlock Classes="mono" Text="{Binding Result}" TextWrapping="Wrap" Foreground="{DynamicResource Dim}"/>
           </Border>
         </StackPanel>
       </Border>
     </DataTemplate>
     <DataTemplate DataType="vm:PermissionItem">
-      <Border BorderBrush="{StaticResource Accent}" BorderThickness="1" CornerRadius="8" Background="#2a2416" Padding="12,10">
+      <Border BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="8" Background="{DynamicResource AccentWash}" Padding="12,10">
         <StackPanel Spacing="8">
           <TextBlock><Run Text="Allow "/><Run Text="{Binding Tool}" FontWeight="SemiBold"/><Run Text="?"/></TextBlock>
           <SelectableTextBlock Classes="mono" Text="{Binding Summary}" TextWrapping="Wrap"/>
@@ -89,7 +79,7 @@
       </Border>
     </DataTemplate>
     <DataTemplate DataType="vm:QuestionItem">
-      <Border BorderBrush="{StaticResource Accent}" BorderThickness="1" CornerRadius="8" Background="#2a2416" Padding="12,10">
+      <Border BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="8" Background="{DynamicResource AccentWash}" Padding="12,10">
         <ItemsControl ItemsSource="{Binding Questions}">
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="12"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
@@ -122,7 +112,7 @@
                   <Button Grid.Column="1" Classes="primary" Content="Send" VerticalAlignment="Bottom" Command="{Binding SendOwnCommand}"/>
                 </Grid>
                 <TextBlock IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNotNull}}" TextWrapping="Wrap"
-                           Text="{Binding Chosen, StringFormat='You picked: {0}'}" Foreground="{StaticResource Accent}"/>
+                           Text="{Binding Chosen, StringFormat='You picked: {0}'}" Foreground="{DynamicResource Accent}"/>
               </StackPanel>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
@@ -135,25 +125,26 @@
     <FluentTheme />
     <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"/>
     <Style Selector="TextBlock.dir">
-      <Setter Property="Foreground" Value="#c9a86a"/>
+      <Setter Property="Foreground" Value="{DynamicResource DirInk}"/>
     </Style>
     <Style Selector="Window">
-      <Setter Property="Background" Value="{StaticResource Bg}"/>
+      <Setter Property="Background" Value="{DynamicResource Bg}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
     </Style>
     <Style Selector="TextBlock.dim, SelectableTextBlock.dim">
-      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
     </Style>
     <Style Selector="Ellipse.status">
-      <Setter Property="Fill" Value="#5a606c"/>
+      <Setter Property="Fill" Value="{DynamicResource StatusOff}"/>
     </Style>
     <Style Selector="Ellipse.status.up">
-      <Setter Property="Fill" Value="{StaticResource Ok}"/>
+      <Setter Property="Fill" Value="{DynamicResource Ok}"/>
     </Style>
     <Style Selector="TextBlock.good">
-      <Setter Property="Foreground" Value="{StaticResource Ok}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ok}"/>
     </Style>
     <Style Selector="TextBlock.bad">
-      <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Bad}"/>
     </Style>
     <Style Selector="TextBlock.small">
       <Setter Property="FontSize" Value="11"/>
@@ -163,8 +154,8 @@
       <Setter Property="FontSize" Value="12"/>
     </Style>
     <Style Selector="Border.card">
-      <Setter Property="Background" Value="{StaticResource Panel2}"/>
-      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="Background" Value="{DynamicResource Panel2}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="CornerRadius" Value="6"/>
       <Setter Property="Padding" Value="9,7"/>
@@ -204,8 +195,8 @@
 
     <!-- where a dragged card or post-it would land -->
     <Style Selector="Border.list.droptarget">
-      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
-      <Setter Property="Background" Value="#20242c"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+      <Setter Property="Background" Value="{DynamicResource DropBg}"/>
     </Style>
     <!-- a post-it picked for a batch (Ctrl- or Shift-click, Pick all) -->
     <Style Selector="Border.postit">
@@ -214,23 +205,23 @@
     </Style>
     <!-- white: it shows against the dark wall whatever colour the paper is -->
     <Style Selector="Border.postit.picked">
-      <Setter Property="BorderBrush" Value="#f4f4f4"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Picked}"/>
     </Style>
     <Style Selector="Border.wallcol.droptarget">
-      <Setter Property="Background" Value="#22e0a84a"/>
+      <Setter Property="Background" Value="{DynamicResource WallDrop}"/>
       <Setter Property="CornerRadius" Value="8"/>
     </Style>
     <Style Selector="Border.card:pointerover">
-      <Setter Property="BorderBrush" Value="#4a5160"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource CardHoverLine}"/>
     </Style>
     <!-- a card picked for a batch (Ctrl- or Shift-click, Pick all), as on the notes wall -->
     <Style Selector="Border.card.picked">
-      <Setter Property="BorderBrush" Value="#f4f4f4"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Picked}"/>
       <Setter Property="BorderThickness" Value="2"/>
       <Setter Property="Padding" Value="8,6"/>
     </Style>
     <Style Selector="Border.label">
-      <Setter Property="Background" Value="#2a2f39"/>
+      <Setter Property="Background" Value="{DynamicResource LabelBg}"/>
       <Setter Property="CornerRadius" Value="8"/>
       <Setter Property="Padding" Value="6,0"/>
       <Setter Property="Margin" Value="0,0,4,2"/>
@@ -253,18 +244,18 @@
       <Setter Property="BorderBrush" Value="Transparent"/>
     </Style>
     <Style Selector="Button.chip.any">
-      <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
-      <Setter Property="Foreground" Value="{StaticResource Accent}"/>
-      <Setter Property="Background" Value="#3a3020"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+      <Setter Property="Background" Value="{DynamicResource AccentSoft}"/>
     </Style>
     <Style Selector="Button.chip.all">
-      <Setter Property="Background" Value="{StaticResource Accent}"/>
-      <Setter Property="Foreground" Value="#1a1408"/>
+      <Setter Property="Background" Value="{DynamicResource Accent}"/>
+      <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
       <Setter Property="FontWeight" Value="Bold"/>
     </Style>
     <Style Selector="Button.chip.all:pointerover /template/ ContentPresenter">
-      <Setter Property="Background" Value="#f0bc5e"/>
-      <Setter Property="Foreground" Value="#1a1408"/>
+      <Setter Property="Background" Value="{DynamicResource AccentHover}"/>
+      <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
     </Style>
     <Style Selector="Button.rail, ToggleButton.rail">
       <Setter Property="Width" Value="48"/>
@@ -294,16 +285,16 @@
          and TextBlock.state inside take the colour. Grey: saved or ended. Working pulses; needs you is a
          filled row, as it's the one to act on; .unseen (news not yet opened) makes the name bold. -->
     <Style Selector=".agentstate Ellipse.dot">
-      <Setter Property="Fill" Value="#5a606c"/>
+      <Setter Property="Fill" Value="{DynamicResource StatusOff}"/>
     </Style>
     <Style Selector=".agentstate Border.bar">
       <Setter Property="Background" Value="Transparent"/>
     </Style>
     <Style Selector=".agentstate TextBlock.state">
-      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
     </Style>
     <Style Selector=".agentstate.working Ellipse.dot">
-      <Setter Property="Fill" Value="{StaticResource Info}"/>
+      <Setter Property="Fill" Value="{DynamicResource Info}"/>
       <Style.Animations>
         <Animation Duration="0:0:1.2" IterationCount="Infinite" Easing="SineEaseInOut">
           <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1"/></KeyFrame>
@@ -313,41 +304,41 @@
       </Style.Animations>
     </Style>
     <Style Selector=".agentstate.working Border.bar">
-      <Setter Property="Background" Value="{StaticResource Info}"/>
+      <Setter Property="Background" Value="{DynamicResource Info}"/>
     </Style>
     <Style Selector=".agentstate.working TextBlock.state">
-      <Setter Property="Foreground" Value="{StaticResource Info}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Info}"/>
     </Style>
     <Style Selector=".agentstate.needs Ellipse.dot">
-      <Setter Property="Fill" Value="{StaticResource Accent}"/>
+      <Setter Property="Fill" Value="{DynamicResource Accent}"/>
     </Style>
     <Style Selector=".agentstate.needs Border.bar">
-      <Setter Property="Background" Value="{StaticResource Accent}"/>
+      <Setter Property="Background" Value="{DynamicResource Accent}"/>
     </Style>
     <Style Selector=".agentstate.needs TextBlock.state">
-      <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
     </Style>
     <Style Selector="ListBoxItem:not(:selected) DockPanel.agentstate.needs">
-      <Setter Property="Background" Value="#2a2418"/>
+      <Setter Property="Background" Value="{DynamicResource AccentWash}"/>
     </Style>
     <Style Selector=".agentstate.done Ellipse.dot">
-      <Setter Property="Fill" Value="{StaticResource Ok}"/>
+      <Setter Property="Fill" Value="{DynamicResource Ok}"/>
     </Style>
     <Style Selector=".agentstate.done Border.bar">
-      <Setter Property="Background" Value="{StaticResource Ok}"/>
+      <Setter Property="Background" Value="{DynamicResource Ok}"/>
     </Style>
     <Style Selector=".agentstate.done TextBlock.state">
-      <Setter Property="Foreground" Value="{StaticResource Ok}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Ok}"/>
     </Style>
     <Style Selector=".agentstate.failed Ellipse.dot">
-      <Setter Property="Fill" Value="{StaticResource Bad}"/>
+      <Setter Property="Fill" Value="{DynamicResource Bad}"/>
     </Style>
     <Style Selector=".agentstate.failed Border.bar">
-      <Setter Property="Background" Value="{StaticResource Bad}"/>
+      <Setter Property="Background" Value="{DynamicResource Bad}"/>
     </Style>
     <Style Selector=".agentstate.failed TextBlock.state">
-      <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Bad}"/>
     </Style>
     <Style Selector=".agentstate.unseen TextBlock.name">
       <Setter Property="FontWeight" Value="Bold"/>
@@ -460,8 +451,8 @@
       <Setter Property="IsVisible" Value="True"/>
     </Style>
     <Style Selector="Button.primary">
-      <Setter Property="Background" Value="{StaticResource Accent}"/>
-      <Setter Property="Foreground" Value="#1a1408"/>
+      <Setter Property="Background" Value="{DynamicResource Accent}"/>
+      <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
     </Style>
   </Application.Styles>

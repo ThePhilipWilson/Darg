@@ -5,7 +5,7 @@
              x:DataType="vm:ArtifactsViewModel">
   <Grid ColumnDefinitions="300,*" RowDefinitions="*,Auto">
     <!-- one folder per agent, as a tree -->
-    <Border Grid.RowSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+    <Border Grid.RowSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <TreeView ItemsSource="{Binding Groups}" SelectedItem="{Binding SelectedNode}" Background="Transparent" Margin="0,8,0,0"
                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
         <TreeView.Styles>
@@ -34,7 +34,7 @@
     </Border>
 
     <DockPanel Grid.Column="1" IsVisible="{Binding HasOpen}">
-      <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
+      <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
         <DockPanel>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
             <Button Content="Reload" Command="{Binding ReloadCommand}" ToolTip.Tip="Load the page again (after its agent changed it)"/>
@@ -53,7 +53,7 @@
                IsVisible="{Binding !HasOpen}"
                Text="Pages agents made to show you something: reviews, pickers, comparisons. Pick one on the left. What a page sends goes back to the agent that made it."/>
 
-    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+    <Border Grid.Row="1" Grid.Column="1" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
       <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
     </Border>
   </Grid>

@@ -5,7 +5,7 @@
              x:DataType="vm:AgentsViewModel">
   <Grid ColumnDefinitions="280,*">
     <!-- agent list -->
-    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+    <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
         <StackPanel DockPanel.Dock="Bottom" Margin="10" Spacing="6">
           <TextBox Text="{Binding NewPrompt}" PlaceholderText="What should a new agent do?" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"/>
@@ -108,12 +108,12 @@
     <!-- the selected agent -->
     <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" DataContext="{Binding Shown}" x:DataType="vm:AgentViewModel"
           IsVisible="{Binding $parent[UserControl].((vm:AgentsViewModel)DataContext).Shown, Converter={x:Static ObjectConverters.IsNotNull}}">
-      <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
+      <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
         <StackPanel Spacing="4">
         <DockPanel IsVisible="{Binding InFlow}">
           <Button DockPanel.Dock="Right" Content="Stop flow" Command="{Binding Flow.StopFlowCommand, FallbackValue={x:Null}}" Padding="8,2"
                   IsVisible="{Binding Flow.Running, FallbackValue=False}" ToolTip.Tip="Nothing more is handed on; the agent at work finishes its turn"/>
-          <TextBlock Classes="dim small" Foreground="{StaticResource Accent}" Text="{Binding Flow.Status, StringFormat='Flow · {0}', FallbackValue=''}" VerticalAlignment="Center"/>
+          <TextBlock Classes="dim small" Foreground="{DynamicResource Accent}" Text="{Binding Flow.Status, StringFormat='Flow · {0}', FallbackValue=''}" VerticalAlignment="Center"/>
         </DockPanel>
         <!-- out of usage: Darg waits for the limit to reset and then tells the agent to carry on (no AI runs meanwhile) -->
         <DockPanel IsVisible="{Binding LimitHit}">
@@ -122,7 +122,7 @@
                   ToolTip.Tip="When the usage limit resets, send this agent a message to carry on where it left off. Darg must be running then (it carries on when it next opens if not)."/>
           <Button DockPanel.Dock="Right" Content="Don't continue" Command="{Binding CancelContinueCommand}" Padding="8,2"
                   IsVisible="{Binding WaitingForReset}" AutomationProperties.Name="Don't continue"/>
-          <TextBlock Classes="small" Foreground="{StaticResource Accent}" Text="{Binding LimitLine}" VerticalAlignment="Center"/>
+          <TextBlock Classes="small" Foreground="{DynamicResource Accent}" Text="{Binding LimitLine}" VerticalAlignment="Center"/>
         </DockPanel>
         <DockPanel>
           <Button DockPanel.Dock="Right" Content="Close" Command="{Binding CloseCommand}" IsEnabled="{Binding Open}" Margin="6,0,0,0"
@@ -162,7 +162,7 @@
         </ItemsControl>
       </ScrollViewer>
 
-      <Border Grid.Row="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="14,10">
+      <Border Grid.Row="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="14,10">
         <DockPanel>
           <Button DockPanel.Dock="Right" Classes="primary" Content="Send" Command="{Binding SendCommand}" Margin="8,0,0,0" VerticalAlignment="Bottom"/>
           <Button DockPanel.Dock="Right" Content="✗ Mistake" Command="{Binding MistakeCommand}" Margin="8,0,0,0" VerticalAlignment="Bottom"

@@ -5,7 +5,7 @@
              x:Class="Darg.Desktop.Views.ProjectView"
              x:DataType="vm:ProjectViewModel">
   <Grid ColumnDefinitions="60,*">
-    <Border Background="#111317" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+    <Border Background="{DynamicResource Rail}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <StackPanel Margin="0,8,0,0" HorizontalAlignment="Center">
         <ToggleButton Classes="rail" IsChecked="{Binding OnHome, Mode=OneWay}"
                       Command="{Binding OpenCommand}" CommandParameter="Home" ToolTip.Tip="Home: the README and what's going on">
@@ -31,9 +31,9 @@
                       Command="{Binding OpenCommand}" CommandParameter="Reports" ToolTip.Tip="Reports: what finished card agents did, unread ones counted">
           <Panel>
             <StackPanel><TextBlock Text="✓" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Reports" FontSize="9" HorizontalAlignment="Center" Margin="-8,0"/></StackPanel>
-            <Border Background="{StaticResource Accent}" CornerRadius="7" MinWidth="14" Height="14" Padding="3,0" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-6,0"
+            <Border Background="{DynamicResource Accent}" CornerRadius="7" MinWidth="14" Height="14" Padding="3,0" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-6,0"
                     IsVisible="{Binding Reports.HasUnread, FallbackValue=False}" ToolTip.Tip="Unread reports">
-              <TextBlock Text="{Binding Reports.UnreadText, FallbackValue=''}" FontSize="9" FontWeight="SemiBold" Foreground="#111317" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              <TextBlock Text="{Binding Reports.UnreadText, FallbackValue=''}" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource OnAccent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
           </Panel>
         </ToggleButton>

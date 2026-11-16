@@ -6,7 +6,7 @@
              x:DataType="vm:CodeViewModel">
   <Grid ColumnDefinitions="320,*" RowDefinitions="*,Auto">
     <!-- the repos -->
-    <Border Grid.RowSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+    <Border Grid.RowSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
         <StackPanel DockPanel.Dock="Top" Margin="10" Spacing="6">
           <TextBox Text="{Binding Find}" PlaceholderText="Find a file…"/>
@@ -28,7 +28,7 @@
               <TreeDataTemplate DataType="vm:TreeNode" ItemsSource="{Binding Children}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <TextBlock Text="{Binding Name}" Classes="mono" Classes.dir="{Binding IsDir}"/>
-                  <TextBlock Text="{Binding Change}" Foreground="{StaticResource Accent}" FontSize="11" IsVisible="{Binding Changed}"/>
+                  <TextBlock Text="{Binding Change}" Foreground="{DynamicResource Accent}" FontSize="11" IsVisible="{Binding Changed}"/>
                 </StackPanel>
               </TreeDataTemplate>
             </TreeView.ItemTemplate>
@@ -40,7 +40,7 @@
                   <StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6">
                       <TextBlock Text="{Binding Name}" Classes="mono"/>
-                      <TextBlock Text="{Binding Change}" Foreground="{StaticResource Accent}" FontSize="11"/>
+                      <TextBlock Text="{Binding Change}" Foreground="{DynamicResource Accent}" FontSize="11"/>
                     </StackPanel>
                     <TextBlock Text="{Binding Where}" Classes="dim small" TextTrimming="CharacterEllipsis"/>
                   </StackPanel>
@@ -54,14 +54,14 @@
 
     <!-- open files -->
     <DockPanel Grid.Column="1">
-      <ListBox x:Name="FileTabs" DockPanel.Dock="Top" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Current}" Background="{StaticResource Panel}"
-               BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" IsVisible="{Binding Tabs.Count}">
+      <ListBox x:Name="FileTabs" DockPanel.Dock="Top" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Current}" Background="{DynamicResource Panel}"
+               BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" IsVisible="{Binding Tabs.Count}">
         <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:OpenFile">
             <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding FullPath}">
               <TextBlock Text="{Binding Title}" Classes="mono" VerticalAlignment="Center"/>
-              <TextBlock Text="{Binding Change}" Foreground="{StaticResource Accent}" FontSize="11" VerticalAlignment="Center"/>
+              <TextBlock Text="{Binding Change}" Foreground="{DynamicResource Accent}" FontSize="11" VerticalAlignment="Center"/>
               <Button Content="×" Command="{Binding CloseCommand}" Padding="4,0" Background="Transparent" MinHeight="0"/>
             </StackPanel>
           </DataTemplate>
@@ -69,7 +69,7 @@
       </ListBox>
       <Panel>
         <ae:TextEditor x:Name="Editor" IsReadOnly="False" ShowLineNumbers="True" FontFamily="{StaticResource Mono}" FontSize="13"
-                       Background="{StaticResource Bg}" Padding="6,4" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"/>
+                       Background="{DynamicResource Bg}" Padding="6,4" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"/>
         <ScrollViewer x:Name="ImageBox" IsVisible="False" HorizontalScrollBarVisibility="Auto">
           <Image x:Name="Picture" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12"/>
         </ScrollViewer>
@@ -79,7 +79,7 @@
       </Panel>
     </DockPanel>
 
-    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+    <Border Grid.Row="1" Grid.Column="1" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
       <TextBlock Classes="dim small" Text="{Binding Status}"/>
     </Border>
   </Grid>

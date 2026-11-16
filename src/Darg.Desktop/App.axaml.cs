@@ -9,6 +9,8 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        // the theme picked in Settings, before any view asks for a colour
+        ThemeManager.Apply(Darg.Core.Themes.Get(Darg.Core.AppSettings.Load().Theme));
     }
 
     public override void OnFrameworkInitializationCompleted()

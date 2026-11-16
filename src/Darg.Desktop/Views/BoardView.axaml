@@ -13,7 +13,7 @@
       <Setter Property="Padding" Value="6,0"/>
       <Setter Property="MinHeight" Value="0"/>
       <Setter Property="FontSize" Value="13"/>
-      <Setter Property="Foreground" Value="{StaticResource Dim}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
       <Setter Property="Opacity" Value="0.5"/>
     </Style>
     <Style Selector="Border.list:pointerover Button.head"><Setter Property="Opacity" Value="1"/></Style>
@@ -26,15 +26,15 @@
       <Setter Property="Padding" Value="0,10"/>
     </Style>
     <!-- a card's type: a red Bug pill; another type a file names, grey -->
-    <Style Selector="Border.kind"><Setter Property="Background" Value="#2c3038"/></Style>
-    <Style Selector="Border.kind TextBlock"><Setter Property="Foreground" Value="#c6ccd6"/></Style>
-    <Style Selector="Border.kind.bug"><Setter Property="Background" Value="#4a2226"/></Style>
-    <Style Selector="Border.kind.bug TextBlock"><Setter Property="Foreground" Value="#ff8a8a"/></Style>
+    <Style Selector="Border.kind"><Setter Property="Background" Value="{DynamicResource LabelBg}"/></Style>
+    <Style Selector="Border.kind TextBlock"><Setter Property="Foreground" Value="{DynamicResource LabelInk}"/></Style>
+    <Style Selector="Border.kind.bug"><Setter Property="Background" Value="{DynamicResource BugBg}"/></Style>
+    <Style Selector="Border.kind.bug TextBlock"><Setter Property="Foreground" Value="{DynamicResource BugInk}"/></Style>
   </UserControl.Styles>
   <Panel>
   <Grid ColumnDefinitions="*,Auto">
   <Grid RowDefinitions="Auto,Auto,*">
-    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
+    <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
       <DockPanel>
         <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding Boards}" SelectedItem="{Binding SelectedBoard}" MinWidth="140" Margin="0,0,6,0"/>
         <Button DockPanel.Dock="Left" Content="+ Board" Command="{Binding NewBoardCommand}" Margin="0,0,12,0"
@@ -43,7 +43,7 @@
         <CheckBox DockPanel.Dock="Right" Content="Show completed" IsChecked="{Binding ShowCompleted}" Margin="12,0,0,0"/>
         <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
-          <TextBlock Text="{Binding PickedText}" IsVisible="{Binding HasPicked}" VerticalAlignment="Center" Foreground="{StaticResource Accent}"/>
+          <TextBlock Text="{Binding PickedText}" IsVisible="{Binding HasPicked}" VerticalAlignment="Center" Foreground="{DynamicResource Accent}"/>
           <Button Classes="primary" Content="{Binding WorkOnPickedText}" Command="{Binding WorkOnPickedCommand}" IsVisible="{Binding CanWorkOnPicked}"
                   ToolTip.Tip="Start an agent on each picked card, all at once in the project's folder; each is told which others are running beside it. Cards that already have an agent are skipped."/>
           <Button Content="Unpick" Command="{Binding ClearPickedCommand}" IsVisible="{Binding HasPicked}" ToolTip.Tip="Unpick every card (Esc)"/>
@@ -54,7 +54,7 @@
       </DockPanel>
     </Border>
 
-    <Border Grid.Row="1" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8,14,3">
+    <Border Grid.Row="1" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8,14,3">
       <ItemsControl ItemsSource="{Binding Labels}">
         <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
@@ -74,7 +74,7 @@
           <DataTemplate x:DataType="vm:ListViewModel">
             <Panel>
             <!-- minimized: a narrow strip with its name running down it; a click opens it, cards still drop on it -->
-            <Border Width="38" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8"
+            <Border Width="38" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8"
                     Tag="{Binding Id}" Classes="list" IsVisible="{Binding IsMinimized}">
               <Button Classes="strip" Command="{Binding ToggleMinimizedCommand}" ToolTip.Tip="{Binding Name, StringFormat='Open {0}'}"
                       AutomationProperties.Name="{Binding Name, StringFormat='Open {0}'}">
@@ -82,15 +82,15 @@
                   <TextBlock DockPanel.Dock="Top" Classes="dim small" Text="{Binding Count}" HorizontalAlignment="Center" Margin="0,0,0,8"/>
                   <LayoutTransformControl HorizontalAlignment="Center" VerticalAlignment="Top">
                     <LayoutTransformControl.LayoutTransform><RotateTransform Angle="90"/></LayoutTransformControl.LayoutTransform>
-                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource Dim}"/>
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource Dim}"/>
                   </LayoutTransformControl>
                 </DockPanel>
               </Button>
             </Border>
-            <Border Width="290" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8"
+            <Border Width="290" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8"
                     Tag="{Binding Id}" Classes="list" IsVisible="{Binding IsOpen}">
               <DockPanel>
-                <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="10,6">
+                <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="10,6">
                   <StackPanel Spacing="6">
                     <DockPanel IsVisible="{Binding IsHeaderPlain}">
                       <Button DockPanel.Dock="Right" Classes="head" Content="⋯" ToolTip.Tip="Rename, minimize or remove this list"
@@ -109,7 +109,7 @@
                       <Button DockPanel.Dock="Right" Classes="workon colpick" Classes.on="{Binding AllPicked}" Content="{Binding PickText}"
                               Command="{Binding PickCommand}" IsVisible="{Binding HasCards}" Margin="0,0,6,0"
                               ToolTip.Tip="Pick every card showing in this column (click again to unpick them)"/>
-                      <TextBlock Classes="listname" Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource Dim}"
+                      <TextBlock Classes="listname" Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource Dim}"
                                  VerticalAlignment="Center" Background="Transparent" Tag="{Binding}"/>
                     </DockPanel>
                     <TextBox Classes="rename" Text="{Binding EditName}" IsVisible="{Binding IsRenaming}" FontSize="12" Tag="{Binding}"
@@ -117,7 +117,7 @@
                     <StackPanel Spacing="6" IsVisible="{Binding ConfirmingRemove}">
                       <TextBlock Text="{Binding RemoveQuestion}" TextWrapping="Wrap" FontSize="12"/>
                       <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Remove" Command="{Binding RemoveCommand}" Foreground="{StaticResource Bad}"/>
+                        <Button Content="Remove" Command="{Binding RemoveCommand}" Foreground="{DynamicResource Bad}"/>
                         <Button Content="Keep it" Command="{Binding KeepItCommand}"/>
                       </StackPanel>
                     </StackPanel>
@@ -145,8 +145,8 @@
                             <DockPanel>
                               <Button DockPanel.Dock="Right" Classes="workon" Content="▶ Work on" Command="{Binding WorkOnCommand}"
                                       IsVisible="{Binding !HasAgent}" ToolTip.Tip="Start an agent on this card"/>
-                              <Border DockPanel.Dock="Right" IsVisible="{Binding HasPriority}" Background="#3a3020" CornerRadius="8" Padding="6,0" Margin="0,0,6,0">
-                                <TextBlock Text="{Binding Priority}" FontSize="10" Foreground="{StaticResource Accent}"/>
+                              <Border DockPanel.Dock="Right" IsVisible="{Binding HasPriority}" Background="{DynamicResource AccentSoft}" CornerRadius="8" Padding="6,0" Margin="0,0,6,0">
+                                <TextBlock Text="{Binding Priority}" FontSize="10" Foreground="{DynamicResource Accent}"/>
                               </Border>
                               <Border DockPanel.Dock="Right" IsVisible="{Binding ShowsKind}" Classes="kind" Classes.bug="{Binding IsBug}"
                                       CornerRadius="8" Padding="6,0" Margin="0,0,6,0" ToolTip.Tip="Its type">
@@ -159,7 +159,7 @@
                               <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                               <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="x:String">
-                                  <Border Classes="label"><TextBlock Text="{Binding}" FontSize="10" Foreground="#c6ccd6"/></Border>
+                                  <Border Classes="label"><TextBlock Text="{Binding}" FontSize="10" Foreground="{DynamicResource LabelInk}"/></Border>
                                 </DataTemplate>
                               </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -195,8 +195,8 @@
   </Grid>
 
     <!-- a card: new, or open to read and edit -->
-    <Border Grid.Column="1" Width="400" IsVisible="{Binding IsEditing}" Background="{StaticResource Panel}"
-            BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+    <Border Grid.Column="1" Width="400" IsVisible="{Binding IsEditing}" Background="{DynamicResource Panel}"
+            BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
       <ScrollViewer>
         <StackPanel DataContext="{Binding Editor}" x:DataType="vm:CardEditor" Margin="14" Spacing="10">
           <DockPanel>
@@ -237,7 +237,7 @@
           </StackPanel>
           <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding CanDone}" Margin="0,6,0,0">
             <Button Content="✓ Mark done" Command="{Binding DoneCommand}" ToolTip.Tip="Moves it to the board's last column"/>
-            <Button Content="{Binding DeleteLabel}" Command="{Binding DeleteCommand}" Foreground="{StaticResource Bad}"
+            <Button Content="{Binding DeleteLabel}" Command="{Binding DeleteCommand}" Foreground="{DynamicResource Bad}"
                     ToolTip.Tip="Moves its file into the board's .deleted folder (recoverable)"/>
           </StackPanel>
         </StackPanel>
@@ -245,8 +245,8 @@
     </Border>
 
     <!-- making boards: one by hand, or an agent sorting the cards into several -->
-    <Border Grid.Column="1" Width="400" IsVisible="{Binding IsMaking}" Background="{StaticResource Panel}"
-            BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+    <Border Grid.Column="1" Width="400" IsVisible="{Binding IsMaking}" Background="{DynamicResource Panel}"
+            BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
       <ScrollViewer>
         <StackPanel DataContext="{Binding Maker}" x:DataType="vm:BoardMaker" Margin="14" Spacing="10">
           <TextBlock Text="✨ Sort into boards" FontWeight="SemiBold" FontSize="13"/>
@@ -255,7 +255,7 @@
           <TextBox Text="{Binding Hint}" PlaceholderText="How to sort them (optional): by area, art apart from code…" TextWrapping="Wrap"/>
           <Button Classes="primary" Content="✨ Sort into boards" Command="{Binding SortCommand}"/>
 
-          <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,10,0,0" Padding="0,14,0,0">
+          <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Margin="0,10,0,0" Padding="0,14,0,0">
             <StackPanel Spacing="10">
               <TextBlock Text="New board" FontWeight="SemiBold" FontSize="13"/>
               <TextBox Text="{Binding Name}" PlaceholderText="Name" FontSize="15"/>

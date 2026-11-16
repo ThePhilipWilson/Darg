@@ -1,0 +1,98 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             x:Class="Darg.Desktop.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel"
+             Background="{DynamicResource Bg}">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="16,10">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="Close" Command="{Binding CloseCommand}"/>
+        <TextBlock Text="Settings" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+      </DockPanel>
+    </Border>
+    <ScrollViewer>
+      <StackPanel Margin="20,16" Spacing="10">
+        <TextBlock Text="Theme" FontSize="15" FontWeight="SemiBold"/>
+        <TextBlock Classes="dim small" Text="Shows at once and is kept for next time (settings.json in the instance folder)."/>
+        <ItemsControl ItemsSource="{Binding Themes}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ThemeChoice">
+              <!-- a card per theme: a little window drawn in its own colours, whatever theme is on -->
+              <Button Command="{Binding PickCommand}" Classes="theme" Classes.current="{Binding IsCurrent}" Padding="0" Margin="0,0,16,16"
+                      Background="Transparent" Cursor="Hand" AutomationProperties.Name="{Binding AutomationName}">
+                <Border Classes="frame" Width="260" CornerRadius="12" BorderThickness="2" Padding="10">
+                  <StackPanel Spacing="10">
+                    <Border Height="130" CornerRadius="8" ClipToBounds="True" Background="{Binding Bg}" BorderBrush="{Binding Line}" BorderThickness="1">
+                      <DockPanel>
+                        <Border DockPanel.Dock="Top" Height="20" Background="{Binding Chrome}" BorderBrush="{Binding Line}" BorderThickness="0,0,0,1">
+                          <StackPanel Orientation="Horizontal" Spacing="6" Margin="8,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Theme.Mark}" Foreground="{Binding Accent}" FontSize="10" FontWeight="Bold"/>
+                            <Border Width="34" Height="6" CornerRadius="3" Background="{Binding Panel2}" VerticalAlignment="Center"/>
+                            <Border Width="26" Height="6" CornerRadius="3" Background="{Binding Panel2}" VerticalAlignment="Center"/>
+                          </StackPanel>
+                        </Border>
+                        <Border DockPanel.Dock="Left" Width="22" Background="{Binding Panel}" BorderBrush="{Binding Line}" BorderThickness="0,0,1,0">
+                          <StackPanel Spacing="6" Margin="0,8">
+                            <Ellipse Width="8" Height="8" Fill="{Binding Accent}"/>
+                            <Ellipse Width="8" Height="8" Fill="{Binding Dim}"/>
+                            <Ellipse Width="8" Height="8" Fill="{Binding Dim}"/>
+                          </StackPanel>
+                        </Border>
+                        <StackPanel Margin="10,8" Spacing="6">
+                          <TextBlock Text="Board" Foreground="{Binding Ink}" FontSize="11" FontWeight="SemiBold"/>
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Border Width="60" Height="34" CornerRadius="4" Background="{Binding Panel2}" BorderBrush="{Binding Line}" BorderThickness="1" Padding="5,4">
+                              <StackPanel Spacing="4">
+                                <Border Height="4" CornerRadius="2" Background="{Binding Ink}" Opacity="0.7"/>
+                                <Border Height="4" Width="30" HorizontalAlignment="Left" CornerRadius="2" Background="{Binding Dim}"/>
+                              </StackPanel>
+                            </Border>
+                            <Border Width="60" Height="34" CornerRadius="4" Background="{Binding Panel2}" BorderBrush="{Binding Line}" BorderThickness="1" Padding="5,4">
+                              <StackPanel Spacing="4">
+                                <Border Height="4" CornerRadius="2" Background="{Binding Ink}" Opacity="0.7"/>
+                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                  <Ellipse Width="6" Height="6" Fill="{Binding Ok}"/>
+                                  <Ellipse Width="6" Height="6" Fill="{Binding Info}"/>
+                                </StackPanel>
+                              </StackPanel>
+                            </Border>
+                          </StackPanel>
+                          <Border HorizontalAlignment="Left" CornerRadius="4" Background="{Binding Accent}" Padding="8,2">
+                            <TextBlock Text="Work on" Foreground="{Binding OnAccent}" FontSize="9" FontWeight="SemiBold"/>
+                          </Border>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                    <DockPanel>
+                      <TextBlock DockPanel.Dock="Right" Text="✓ On" Foreground="{DynamicResource Accent}" FontWeight="SemiBold" IsVisible="{Binding IsCurrent}"/>
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                    </DockPanel>
+                    <TextBlock Classes="dim small" Text="{Binding Blurb}" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </Border>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock Classes="bad" Text="{Binding Status}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap"/>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+  <UserControl.Styles>
+    <Style Selector="Button.theme Border.frame">
+      <Setter Property="Background" Value="{DynamicResource Panel}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+    </Style>
+    <Style Selector="Button.theme:pointerover Border.frame">
+      <Setter Property="BorderBrush" Value="{DynamicResource CardHoverLine}"/>
+    </Style>
+    <Style Selector="Button.theme.current Border.frame">
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+    </Style>
+    <Style Selector="Button.theme:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.theme:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+  </UserControl.Styles>
+</UserControl>
