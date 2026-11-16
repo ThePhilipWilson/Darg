@@ -4,10 +4,13 @@ namespace Workbench.Core.Tests;
 
 public sealed class CreateCardTests : IDisposable
 {
-    readonly string _dir = Directory.CreateTempSubdirectory("wb-create-").FullName;
+    // a board inside a project's boards folder, as on disk: Create looks at the boards beside it
+    readonly string _root = Directory.CreateTempSubdirectory("wb-create-").FullName;
+    readonly string _dir;
 
     public CreateCardTests()
     {
+        _dir = Directory.CreateDirectory(Path.Combine(_root, "Main")).FullName;
         File.WriteAllText(Path.Combine(_dir, "board.json"), """{"columns":[{"id":"c1","name":"To Do"}],"prefix":"VOT","nextId":3,"order":{"backlog":["VOT-0001"]}}""");
         Directory.CreateDirectory(Path.Combine(_dir, "items"));
         File.WriteAllText(Path.Combine(_dir, "items", "VOT-0007 - Old.md"), "# VOT-0007: Old\n\n- **Status:** Backlog\n");
@@ -53,7 +56,7 @@ public sealed class CreateCardTests : IDisposable
         Assert.Equal("New text.\n\nTwo paragraphs.", u.Description);
     }
 
-    public void Dispose() => Directory.Delete(_dir, true);
+    public void Dispose() => Directory.Delete(_root, true);
 }
 
 public sealed class NoteStoreTests : IDisposable

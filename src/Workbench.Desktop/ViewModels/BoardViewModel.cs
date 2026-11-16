@@ -28,6 +28,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     string? _notice;
     /// <summary>Set by the project: show an agent.</summary>
     public Action<AgentViewModel>? OpenAgent { get; set; }
+    /// <summary>Set by the project: start an agent and show it. Passed: the prompt, its folder and its name.</summary>
+    public Action<string, string, string>? StartAgent { get; set; }
+    FileSystemWatcher? _watchBoards;
 
     public ObservableCollection<string> Boards { get; } = [];
     public ObservableCollection<ListViewModel> Lists { get; } = [];
@@ -40,6 +43,107 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsEditing))] public partial CardEditor? Editor { get; set; }
     public bool IsEditing => Editor is not null;
     [RelayCommand] void NewCard() { if (Folder is not null) Editor = new CardEditor(this, null); }
+
+    /// <summary>The side panel for making boards: one by hand, or an agent sorting the cards into several.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsMaking))] public partial BoardMaker? Maker { get; set; }
+    public bool IsMaking => Maker is not null;
+    [RelayCommand]
+    void NewBoard()
+    {
+        if (_project.Boards is null) return;
+        Editor = null;
+        Maker = Maker is null ? new BoardMaker(this, _board?.Columns.Select(c => c.Name) ?? BoardStore.DefaultColumns) : null;
+    }
+    partial void OnEditorChanged(CardEditor? value) { if (value is not null) Maker = null; }
+
+    /// <summary>Make a board and show it.</summary>
+    public void CreateBoard(string name, IEnumerable<string> columns)
+    {
+        var folder = BoardStore.CreateBoard(_project.Boards!, name, columns);
+        if (_watchBoards is null) WatchBoards(); // the boards folder may only now exist
+        RefreshBoards();
+        SelectedBoard = Path.GetFileName(folder);
+        _notice = $"Made the board {SelectedBoard}. Right-click a card on another board to move it here.";
+        Apply();
+    }
+
+    /// <summary>Start an agent that reads every card on the project's boards, proposes how to split them
+    /// into boards, asks, and then makes the boards and moves the cards.</summary>
+    public void SortIntoBoards(string? hint)
+    {
+        if (_project.Boards is null || StartAgent is null) return;
+        var busy = BoardStore.List(_project.Boards)
+            .SelectMany(b => BoardStore.ReadCards(Path.Combine(_project.Boards, b)))
+            .Where(c => AgentFor?.Invoke(c.Id) is not null).Select(c => c.Id).ToList();
+        StartAgent(SortPrompt(_project.Name, _project.Boards, BoardStore.List(_project.Boards), busy, hint),
+            _project.Boards, $"Sort {_project.Name}'s cards into boards");
+        Maker = null;
+    }
+
+    /// <summary>What the sorting agent is asked: read the cards, propose boards, ask, then make them in
+    /// Tatty's format and move the cards (IDs kept, cards with a live agent left alone).</summary>
+    public static string SortPrompt(string projectName, string boardsFolder, IReadOnlyList<string> boards, IReadOnlyList<string> busy, string? hint)
+    {
+        var lines = new List<string>
+        {
+            $"Sort the {projectName} project's cards into boards. Its boards are folders in {boardsFolder} (now: {string.Join(", ", boards)}); " +
+            "this is your working folder.",
+            "",
+            "1. Read every card on every board. Skip Completed cards unless they decide a grouping.",
+            "2. Work out how best to organise them: a handful of boards (usually 2 to 6) that each hold one kind of work someone " +
+            "would sit down to do together (an area of the app, a feature, a kind of task). Every card goes on exactly one board. " +
+            "Keep a board that already fits rather than renaming it.",
+            "3. Ask me with AskUserQuestion before changing anything. Put the proposal in the question itself, since I may only see " +
+            "the question: each board's name, one line on what it holds, and the card IDs going there. Make your proposal the " +
+            "first option, marked (Recommended); add one or two real alternatives (fewer boards, or a different cut) and a " +
+            "\"Leave the boards as they are\" option.",
+            "4. Then make the boards and move the cards, exactly as Workbench does:",
+            "   - A board is a folder with board.json and an items folder. Copy the columns of the board the cards come from " +
+            "(same names, ids c1, c2 and on), the same prefix, \"version\": 1, nextId one past the highest number used on any board " +
+            "with that prefix, and order {\"backlog\": []}. A board's name is its folder's name: none of / \\ : * ? \" < > |.",
+            "   - Moving a card: move its file from <old board>/items to <new board>/items unchanged (it keeps its ID and file name), " +
+            "remove its ID from every list in the old board.json's order, and add it to the new board.json's order under the list " +
+            "it belongs in: the column whose name matches its Status, else backlog (then set its Status line to Backlog).",
+            "   - Don't renumber, rename or delete any card. If a board ends up empty, leave it and say so; I'll decide.",
+            "5. When you stop, list the boards and what moved where. Workbench shows the changes as you make them. Never commit or push.",
+        };
+        if (busy.Count > 0)
+            lines.AddRange(["", $"Agents are working on {string.Join(", ", busy)} right now: leave those cards on the board they're on (their agents hold the file's path)."]);
+        if (hint is { Length: > 0 }) lines.AddRange(["", $"How I'd like it sorted: {hint}"]);
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>The boards in the folder, re-read (an agent or Tatty may have made one); the shown one stays.</summary>
+    void RefreshBoards()
+    {
+        var now = BoardStore.List(_project.Boards);
+        var keep = SelectedBoard;
+        if (!now.SequenceEqual(Boards))
+        {
+            foreach (var b in Boards.Except(now).Where(b => b != keep).ToList()) Boards.Remove(b);
+            foreach (var b in now.Except(Boards).ToList())
+            {
+                var at = 0;
+                while (at < Boards.Count && StringComparer.OrdinalIgnoreCase.Compare(Boards[at], b) < 0) at++;
+                Boards.Insert(at, b);
+            }
+        }
+        if (SelectedBoard is null && Boards.Count > 0) SelectedBoard = Boards[0];
+        OnPropertyChanged(nameof(OtherBoards));
+    }
+
+    /// <summary>The project's other boards, for "Move to board".</summary>
+    public IReadOnlyList<string> OtherBoards => Boards.Where(b => b != SelectedBoard).ToList();
+
+    /// <summary>Move a card to another of the project's boards (it keeps its ID).</summary>
+    public void MoveToBoard(CardViewModel card, string board)
+    {
+        if (Folder is null || _project.Boards is null) return;
+        try { BoardStore.Transfer(Folder, Path.Combine(_project.Boards, board), card.Id); }
+        catch (Exception e) { _notice = $"Couldn't move {card.Id}: {e.Message}"; Apply(); return; }
+        _notice = $"Moved {card.Id} to {board}";
+        Reload();
+    }
     public void Open(CardViewModel card) => Editor = new CardEditor(this, card);
 
     /// <summary>Open a card by its ID, on whichever board holds it (clearing filters that hide it).</summary>
@@ -73,10 +177,21 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _project = project;
         foreach (var b in BoardStore.List(project.Boards)) Boards.Add(b);
         SelectedBoard = Boards.FirstOrDefault();
-        if (Boards.Count == 0) Status = project.Boards is null ? "This project has no boards folder set." : $"No boards in {project.Boards}.";
+        if (Boards.Count == 0) Status = project.Boards is null ? "This project has no boards folder set." : $"No boards in {project.Boards}. + Board makes one.";
+        WatchBoards();
     }
 
-    partial void OnSelectedBoardChanged(string? value) { Watch(); Reload(); }
+    /// <summary>A board made or removed outside Workbench (an agent sorting cards, Tatty) shows in the list.</summary>
+    void WatchBoards()
+    {
+        if (_project.Boards is null || !Directory.Exists(_project.Boards)) return;
+        var t = new DispatcherTimer(TimeSpan.FromMilliseconds(400), DispatcherPriority.Background, (s, _) => { ((DispatcherTimer)s!).Stop(); RefreshBoards(); });
+        _watchBoards = new FileSystemWatcher(_project.Boards, "board.json") { IncludeSubdirectories = true, EnableRaisingEvents = true };
+        void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { t.Stop(); t.Start(); });
+        _watchBoards.Created += Poke; _watchBoards.Deleted += Poke; _watchBoards.Renamed += (s, e) => Poke(s, e);
+    }
+
+    partial void OnSelectedBoardChanged(string? value) { _notice = null; OnPropertyChanged(nameof(OtherBoards)); Watch(); Reload(); }
     partial void OnFilterChanged(string value) { _notice = null; Apply(); }
     partial void OnShowCompletedChanged(bool value) { _notice = null; Apply(); }
 
@@ -272,7 +387,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             var cards = _board.Lists[id].Where(Keep).ToList();
             total += cards.Count;
             Lists.Add(new ListViewModel(this, id, name, cards.Select(c =>
-                new CardViewModel(c, targets, this, AgentFor?.Invoke(c.Id)) { IsPicked = _picked.Contains(c.Id) }), _board.Lists[id].Count,
+                new CardViewModel(c, targets, this, AgentFor?.Invoke(c.Id), OtherBoards) { IsPicked = _picked.Contains(c.Id) }), _board.Lists[id].Count,
                 _board.Minimized.Contains(id)));
         }
         _picked.IntersectWith(Shown().Select(c => c.Id));
@@ -315,7 +430,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
     }
 
-    public void Dispose() => _watch?.Dispose();
+    public void Dispose() { _watch?.Dispose(); _watchBoards?.Dispose(); }
 }
 
 public enum ChipMode { Off, Any, All }
@@ -421,7 +536,8 @@ public sealed partial class CardViewModel : ObservableObject
     public IRelayCommand WorkOnCommand { get; }
     public IRelayCommand OpenAgentCommand { get; }
 
-    public CardViewModel(Card card, IEnumerable<(string Id, string Name)> lists, BoardViewModel board, AgentViewModel? agent = null)
+    public CardViewModel(Card card, IEnumerable<(string Id, string Name)> lists, BoardViewModel board, AgentViewModel? agent = null,
+        IEnumerable<string>? otherBoards = null)
     {
         Card = card;
         Agent = agent;
@@ -430,11 +546,35 @@ public sealed partial class CardViewModel : ObservableObject
         MoveTargets = [
             new MoveTarget(agent is null ? "Work on this with an agent" : "Open its agent", agent is null ? WorkOnCommand : OpenAgentCommand),
             .. lists.Select(l => new MoveTarget("Move to " + l.Name, new RelayCommand(() => board.Move(this, l.Id)))),
+            // a card with a live agent stays put: the agent holds its file's path
+            .. agent is null ? (otherBoards ?? []).Select(b => new MoveTarget("Move to board " + b, new RelayCommand(() => board.MoveToBoard(this, b)))) : [],
         ];
     }
 }
 
 public sealed record MoveTarget(string Label, IRelayCommand Command);
+
+/// <summary>The side panel for making boards: a new one by hand, or an agent sorting the cards into several.</summary>
+public partial class BoardMaker(BoardViewModel board, IEnumerable<string> columns) : ObservableObject
+{
+    [ObservableProperty] public partial string Name { get; set; } = "";
+    /// <summary>Its columns, comma separated (the shown board's to start with).</summary>
+    [ObservableProperty] public partial string Columns { get; set; } = string.Join(", ", columns);
+    /// <summary>Optional words for the sorting agent ("by area of the app", "art apart from code").</summary>
+    [ObservableProperty] public partial string Hint { get; set; } = "";
+    [ObservableProperty] public partial string Error { get; set; } = "";
+
+    [RelayCommand]
+    void Create()
+    {
+        try { board.CreateBoard(Name, Columns.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)); }
+        catch (Exception e) { Error = e.Message; return; }
+        board.Maker = null;
+    }
+
+    [RelayCommand] void Sort() => board.SortIntoBoards(Hint.Trim());
+    [RelayCommand] void Cancel() => board.Maker = null;
+}
 
 /// <summary>The side panel for a new card, or for reading and editing one.</summary>
 public partial class CardEditor : ObservableObject

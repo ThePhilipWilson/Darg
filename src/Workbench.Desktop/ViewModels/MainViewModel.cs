@@ -320,6 +320,7 @@ public partial class ProjectViewModel : ObservableObject
         {
             Board.AgentFor = Agents.ForCard;
             Board.OpenAgent = a => { Agents.Selected = a; Section = Section.Agents; };
+            Board.StartAgent = (prompt, cwd, name) => { Agents.Start(prompt, cwd, name: name); Section = Section.Agents; };
             Board.WorkOn = (card, file, alongside, show) =>
             {
                 // everyone at work in this folder: the batch this card was started with, and agents busy here now

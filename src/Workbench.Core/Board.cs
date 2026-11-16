@@ -261,8 +261,7 @@ public static class BoardStore
         var boardPath = Path.Combine(folder, "board.json");
         var json = JsonNode.Parse(File.ReadAllText(boardPath))!.AsObject();
         var prefix = (string?)json["prefix"] is { Length: > 0 } p ? p : "T";
-        var used = ReadCards(folder).Select(c => c.Number).Where(n => n != int.MaxValue).DefaultIfEmpty(0).Max();
-        var next = Math.Max((int?)json["nextId"] ?? 1, used + 1);
+        var next = Math.Max((int?)json["nextId"] ?? 1, HighestUsed(folder, prefix) + 1);
         var id = $"{prefix}-{next:0000}";
         var labelText = string.Join(", ", (labels ?? []).Select(l => l.Trim()).Where(l => l.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase));
         var text = $"# {id}: {title}\n\n- **Status:** Backlog\n- **Priority:**{(priority.Length > 0 ? " " + priority : "")}\n" +
@@ -280,6 +279,113 @@ public static class BoardStore
         backlog.Add(id);
         File.WriteAllText(boardPath, json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
         return Parse(text, file)!;
+    }
+
+    /// <summary>The highest number in use for a prefix, on this board and on every board beside it with the
+    /// same prefix (their cards and their nextId). Boards in a project share a prefix, so an ID stays unique
+    /// across them and a card keeps its ID when it moves to another board.</summary>
+    static int HighestUsed(string folder, string prefix)
+    {
+        var high = 0;
+        var parent = Path.GetDirectoryName(Path.GetFullPath(folder).TrimEnd('\\', '/'));
+        var boards = parent is null ? [folder] : Directory.GetDirectories(parent).Where(d => File.Exists(Path.Combine(d, "board.json")))
+            .Append(folder).Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (var b in boards)
+        {
+            JsonObject? json;
+            try { json = JsonNode.Parse(File.ReadAllText(Path.Combine(b, "board.json")))?.AsObject(); }
+            catch (Exception) { continue; }
+            if (json is null || !string.Equals((string?)json["prefix"] is { Length: > 0 } p ? p : "T", prefix, StringComparison.Ordinal)) continue;
+            high = Math.Max(high, ((int?)json["nextId"] ?? 1) - 1);
+            foreach (var c in ReadCards(b))
+                if (c.Id.StartsWith(prefix + "-", StringComparison.Ordinal) && c.Number != int.MaxValue) high = Math.Max(high, c.Number);
+        }
+        return high;
+    }
+
+    public static readonly IReadOnlyList<string> DefaultColumns = ["To Do", "In Progress", "Done"];
+
+    /// <summary>Make a new, empty board in a project's boards folder, in Tatty's format. It takes the prefix
+    /// of the boards already there (so IDs stay unique across them; "T" if there are none) unless given one,
+    /// and the columns given (To Do, In Progress, Done by default). Returns its folder.</summary>
+    public static string CreateBoard(string boardsFolder, string name, IEnumerable<string>? columns = null, string? prefix = null)
+    {
+        name = Regex.Replace(name.Replace('\n', ' ').Replace('\r', ' '), @"\s+", " ").Trim();
+        if (name.Length == 0) throw new ArgumentException("A board needs a name.", nameof(name));
+        if (FileTitle(name) != name || name.StartsWith('.'))
+            throw new ArgumentException("A board's name is its folder's name: no / \\ : * ? \" < > |, and not starting with a dot.", nameof(name));
+        Directory.CreateDirectory(boardsFolder);
+        var folder = Path.Combine(boardsFolder, name);
+        if (Directory.Exists(folder)) throw new ArgumentException($"There is already a board or folder called {name}.", nameof(name));
+        var cols = (columns ?? DefaultColumns).Select(c => Regex.Replace(c, @"\s+", " ").Trim()).Where(c => c.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (cols.Any(c => c.Equals("Backlog", StringComparison.OrdinalIgnoreCase) || c.Equals("Completed", StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException("Backlog and Completed are always there; they can't be columns too.", nameof(columns));
+        prefix = prefix?.Trim().ToUpperInvariant() is { Length: > 0 } given ? given
+            : List(boardsFolder).Select(b => { try { return (string?)JsonNode.Parse(File.ReadAllText(Path.Combine(boardsFolder, b, "board.json")))?["prefix"]; } catch (Exception) { return null; } })
+                .FirstOrDefault(p => p is { Length: > 0 }) ?? "T";
+        if (!Regex.IsMatch(prefix, "^[A-Z][A-Z0-9]*$")) throw new ArgumentException("A prefix is letters and digits, starting with a letter.", nameof(prefix));
+        Directory.CreateDirectory(Path.Combine(folder, "items"));
+        var json = new JsonObject
+        {
+            ["columns"] = new JsonArray(cols.Select((c, i) => (JsonNode)new JsonObject { ["id"] = $"c{i + 1}", ["name"] = c }).ToArray()),
+            ["prefix"] = prefix,
+            ["version"] = 1,
+            ["nextId"] = HighestUsed(folder, prefix) + 1,
+            ["order"] = new JsonObject { [Board.Backlog] = new JsonArray() },
+        };
+        File.WriteAllText(Path.Combine(folder, "board.json"), json.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
+        return folder;
+    }
+
+    /// <summary>Move a card to another board, keeping its ID and file: it leaves this board's order and joins
+    /// the other's, in the column of the same name if there is one, else the backlog (Completed stays
+    /// Completed). The other board's nextId moves past it if they share a prefix. Returns the card as moved.</summary>
+    public static Card Transfer(string fromFolder, string toFolder, string cardId)
+    {
+        if (string.Equals(Path.GetFullPath(fromFolder).TrimEnd('\\', '/'), Path.GetFullPath(toFolder).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("That is the board it's on.", nameof(toFolder));
+        var card = ReadCards(fromFolder).FirstOrDefault(c => c.Id == cardId)
+                   ?? throw new ArgumentException($"No card {cardId} on this board.", nameof(cardId));
+        if (ReadCards(toFolder).Any(c => c.Id == cardId))
+            throw new ArgumentException($"The other board already has a card {cardId}.", nameof(cardId));
+        var toPath = Path.Combine(toFolder, "board.json");
+        var to = JsonNode.Parse(File.ReadAllText(toPath))!.AsObject();
+        var columns = (to["columns"] as JsonArray ?? [])
+            .Select(c => new Column((string?)c?["id"] ?? "", (string?)c?["name"] ?? "")).Where(c => c.Id != "").ToList();
+        var place = PlaceOf(card.Status, columns);
+        if (place == Board.Unsorted) place = Board.Backlog;
+
+        var items = Path.Combine(toFolder, "items");
+        Directory.CreateDirectory(items);
+        var target = Path.Combine(items, card.File);
+        if (File.Exists(target)) throw new ArgumentException($"The other board already has a file {card.File}.", nameof(cardId));
+        File.Move(Path.Combine(fromFolder, "items", card.File), target);
+        if (place == Board.Backlog && !card.Status.Equals("backlog", StringComparison.OrdinalIgnoreCase))
+        {
+            var raw = File.ReadAllText(target);
+            var crlf = raw.Contains("\r\n");
+            var text = SetField(raw.Replace("\r\n", "\n"), "Status", "Backlog");
+            File.WriteAllText(target, crlf ? text.Replace("\n", "\r\n") : text, new UTF8Encoding(false));
+        }
+
+        var fromPath = Path.Combine(fromFolder, "board.json");
+        var from = JsonNode.Parse(File.ReadAllText(fromPath))!.AsObject();
+        if (from["order"] is JsonObject fromOrder)
+            foreach (var (_, ids) in fromOrder)
+                if (ids is JsonArray a)
+                    foreach (var n in a.Where(x => (string?)x == cardId).ToList()) a.Remove(n);
+        File.WriteAllText(fromPath, from.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
+
+        var order = to["order"] as JsonObject ?? new JsonObject();
+        to["order"] = order;
+        if (order[place] is not JsonArray list) order[place] = list = new JsonArray();
+        list.Add(cardId);
+        var prefix = (string?)to["prefix"] is { Length: > 0 } p ? p : "T";
+        if (cardId.StartsWith(prefix + "-", StringComparison.Ordinal) && card.Number != int.MaxValue && ((int?)to["nextId"] ?? 1) <= card.Number)
+            to["nextId"] = card.Number + 1;
+        File.WriteAllText(toPath, to.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n", new UTF8Encoding(false));
+        return ReadCards(toFolder).First(c => c.Id == cardId);
     }
 
     /// <summary>Delete a card the way Tatty does: its file moves into the board's .deleted folder (out of
