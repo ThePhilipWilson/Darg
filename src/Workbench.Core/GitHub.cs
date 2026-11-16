@@ -27,7 +27,7 @@ public static class GitHub
     /// <summary>owner/name from a repo's origin, when it's on github.com (ssh or https form).</summary>
     public static (string Owner, string Name)? ParseRemote(string url)
     {
-        var m = Regex.Match(url.Trim(), @"github\.com[:/]+([^/\s]+)/([^/\s]+?)(?:\.git)?/?$", RegexOptions.IgnoreCase);
+        var m = Regex.Match(url.Trim(), @"github\.com(?:-[^:/\s]+)?[:/]+([^/\s]+)/([^/\s]+?)(?:\.git)?/?$", RegexOptions.IgnoreCase);
         return m.Success ? (m.Groups[1].Value, m.Groups[2].Value) : null;
     }
 

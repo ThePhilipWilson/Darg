@@ -10,6 +10,7 @@ public sealed class GitHubTests
     [InlineData("https://github.com/ThePhilipWilson/Site.git", "ThePhilipWilson", "Site")]
     [InlineData("https://github.com/TimLewisDev/Tims-AI-Companion", "TimLewisDev", "Tims-AI-Companion")]
     [InlineData("ssh://git@github.com/a/b.git\n", "a", "b")]
+    [InlineData("git@github.com-thephilipwilson:ThePhilipWilson/Workbench.git", "ThePhilipWilson", "Workbench")]
     public void Remotes_on_github(string url, string owner, string name) => Assert.Equal((owner, name), GitHub.ParseRemote(url));
 
     [Theory]
