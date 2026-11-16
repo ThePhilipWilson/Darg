@@ -31,7 +31,9 @@
   <Grid RowDefinitions="Auto,Auto,*">
     <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
       <DockPanel>
-        <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding Boards}" SelectedItem="{Binding SelectedBoard}" MinWidth="140" Margin="0,0,12,0"/>
+        <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding Boards}" SelectedItem="{Binding SelectedBoard}" MinWidth="140" Margin="0,0,6,0"/>
+        <Button DockPanel.Dock="Left" Content="+ Board" Command="{Binding NewBoardCommand}" Margin="0,0,12,0"
+                ToolTip.Tip="Make a new board, or have an agent sort the cards into boards"/>
         <Button DockPanel.Dock="Right" Classes="primary" Content="+ Card" Command="{Binding NewCardCommand}" Margin="12,0,0,0"/>
         <CheckBox DockPanel.Dock="Right" Content="Show completed" IsChecked="{Binding ShowCompleted}" Margin="12,0,0,0"/>
         <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0"/>
@@ -201,6 +203,34 @@
             <Button Content="{Binding DeleteLabel}" Command="{Binding DeleteCommand}" Foreground="{StaticResource Bad}"
                     ToolTip.Tip="Moves its file into the board's .deleted folder (recoverable)"/>
           </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+
+    <!-- making boards: one by hand, or an agent sorting the cards into several -->
+    <Border Grid.Column="1" Width="400" IsVisible="{Binding IsMaking}" Background="{StaticResource Panel}"
+            BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+      <ScrollViewer>
+        <StackPanel DataContext="{Binding Maker}" x:DataType="vm:BoardMaker" Margin="14" Spacing="10">
+          <TextBlock Text="✨ Sort into boards" FontWeight="SemiBold" FontSize="13"/>
+          <TextBlock Classes="dim" TextWrapping="Wrap"
+                     Text="An agent reads every card, works out how best to split them into boards, and asks you before it makes them and moves the cards. IDs stay the same; cards with an agent on them stay put."/>
+          <TextBox Text="{Binding Hint}" PlaceholderText="How to sort them (optional): by area, art apart from code…" TextWrapping="Wrap"/>
+          <Button Classes="primary" Content="✨ Sort into boards" Command="{Binding SortCommand}"/>
+
+          <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,10,0,0" Padding="0,14,0,0">
+            <StackPanel Spacing="10">
+              <TextBlock Text="New board" FontWeight="SemiBold" FontSize="13"/>
+              <TextBox Text="{Binding Name}" PlaceholderText="Name" FontSize="15"/>
+              <TextBox Text="{Binding Columns}" PlaceholderText="Columns, comma separated"/>
+              <TextBlock Classes="dim small" TextWrapping="Wrap" Text="Backlog and Completed are always there. Right-click a card to move it to another board."/>
+              <TextBlock Classes="bad" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="primary" Content="Create" Command="{Binding CreateCommand}"/>
+                <Button Content="Close" Command="{Binding CancelCommand}"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
         </StackPanel>
       </ScrollViewer>
     </Border>
