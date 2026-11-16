@@ -341,12 +341,14 @@ public partial class ProjectViewModel : ObservableObject
                 var repo = Directory.Exists(Path.Combine(folder, ".git")) || File.Exists(Path.Combine(folder, ".git")) ? folder : null;
                 return AgentsViewModel.CardPrompt(Name, card, file, others, repo);
             }
+            // what picks a card agent's model profile: the card's words, type and labels, not the house rules around them
+            static AgentJob CardJob(Card card) => new(JobKinds.Card, $"{card.Title}\n\n{card.Description}".Trim(), card.Type, card.Labels);
             // the card shows the agent's state; when the agent ends, the card drops its link
             void Watch(AgentViewModel a) =>
                 a.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State) && a.State == AgentState.Exited) Board.Reload(); };
             Board.WorkOn = (card, file, alongside, show) =>
             {
-                Watch(Agents.Start(CardPrompt(card, file, alongside), cardId: card.Id, name: $"{card.Id} {card.Title}"));
+                Watch(Agents.Start(CardPrompt(card, file, alongside), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card)));
                 if (show) Section = Section.Agents;
             };
             Board.Flows = () => Agents.Flows;
@@ -354,7 +356,7 @@ public partial class ProjectViewModel : ObservableObject
             {
                 Agents.ReloadFlows(); // its file may have been edited since the board last looked
                 var current = Agents.Flows.FirstOrDefault(f => f.Name == flow.Name) ?? flow;
-                var run = Agents.RunFlow(current, CardPrompt(card, file, []), $"{card.Id} {card.Title}", cardId: card.Id);
+                var run = Agents.RunFlow(current, CardPrompt(card, file, []), $"{card.Id} {card.Title}", cardId: card.Id, job: CardJob(card));
                 // each stage is a new agent: the card follows the one at work
                 run.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(FlowRun.Status)) Board.Reload(); };
                 Section = Section.Agents;

@@ -32,30 +32,16 @@ public static class ChatTitle
     public static async Task<string> Make(string message, TimeSpan? timeout = null)
     {
         var guess = Guess(message);
-        var claude = AgentSession.FindClaude();
-        if (claude is null) return guess;
-        var text = Context.Replace(message, "").Trim();
+        var text = WithoutContext(message);
         if (text.Length > 2000) text = text[..2000];
         var prompt = "Write a title of 3 to 6 words for this request to an assistant, saying what it's about, like a task name. " +
                      "Plain words only: no quotes, no full stop, no emoji. Reply with the title and nothing else.\n\nRequest:\n" + text;
-        try
-        {
-            var psi = new ProcessStartInfo(claude)
-            {
-                RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
-                UseShellExecute = false, CreateNoWindow = true, StandardOutputEncoding = Encoding.UTF8,
-            };
-            foreach (var a in new[] { "-p", "--model", "haiku", "--tools", "", "--output-format", "text" }) psi.ArgumentList.Add(a);
-            using var p = Process.Start(psi)!;
-            await p.StandardInput.WriteAsync(prompt);
-            p.StandardInput.Close();
-            using var cts = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(45));
-            var output = await p.StandardOutput.ReadToEndAsync(cts.Token);
-            await p.WaitForExitAsync(cts.Token);
-            return p.ExitCode == 0 ? Clean(output) ?? guess : guess;
-        }
-        catch (Exception) { return guess; }
+        var output = await Haiku.Ask(prompt, timeout ?? TimeSpan.FromSeconds(45));
+        return output is null ? guess : Clean(output) ?? guess;
     }
+
+    /// <summary>A message without the "[Philip is looking at: …]" line Fettle's chats carry in front.</summary>
+    public static string WithoutContext(string message) => Context.Replace(message, "").Trim();
 
     /// <summary>A model's reply as a title, or null if it doesn't look like one.</summary>
     public static string? Clean(string reply)

@@ -123,6 +123,9 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         Agent = Load(r);
     }
 
+    /// <summary>A new chat's model profile (WOR-0034): by a "kind: fettle" rule, else by what was asked.</summary>
+    Task<ProfilePick?> ProfileFor(string text) => ModelProfiles.Pick(ModelProfiles.Load(), new AgentJob(JobKinds.Fettle, text, Project: ProjectId));
+
     AgentViewModel Wire(AgentViewModel a)
     {
         a.Notify += (what, detail) => Notify?.Invoke(a, what, detail);
@@ -172,7 +175,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         Fresh();
         var home = InstanceConfig.Folder();
         Directory.CreateDirectory(home);
-        Agent = Wire(new AgentViewModel(home, WithContext(text), name: ChatTitle.Guess(shown), args: Args(), shown: shown) { StoreFolder = Store, Project = ProjectId });
+        Agent = Wire(new AgentViewModel(home, WithContext(text), name: ChatTitle.Guess(shown), args: Args(), shown: shown, profile: ProfileFor(text)) { StoreFolder = Store, Project = ProjectId });
         Agent.Save();
         ListChats();
         Open = true;
@@ -191,7 +194,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
             var home = InstanceConfig.Folder();
             Directory.CreateDirectory(home);
             // a quick title from the words now, a better one from Haiku a few seconds later
-            Agent = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text) { StoreFolder = Store, Project = ProjectId });
+            Agent = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text, profile: ProfileFor(text)) { StoreFolder = Store, Project = ProjectId });
             Agent.Save();
             ListChats();
             _ = Retitle(Agent.Id, text);
