@@ -152,7 +152,9 @@ public partial class AgentsViewModel : ObservableObject
         if (card.Description.Length > 0) { lines.Add(""); lines.Add(card.Description); }
         lines.Add("");
         lines.Add("Read the project's CLAUDE.md first. Use AskUserQuestion when a choice is mine to make. " +
-                  "When you stop, say what is done and what is left. Leave the card's Status alone: I move cards.");
+                  "When you stop, say what is done and what is left. When the work is finished and pushed, move the card to done yourself: " +
+                  "set its Status to the board's last column (Completed if the board has no done column), add a Done line with today's date, " +
+                  "and move its id into that column in board.json's order. Leave the card where it is while work is left.");
         if (alongside is { Count: > 0 })
         {
             lines.Add("");
