@@ -90,7 +90,7 @@
       <StackPanel DataContext="{Binding Editor}" x:DataType="vm:NoteEditor" Margin="14" Spacing="10">
         <TextBlock Text="{Binding Heading}" FontWeight="SemiBold"/>
         <Border Background="{Binding Brush}" CornerRadius="2" Padding="8">
-          <TextBox Classes="paper" Text="{Binding Text}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="140" Foreground="#2a2620"
+          <TextBox x:Name="PaperBox" Classes="paper" Text="{Binding Text}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="140" Foreground="#2a2620"
                    Background="Transparent" BorderThickness="0" FontSize="15" FontFamily="Segoe Print, Comic Sans MS, Chalkboard, cursive"
                    PlaceholderText="Write it down…"/>
         </Border>
