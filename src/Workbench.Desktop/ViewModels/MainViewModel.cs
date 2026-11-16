@@ -111,6 +111,7 @@ public partial class MainViewModel : ObservableObject
         }
         if (vm.Notes is { } notes) notes.Organise = (shown, text) => Mascot?.Ask(shown, text) ?? false;
         if (vm.Docs is { } docs) docs.OpenElsewhere = full => ShowDocElsewhere(vm, full);
+        WatchNav(vm);
         return vm;
     }
 
@@ -286,6 +287,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var p in Projects) p.IsActive = p == value;
         Mascot?.ShowProject(value?.Config.Id); // Bench lists the chats of the project on screen
         LastProject.Write(value?.Config.Id);
+        NavMoved();
     }
 }
 

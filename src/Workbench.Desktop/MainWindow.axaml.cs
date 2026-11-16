@@ -30,6 +30,16 @@ public partial class MainWindow : Window
             };
         Closed += (_, _) => Notifier.Clear();
 
+        // the mouse's back and forward buttons walk where you've been (WOR-0052); caught on the way down,
+        // so no list or box under the pointer can keep them. A web view is a native window of its own:
+        // over the site preview they go back and forward in its pages instead.
+        AddHandler(PointerPressedEvent, (_, e) =>
+        {
+            var kind = e.GetCurrentPoint(this).Properties.PointerUpdateKind;
+            if (kind == Avalonia.Input.PointerUpdateKind.XButton1Pressed) { vm.GoBack(); e.Handled = true; }
+            else if (kind == Avalonia.Input.PointerUpdateKind.XButton2Pressed) { vm.GoForward(); e.Handled = true; }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+
         // Bench's box: Enter sends, Shift+Enter is a new line; the chat follows its newest line.
         MascotBox.AddHandler(KeyDownEvent, (_, e) =>
         {
