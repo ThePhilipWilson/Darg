@@ -101,4 +101,11 @@ public static class NoteStore
         var card = BoardStore.Create(boardFolder, title, desc, note.Tags);
         return (Save(folder, note with { Ticket = card.Id }), card);
     }
+
+    /// <summary>Turn several notes into cards at once, oldest note first so the card IDs follow the order
+    /// the notes were written. Notes that already have a ticket, or have no text, are left alone.</summary>
+    public static List<Card> MakeTickets(string folder, IEnumerable<Note> notes, string boardFolder) =>
+        notes.Where(n => n.Ticket.Length == 0 && n.Text.Trim().Length > 0)
+            .OrderBy(n => n.Created, StringComparer.Ordinal).ThenBy(n => n.Id, StringComparer.Ordinal)
+            .Select(n => MakeTicket(folder, n, boardFolder).Card).ToList();
 }
