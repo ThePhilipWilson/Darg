@@ -61,6 +61,20 @@ public partial class NotesViewModel : ObservableObject
 
     [ObservableProperty] public partial string Filter { get; set; } = "";
     [ObservableProperty] public partial string Status { get; set; } = "";
+    /// <summary>Width of a wall column and its post-its; kept in wall.json, saved a moment after the slider stops.</summary>
+    [ObservableProperty] public partial double ColumnWidth { get; set; } = NoteStore.DefaultWidth;
+    DispatcherTimer? _widthSave;
+    partial void OnColumnWidthChanged(double value)
+    {
+        if (Math.Abs(value - NoteStore.ColumnWidth(Folder)) < 0.5) return;
+        _widthSave ??= new DispatcherTimer(TimeSpan.FromMilliseconds(400), DispatcherPriority.Background, (_, _) =>
+        {
+            _widthSave!.Stop();
+            try { NoteStore.SetColumnWidth(Folder, ColumnWidth); }
+            catch (Exception e) { Status = $"Couldn't save the width: {e.Message}"; }
+        });
+        _widthSave.Stop(); _widthSave.Start();
+    }
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsEditing))] public partial NoteEditor? Editor { get; set; }
     public bool IsEditing => Editor is not null;
     public int PickedCount => _picked.Count;
@@ -205,6 +219,7 @@ public partial class NotesViewModel : ObservableObject
             _all = NoteStore.List(Folder);
             _archived = NoteStore.Archived(Folder);
             ColumnNames = NoteStore.Columns(Folder);
+            if (_widthSave is not { IsEnabled: true }) ColumnWidth = NoteStore.ColumnWidth(Folder);
         }
         catch (Exception e) { Status = $"Couldn't read the notes: {e.Message}"; return; }
         if (_archived.Count == 0) ShowArchive = false;
