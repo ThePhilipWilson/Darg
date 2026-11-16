@@ -94,4 +94,4 @@ public partial class MainWindow : Window
         box.SizeChanged += (_, _) => ClampLater();
         root.SizeChanged += (_, _) => ClampLater();
     }
-}
+}
