@@ -29,7 +29,36 @@ public partial class MainViewModel : ObservableObject
         };
         Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
         Selected = Projects.FirstOrDefault();
+        if (ArtifactHost.Server is { } artifacts)
+            artifacts.Reply += r => Avalonia.Threading.Dispatcher.UIThread.Post(() => FromArtifact(r));
+        ArtifactHost.OpenRequested += file => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenArtifact(file));
         DevHooks();
+    }
+
+    /// <summary>What an artifact page sent: to the agent that made it, as a message from the person.</summary>
+    void FromArtifact(ArtifactReply r)
+    {
+        var project = Projects.FirstOrDefault(p => string.Equals(p.Config.Id, r.Project, StringComparison.OrdinalIgnoreCase));
+        var file = Path.Combine(ArtifactStore.Folder(r.Project), r.Agent, r.File);
+        var title = File.Exists(file) ? ArtifactStore.Title(file) : r.File;
+        if (project?.Agents?.Find(r.Agent) is not { } agent)
+        {
+            project?.Artifacts?.Tell($"\"{title}\" sent something, but the agent that made it is no longer listed, so it went nowhere.");
+            return;
+        }
+        agent.Say($"From artifact \"{title}\":\n{r.Text}", $"From artifact \"{title}\" ({file}):\n{r.Text}");
+        project.Artifacts?.Tell($"Sent to {agent.Name}.");
+    }
+
+    /// <summary>Show an artifact: its project's tab, the Artifacts section, that page.</summary>
+    void OpenArtifact(string file)
+    {
+        if (ArtifactStore.Owner(file) is not { } owner) return;
+        var project = Projects.FirstOrDefault(p => string.Equals(p.Config.Id, owner.Project, StringComparison.OrdinalIgnoreCase));
+        if (project?.Artifacts is null) return;
+        Selected = project;
+        project.OpenCommand.Execute(nameof(Section.Artifacts));
+        project.Artifacts.Show(file);
     }
 
     ProjectViewModel Make(ProjectConfig p)
@@ -187,7 +216,7 @@ public partial class MainViewModel : ObservableObject
     }
 }
 
-public enum Section { Board, Notes, Docs, Agents, Code, GitHub, Terminal }
+public enum Section { Board, Notes, Docs, Agents, Artifacts, Code, GitHub, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -201,9 +230,11 @@ public partial class ProjectViewModel : ObservableObject
     public GitHubViewModel? Hub { get; }
     public AgentsViewModel? Agents { get; }
     public ConsolesViewModel? Consoles { get; }
+    /// <summary>Pages the project's agents made (there with the agents feature).</summary>
+    public ArtifactsViewModel? Artifacts { get; }
     public bool UsesTerminal => Consoles is not null;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnCode), nameof(OnHub), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnArtifacts), nameof(OnCode), nameof(OnHub), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -216,6 +247,7 @@ public partial class ProjectViewModel : ObservableObject
     public bool OnCode => Section == Section.Code;
     public bool OnHub => Section == Section.GitHub;
     public bool OnAgents => Section == Section.Agents;
+    public bool OnArtifacts => Section == Section.Artifacts;
     public bool OnTerminal => Section == Section.Terminal;
 
     public ProjectViewModel(ProjectConfig config)
@@ -223,7 +255,11 @@ public partial class ProjectViewModel : ObservableObject
         Config = config;
         Brush = Color.TryParse(config.Color, out var c) ? new SolidColorBrush(c) : Brushes.Orange;
         if (config.Uses(Features.Board)) Board = new BoardViewModel(config);
-        if (config.Uses(Features.Agents)) Agents = new AgentsViewModel(config);
+        if (config.Uses(Features.Agents))
+        {
+            Agents = new AgentsViewModel(config);
+            Artifacts = new ArtifactsViewModel(config.Id, id => Agents.Find(id)?.Name);
+        }
         if (config.Uses(Features.Terminal)) Consoles = new ConsolesViewModel(config);
         if (config.Uses(Features.Docs) && config.Docs is { Length: > 0 } docs) Docs = new DocsViewModel(docs);
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
@@ -264,6 +300,7 @@ public partial class ProjectViewModel : ObservableObject
         if (value == Section.Terminal) { TerminalStarted = true; Consoles?.EnsureOne(); }
         if (value == Section.Code) Code?.Load();
         if (value == Section.GitHub) Hub?.Load();
+        if (value == Section.Artifacts) Artifacts?.Refresh();
     }
 
     /// <summary>Show a section, if this project has it (an unticked feature's section never opens).</summary>
@@ -273,7 +310,7 @@ public partial class ProjectViewModel : ObservableObject
         var s = Enum.Parse<Section>(section);
         var has = s switch
         {
-            Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null,
+            Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Artifacts => Artifacts is not null,
             Section.Code => Code is not null, Section.GitHub => Hub is not null, _ => Consoles is not null,
         };
         if (has) Section = s;

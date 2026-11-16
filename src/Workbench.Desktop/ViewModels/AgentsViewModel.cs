@@ -110,11 +110,25 @@ public partial class AgentsViewModel : ObservableObject
 
     public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null)
     {
-        var agent = new AgentViewModel(string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd, prompt, cardId, name ?? ChatTitle.Guess(prompt)) { StoreFolder = _store };
+        var id = Guid.NewGuid().ToString("N")[..10];
+        var agent = new AgentViewModel(string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd, prompt, cardId, name ?? ChatTitle.Guess(prompt),
+            args: ArtifactArgs(id), id: id) { StoreFolder = _store };
         Add(agent, select: true);
         agent.Save();
         if (name is null) _ = Retitle(agent, prompt); // a card's agent is already named for the card
         return agent;
+    }
+
+    /// <summary>Every agent gets a folder for its artifacts (local HTML pages it can show and hear back
+    /// from) and is told how to use it. Kept in its saved args, so a resumed session has them too.</summary>
+    List<string> ArtifactArgs(string agentId)
+    {
+        try
+        {
+            var dir = ArtifactStore.AgentFolder(project.Id.Length > 0 ? project.Id : "default", agentId);
+            return ["--add-dir", dir, "--append-system-prompt", ArtifactStore.Briefing(dir)];
+        }
+        catch (Exception) { return []; } // no folder, no artifacts; the agent still runs
     }
 
     /// <summary>The prompt for working on a card: the card itself, where its file is, and the house rules.</summary>
@@ -240,8 +254,9 @@ public partial class AgentViewModel : ObservableObject
 
     /// <param name="shown">What the transcript shows for the first message, when what's sent carries more
     /// (Bench sends a line of context ahead of the person's words).</param>
-    public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null, string? shown = null)
+    public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null, string? shown = null, string? id = null)
     {
+        if (id is not null) Id = id;
         Cwd = cwd;
         CardId = cardId;
         _args = args?.ToList() ?? [];
@@ -485,6 +500,10 @@ public sealed partial class ToolItem : TranscriptItem
     public bool HasImage => Image is not null;
     public bool HasDiff => Removed is not null || Added is not null;
     public bool HasPreview => Preview is not null;
+    /// <summary>The artifact this step wrote or changed, if it did: a button opens it in Artifacts.</summary>
+    public string? ArtifactPath { get; init; }
+    public bool HasArtifact => ArtifactPath is not null;
+    [RelayCommand] void OpenArtifact() { if (ArtifactPath is not null) ArtifactHost.Open(ArtifactPath); }
     [ObservableProperty] public partial string? Result { get; set; }
     [ObservableProperty] public partial bool IsError { get; set; }
     [ObservableProperty] public partial bool Done { get; set; }
@@ -553,7 +572,7 @@ public sealed partial class ToolItem : TranscriptItem
         }
         if (c.Name == "Write" && image is null) preview = Clip(S("content"));
         return new ToolItem { Name = c.Name, Summary = summary, Image = image, ImagePath = image is null ? null : path,
-            Removed = removed, Added = added, Preview = preview, InputText = c.Input.ToJsonString() };
+            Removed = removed, Added = added, Preview = preview, InputText = c.Input.ToJsonString(), ArtifactPath = ArtifactIn(c.Name, path) };
     }
 
     /// <summary>A tool line from a saved transcript (its image read again from disk if it's still there).</summary>
@@ -564,10 +583,14 @@ public sealed partial class ToolItem : TranscriptItem
         {
             Name = r.Name ?? "", Summary = r.Summary ?? "", Image = image, ImagePath = image is null ? null : r.ImagePath,
             Removed = r.Removed, Added = r.Added, Preview = r.Preview, Result = r.Result, IsError = r.Bad, Done = true,
+            ArtifactPath = ArtifactIn(r.Name, r.Summary), // a file step's summary is its path
         };
         foreach (var p in r.Images ?? []) if (File.Exists(p)) item.AddPreview(p);
         return item;
     }
+
+    static string? ArtifactIn(string? tool, string? path) =>
+        tool is "Write" or "Edit" or "MultiEdit" && path is not null && ArtifactStore.Owner(path) is not null ? path : null;
 
     static string? Clip(string? s)
     {

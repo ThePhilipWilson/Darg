@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Workbench.Desktop.ViewModels"
+             x:Class="Workbench.Desktop.Views.ArtifactsView"
+             x:DataType="vm:ArtifactsViewModel">
+  <Grid ColumnDefinitions="300,*" RowDefinitions="*,Auto">
+    <!-- one folder per agent, as a tree -->
+    <Border Grid.RowSpan="2" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
+      <TreeView ItemsSource="{Binding Groups}" SelectedItem="{Binding SelectedNode}" Background="Transparent" Margin="0,8,0,0"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <TreeView.Styles>
+          <Style Selector="TreeViewItem">
+            <Setter Property="MinHeight" Value="26"/>
+          </Style>
+          <Style Selector="TreeViewItem" x:DataType="vm:ArtifactGroup">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+          </Style>
+        </TreeView.Styles>
+        <TreeView.DataTemplates>
+          <TreeDataTemplate DataType="vm:ArtifactGroup" ItemsSource="{Binding Children}">
+            <DockPanel ToolTip.Tip="{Binding Agent}">
+              <TextBlock DockPanel.Dock="Right" Text="{Binding Count}" Classes="dim small" Margin="8,0,6,0" VerticalAlignment="Center"/>
+              <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </DockPanel>
+          </TreeDataTemplate>
+          <TreeDataTemplate DataType="vm:ArtifactEntry" ItemsSource="{Binding Children}">
+            <DockPanel AutomationProperties.Name="{Binding Title}">
+              <TextBlock DockPanel.Dock="Right" Text="{Binding When}" Classes="dim small" Margin="8,0,6,0" VerticalAlignment="Center"/>
+              <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+            </DockPanel>
+          </TreeDataTemplate>
+        </TreeView.DataTemplates>
+      </TreeView>
+    </Border>
+
+    <DockPanel Grid.Column="1" IsVisible="{Binding HasOpen}">
+      <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+            <Button Content="Reload" Command="{Binding ReloadCommand}" ToolTip.Tip="Load the page again (after its agent changed it)"/>
+            <Button Content="Open in browser" Command="{Binding OpenInBrowserCommand}" ToolTip.Tip="{Binding Address}"/>
+            <Button Content="Show file" Command="{Binding ShowFileCommand}"/>
+          </StackPanel>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="{Binding Selected.Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{Binding Owner}" Classes="dim small"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+      <NativeWebView x:Name="Web" Source="{Binding Page}"/>
+    </DockPanel>
+    <TextBlock Grid.Column="1" Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" MaxWidth="460" TextWrapping="Wrap"
+               IsVisible="{Binding !HasOpen}"
+               Text="Pages agents made to show you something: reviews, pickers, comparisons. Pick one on the left. What a page sends goes back to the agent that made it."/>
+
+    <Border Grid.Row="1" Grid.Column="1" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+      <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
+    </Border>
+  </Grid>
+</UserControl>

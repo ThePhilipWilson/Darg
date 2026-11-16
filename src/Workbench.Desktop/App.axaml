@@ -64,6 +64,8 @@
               <SelectableTextBlock Classes="mono" Foreground="#a8e6b8" Text="{Binding Added}" TextWrapping="Wrap"/>
             </Border>
           </StackPanel>
+          <Button IsVisible="{Binding HasArtifact}" Command="{Binding OpenArtifactCommand}" Content="Open artifact" Margin="9,0,9,9"
+                  ToolTip.Tip="Open this page in Artifacts, where what it sends comes back to this agent"/>
           <Border IsVisible="{Binding HasPreview}" Background="#15171b" Padding="10,6">
             <SelectableTextBlock Classes="mono" Text="{Binding Preview}" TextWrapping="Wrap"/>
           </Border>
