@@ -11,6 +11,14 @@
           <TextBox Text="{Binding NewPrompt}" PlaceholderText="What should a new agent do?" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"/>
           <TextBlock Classes="dim small" Text="{Binding Folder, StringFormat='Runs in {0}'}" TextWrapping="Wrap"/>
           <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="+ New agent" Command="{Binding StartAgentCommand}"/>
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Content="✎" Command="{Binding EditFlowsCommand}" Margin="6,0,0,0" Padding="8,4"
+                    ToolTip.Tip="Open the flows folder to add or edit a flow (a markdown file each); the list reads them again"
+                    AutomationProperties.Name="Edit flows"/>
+            <Button DockPanel.Dock="Right" Content="▶ Run flow" Command="{Binding StartFlowCommand}" Margin="6,0,0,0"
+                    ToolTip.Tip="Runs the task through the flow: an agent per role, each handing its last message on to the next"/>
+            <ComboBox ItemsSource="{Binding Flows}" SelectedItem="{Binding SelectedFlow}" HorizontalAlignment="Stretch" PlaceholderText="Flow"/>
+          </DockPanel>
         </StackPanel>
         <ScrollViewer>
         <StackPanel>
@@ -70,6 +78,12 @@
     <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" DataContext="{Binding Shown}" x:DataType="vm:AgentViewModel"
           IsVisible="{Binding $parent[UserControl].((vm:AgentsViewModel)DataContext).Shown, Converter={x:Static ObjectConverters.IsNotNull}}">
       <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
+        <StackPanel Spacing="4">
+        <DockPanel IsVisible="{Binding InFlow}">
+          <Button DockPanel.Dock="Right" Content="Stop flow" Command="{Binding Flow.StopFlowCommand, FallbackValue={x:Null}}" Padding="8,2"
+                  IsVisible="{Binding Flow.Running, FallbackValue=False}" ToolTip.Tip="Nothing more is handed on; the agent at work finishes its turn"/>
+          <TextBlock Classes="dim small" Foreground="{StaticResource Accent}" Text="{Binding Flow.Status, StringFormat='Flow · {0}', FallbackValue=''}" VerticalAlignment="Center"/>
+        </DockPanel>
         <DockPanel>
           <Button DockPanel.Dock="Right" Content="Close" Command="{Binding CloseCommand}" IsEnabled="{Binding Open}" Margin="6,0,0,0"
                   ToolTip.Tip="End this agent's Claude session. The agent stays listed; send it a message to carry on." AutomationProperties.Name="Close session"/>
@@ -99,6 +113,7 @@
                        ToolTip.Tip="{Binding Cwd}"/>
           </DockPanel>
         </DockPanel>
+        </StackPanel>
       </Border>
 
       <ScrollViewer Grid.Row="1" x:Name="Scroll">

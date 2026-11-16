@@ -203,7 +203,7 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>For checking the app without clicking: WORKBENCH_SECTION opens a section of the first
     /// project (Board, Agents, Terminal); WORKBENCH_AGENT starts an agent there with that prompt, in
-    /// WORKBENCH_AGENT_CWD if set.</summary>
+    /// WORKBENCH_AGENT_CWD if set, or with WORKBENCH_FLOW runs it through that flow.</summary>
     void DevHooks()
     {
         // WORKBENCH_ADD_FOLDER: open Setup and add that folder as a project (unsaved), as the folder picker would
@@ -216,7 +216,15 @@ public partial class MainViewModel : ObservableObject
         if (Enum.TryParse<Section>(Environment.GetEnvironmentVariable("WORKBENCH_SECTION"), true, out var s)) Selected.OpenCommand.Execute(s.ToString());
         var prompt = Environment.GetEnvironmentVariable("WORKBENCH_AGENT");
         if (string.IsNullOrWhiteSpace(prompt) || Selected.Agents is null) return;
-        Selected.Agents.Start(prompt, Environment.GetEnvironmentVariable("WORKBENCH_AGENT_CWD"));
+        var cwd = Environment.GetEnvironmentVariable("WORKBENCH_AGENT_CWD");
+        // WORKBENCH_FLOW: run the prompt through that flow (by name) instead of starting one agent
+        if (Environment.GetEnvironmentVariable("WORKBENCH_FLOW") is { Length: > 0 } flowName)
+        {
+            if (Selected.Agents.Flows.FirstOrDefault(f => f.Name.Equals(flowName, StringComparison.OrdinalIgnoreCase)) is { } flow)
+                Selected.Agents.RunFlow(flow, prompt, ChatTitle.Guess(prompt), cwd);
+            return;
+        }
+        Selected.Agents.Start(prompt, cwd);
     }
 
     /// <summary>Set by the window: whether it is the active window.</summary>
@@ -322,7 +330,7 @@ public partial class ProjectViewModel : ObservableObject
             Board.AgentFor = Agents.ForCard;
             Board.OpenAgent = a => { Agents.Selected = a; Section = Section.Agents; };
             Board.StartAgent = (prompt, cwd, name) => { Agents.Start(prompt, cwd, name: name); Section = Section.Agents; };
-            Board.WorkOn = (card, file, alongside, show) =>
+            string CardPrompt(Card card, string file, IReadOnlyList<string> alongside)
             {
                 // everyone at work in this folder: the batch this card was started with, and agents busy here now
                 var folder = Config.WorkingFolder();
@@ -331,10 +339,25 @@ public partial class ProjectViewModel : ObservableObject
                     .Select(x => x.CardId ?? $"\"{x.Name}\"");
                 var others = alongside.Concat(busy).Where(x => x != card.Id).Distinct().ToList();
                 var repo = Directory.Exists(Path.Combine(folder, ".git")) || File.Exists(Path.Combine(folder, ".git")) ? folder : null;
-                var a = Agents.Start(AgentsViewModel.CardPrompt(Name, card, file, others, repo), cardId: card.Id, name: $"{card.Id} {card.Title}");
-                // the card shows the agent's state; when the agent ends, the card drops its link
+                return AgentsViewModel.CardPrompt(Name, card, file, others, repo);
+            }
+            // the card shows the agent's state; when the agent ends, the card drops its link
+            void Watch(AgentViewModel a) =>
                 a.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State) && a.State == AgentState.Exited) Board.Reload(); };
+            Board.WorkOn = (card, file, alongside, show) =>
+            {
+                Watch(Agents.Start(CardPrompt(card, file, alongside), cardId: card.Id, name: $"{card.Id} {card.Title}"));
                 if (show) Section = Section.Agents;
+            };
+            Board.Flows = () => Agents.Flows;
+            Board.RunFlow = (card, file, flow) =>
+            {
+                Agents.ReloadFlows(); // its file may have been edited since the board last looked
+                var current = Agents.Flows.FirstOrDefault(f => f.Name == flow.Name) ?? flow;
+                var run = Agents.RunFlow(current, CardPrompt(card, file, []), $"{card.Id} {card.Title}", cardId: card.Id);
+                // each stage is a new agent: the card follows the one at work
+                run.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(FlowRun.Status)) Board.Reload(); };
+                Section = Section.Agents;
             };
         }
     }
