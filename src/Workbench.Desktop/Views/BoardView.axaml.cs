@@ -29,9 +29,10 @@ public partial class BoardView : UserControl
         host.AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (_, e) =>
         {
             // the press lands on the chip's text, whose data is the label's string: find the chip's button
-            if (e.ClickCount != 2) return;
             var chip = (e.Source as Avalonia.Visual)?.GetSelfAndVisualAncestors().OfType<Button>()
                 .Select(b => b.DataContext).OfType<LabelChip>().FirstOrDefault();
-            chip?.DoubleClick();
+            if (chip is null) return;
+            // clicks 1, 3, 5… start a pair; 2, 4, 6… finish a double (Windows keeps counting while the pointer stays put)
+            if (e.ClickCount % 2 == 1) chip.PressStarts(); else chip.DoubleClick();
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
 }

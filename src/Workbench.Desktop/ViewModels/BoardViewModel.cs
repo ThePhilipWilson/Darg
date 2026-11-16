@@ -170,17 +170,18 @@ public partial class LabelChip(string name) : ObservableObject
     // two: DoubleClick), release (a second Click, which must not undo it). So remember the mode before the
     // first click, let DoubleClick set "must have" from there (or clear it if it was already), and
     // swallow the Click that follows.
+    // Windows keeps counting while the pointer stays put: a second double-click is clicks 3 and 4. So
+    // every odd press (1, 3, 5…) starts a pair and notes the mode; every even one (2, 4…) is a double.
     ChipMode _before;
-    DateTime _lastClick;
     bool _swallow;
+
+    /// <summary>An odd-numbered press: the start of a click or of a double-click.</summary>
+    public void PressStarts() => _before = Mode;
 
     [RelayCommand]
     void Click()
     {
         if (_swallow) { _swallow = false; return; }
-        var now = DateTime.UtcNow;
-        if ((now - _lastClick).TotalMilliseconds > 700) _before = Mode;
-        _lastClick = now;
         Mode = Mode == ChipMode.Off ? ChipMode.Any : ChipMode.Off;
     }
 
