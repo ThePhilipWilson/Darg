@@ -97,6 +97,12 @@
                    PlaceholderText="Web: dotnet watch --project web/Alpha.Web"/>
         </StackPanel>
 
+        <StackPanel Spacing="4">
+          <TextBlock Text="Commits and pushes, one folder per line as rule then folder. push: commit and push freely; commit: commit, never push; ask: ask each time; never. A folder's rule covers the folders inside it. A folder with none: Fettle never commits there, card agents follow the repo's CLAUDE.md" Classes="dim small" TextWrapping="Wrap"/>
+          <TextBox Text="{Binding CommitsText}" Classes="mono" AcceptsReturn="True" MinHeight="50"
+                   PlaceholderText="push D:/GitHub/me/MyApp"/>
+        </StackPanel>
+
         <TextBlock Text="Accounts" FontWeight="SemiBold" Margin="0,8,0,0"/>
         <StackPanel Spacing="4">
           <TextBlock Text="GitHub account for this project (empty: gh's active account)" Classes="dim small"/>

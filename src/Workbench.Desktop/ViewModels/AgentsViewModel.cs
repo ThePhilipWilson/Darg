@@ -303,7 +303,7 @@ public partial class AgentsViewModel : ObservableObject
     /// agents already busy there.</param>
     /// <param name="repo">The folder, when it is a git repository: then the agent is told which branch to work on
     /// (<see cref="CardBranch"/>) and how to decide on, and use, a worktree of its own.</param>
-    public static string CardPrompt(string projectName, Card card, string file, IReadOnlyList<string>? alongside = null, string? repo = null)
+    public static string CardPrompt(string projectName, Card card, string file, IReadOnlyList<string>? alongside = null, string? repo = null, string? commits = null)
     {
         var lines = new List<string> { $"Work on this card from the {projectName} board.", "", $"{card.Id}: {card.Title}" };
         if (card.IsBug) lines.Add("Type: Bug. Find the cause before changing anything, and add a test that fails without the fix where one can be written.");
@@ -317,6 +317,7 @@ public partial class AgentsViewModel : ObservableObject
                   "When you stop, say what is done and what is left. When the work is finished and pushed, move the card to done yourself: " +
                   "set its Status to the board's last column (Completed if the board has no done column), add a Done line with today's date, " +
                   "and move its id into that column in board.json's order. Leave the card where it is while work is left.");
+        if (commits is not null) lines.Add(commits + " This is Workbench's rule for that folder and wins over any general one.");
         if (alongside is { Count: > 0 })
         {
             lines.Add("");

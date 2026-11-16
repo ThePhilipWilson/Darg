@@ -79,6 +79,10 @@ public sealed class ProjectConfig
     public List<SavedCommand> Commands { get; set; } = [];
     /// <summary>The dev server the Preview section shows; when not set, one is looked for in the repos.</summary>
     public PreviewConfig? Preview { get; set; }
+    /// <summary>Commit and push rules per folder (a repo, or the vault the boards are in): folder to
+    /// "push", "commit", "ask" or "never" (<see cref="Core.Commits"/>). A folder with no rule is never committed
+    /// by Fettle; a card agent there follows the repo's own CLAUDE.md.</summary>
+    public Dictionary<string, string>? Commits { get; set; }
 
     public string? NotesFolder() => Notes ?? (Boards is null ? null : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(Boards))!, "notes"));
     /// <summary>Features this project uses; an empty list means all of them.</summary>
