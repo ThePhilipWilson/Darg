@@ -59,6 +59,15 @@
       <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
         <DockPanel>
           <Button DockPanel.Dock="Right" Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding Working}"/>
+          <!-- change the session as it runs: from its next turn (a saved agent starts with these when it resumes) -->
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="0,0,10,0">
+            <ComboBox ItemsSource="{Binding ModelChoices}" SelectedItem="{Binding ModelChoice}" FontSize="12" MinHeight="0" Padding="8,3"
+                      ToolTip.Tip="Model, from the next turn" AutomationProperties.Name="Model"/>
+            <ComboBox ItemsSource="{Binding EffortChoices}" SelectedItem="{Binding EffortChoice}" FontSize="12" MinHeight="0" Padding="8,3"
+                      ToolTip.Tip="Effort, from the next turn" AutomationProperties.Name="Effort"/>
+            <ComboBox ItemsSource="{Binding ModeChoices}" SelectedItem="{Binding ModeChoice}" FontSize="12" MinHeight="0" Padding="8,3"
+                      ToolTip.Tip="Permission mode" AutomationProperties.Name="Permission mode"/>
+          </StackPanel>
           <StackPanel Orientation="Horizontal" Spacing="12">
             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
             <TextBlock Classes="dim small" Text="{Binding StateText}" VerticalAlignment="Center"/>

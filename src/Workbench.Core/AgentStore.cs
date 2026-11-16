@@ -33,6 +33,11 @@ public sealed class AgentRecord
     public string? Project { get; set; }
     public string? SessionId { get; set; }
     public List<string> Args { get; set; } = [];
+    /// <summary>The model, effort and permission mode picked in the chat (null: the person's own settings);
+    /// a resumed session starts with them.</summary>
+    public string? Model { get; set; }
+    public string? Effort { get; set; }
+    public string? Mode { get; set; }
     public DateTime Created { get; set; }
     public DateTime Updated { get; set; }
     public List<ItemRecord> Items { get; set; } = [];

@@ -69,6 +69,36 @@ public sealed class StreamParserTests
     [InlineData("""{"type":"rate_limit_event"}""")]
     [InlineData("[1,2]")]
     public void Lines_the_host_doesnt_show_give_nothing(string line) => Assert.Empty(StreamParser.Parse(line));
+
+    [Fact]
+    public void Init_carries_the_permission_mode() =>
+        Assert.Equal("plan", Assert.IsType<SessionStarted>(Assert.Single(StreamParser.Parse(
+            """{"type":"system","subtype":"init","session_id":"a","model":"m","cwd":"c","permissionMode":"plan"}"""))).PermissionMode);
+
+    [Fact]
+    public void A_status_line_with_a_mode_is_a_mode_change() =>
+        Assert.Equal(new ModeChanged("acceptEdits"), Assert.Single(StreamParser.Parse(
+            """{"type":"system","subtype":"status","status":null,"permissionMode":"acceptEdits"}""")));
+
+    [Fact]
+    public void Control_responses_give_a_new_model_or_a_refusal_and_nothing_else()
+    {
+        Assert.Equal(new ModelChanged("claude-sonnet-5-5"), Assert.Single(StreamParser.Parse(
+            """{"type":"control_response","response":{"subtype":"success","request_id":"set-1","response":{"model":"claude-sonnet-5-5"}}}""")));
+        Assert.Equal(new ControlFailed("set-2", "no bypass"), Assert.Single(StreamParser.Parse(
+            """{"type":"control_response","response":{"subtype":"error","request_id":"set-2","error":"no bypass"}}""")));
+        Assert.Empty(StreamParser.Parse("""{"type":"control_response","response":{"subtype":"success","request_id":"set-3"}}"""));
+        Assert.Empty(StreamParser.Parse("""{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"models":[]}}}"""));
+    }
+
+    [Fact]
+    public void Launch_args_name_only_what_isnt_default()
+    {
+        Assert.Empty(AgentChoices.LaunchArgs(null, "default", null));
+        Assert.Equal(["--model", "haiku", "--effort", "low", "--permission-mode", "plan"], AgentChoices.LaunchArgs("haiku", "low", "plan"));
+        Assert.Equal("Ask before acting", AgentChoices.Find(AgentChoices.Modes, "manual").Label);
+        Assert.Equal("bypassPermissions", AgentChoices.Find(AgentChoices.Modes, "bypassPermissions").Value);
+    }
 }
 
 /// <summary>Runs the real claude CLI. Opt in with WORKBENCH_LIVE=1 (it spends a little on a Haiku turn).</summary>
