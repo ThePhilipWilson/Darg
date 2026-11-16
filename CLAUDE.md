@@ -1,6 +1,6 @@
 # Workbench
 
-Philip's one app for everything: per-project boards, notes, docs, code, agents, consoles and tools. Native Avalonia (C#, .NET 10), one codebase for Windows, Mac and mobile. The plan and decisions live in the vault: `../vault/Code/Workbench/PLAN.md` (mockup beside it).
+Philip's one app for everything: per-project boards, notes, docs, code, agents, consoles and tools. Native Avalonia (C#, .NET 10), one codebase for Windows, Mac and mobile. The plan and decisions live in Philip's Obsidian vault under `Code/Workbench/` (PLAN.md, the mockup, MORNING.md, PHONE-PLAN.md); the folder on this machine is in `CLAUDE.local.md` (not committed).
 
 ## Layout
 
