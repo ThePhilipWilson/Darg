@@ -166,8 +166,77 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     public string? Folder => SelectedBoard is null || _project.Boards is null ? null : Path.Combine(_project.Boards, SelectedBoard);
 
+    /// <summary>The list whose header is being edited (a rename, or a remove waiting to be confirmed).
+    /// While it is, reloads wait: other agents change cards all the time, and a reload rebuilds the lists,
+    /// which would throw away the half-typed name.</summary>
+    ListViewModel? _held;
+    bool _reloadWaiting;
+    public void Hold(ListViewModel list)
+    {
+        if (_held is not null && _held != list) { _held.IsRenaming = false; _held.ConfirmingRemove = false; }
+        _held = list;
+    }
+    public void Release()
+    {
+        _held = null;
+        if (_reloadWaiting) Reload();
+    }
+
+    public void SetMinimized(ListViewModel list, bool minimized)
+    {
+        if (Folder is null) return;
+        try { BoardStore.SetMinimized(Folder, list.Id, minimized); }
+        catch (Exception e) { Status = $"Couldn't {(minimized ? "minimize" : "open")} {list.Name}: {e.Message}"; return; }
+        Reload();
+    }
+
+    public void Rename(ListViewModel list, string name)
+    {
+        if (Folder is null) return;
+        if (name.Trim() == list.Name) { list.CancelRenameCommand.Execute(null); return; }
+        try { BoardStore.RenameColumn(Folder, list.Id, name); }
+        catch (Exception e) { list.Error = e.Message; return; }
+        _notice = null;
+        Reload();
+    }
+
+    public void RemoveColumn(ListViewModel list)
+    {
+        if (Folder is null) return;
+        int moved;
+        try { moved = BoardStore.RemoveColumn(Folder, list.Id); }
+        catch (Exception e) { list.Error = e.Message; return; }
+        _notice = moved == 0 ? $"Removed {list.Name}" : $"Removed {list.Name}; {(moved == 1 ? "its card is" : $"its {moved} cards are")} in the backlog";
+        Reload();
+    }
+
+    /// <summary>Add a column before the last one (the last column is the done column, for Tatty and for
+    /// Mark done), named "New column" (or "New column 2"…), with its name open to type over.</summary>
+    [RelayCommand]
+    void AddColumn()
+    {
+        if (Folder is null || _board is null) return;
+        var name = "New column";
+        for (var n = 2; _board.Columns.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)); n++) name = $"New column {n}";
+        string id;
+        try { id = BoardStore.AddColumn(Folder, name, _board.Columns.Count >= 2 ? _board.Columns.Count - 1 : null); }
+        catch (Exception e) { Status = $"Couldn't add a column: {e.Message}"; return; }
+        _notice = null;
+        Reload();
+        Lists.FirstOrDefault(l => l.Id == id)?.StartRenameCommand.Execute(null);
+    }
+
+    /// <summary>The board changed on disk: reload, unless a header is being edited (then once it's done).</summary>
+    void Changed()
+    {
+        if (_held is not null) _reloadWaiting = true; else Reload();
+    }
+
+    /// <summary>Reload now. A header being edited is given up (this is a click elsewhere: a move, another board).</summary>
     public void Reload()
     {
+        if (_held is not null) { _held.IsRenaming = false; _held.ConfirmingRemove = false; _held = null; }
+        _reloadWaiting = false;
         if (Folder is null) return;
         try { _board = BoardStore.Load(Folder); }
         catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
@@ -203,7 +272,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             var cards = _board.Lists[id].Where(Keep).ToList();
             total += cards.Count;
             Lists.Add(new ListViewModel(this, id, name, cards.Select(c =>
-                new CardViewModel(c, targets, this, AgentFor?.Invoke(c.Id)) { IsPicked = _picked.Contains(c.Id) }), _board.Lists[id].Count));
+                new CardViewModel(c, targets, this, AgentFor?.Invoke(c.Id)) { IsPicked = _picked.Contains(c.Id) }), _board.Lists[id].Count,
+                _board.Minimized.Contains(id)));
         }
         _picked.IntersectWith(Shown().Select(c => c.Id));
         PickedChanged();
@@ -239,7 +309,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     {
         _watch?.Dispose();
         if (Folder is null || !Directory.Exists(Folder)) return;
-        _debounce ??= new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => { _debounce!.Stop(); Reload(); });
+        _debounce ??= new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => { _debounce!.Stop(); Changed(); });
         _watch = new FileSystemWatcher(Folder) { IncludeSubdirectories = true, EnableRaisingEvents = true };
         void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
         _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
@@ -294,7 +364,10 @@ public partial class LabelChip(string name) : ObservableObject
         chips.Where(c => c.IsAll).Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase));
 }
 
-public sealed partial class ListViewModel(BoardViewModel board, string id, string name, IEnumerable<CardViewModel> cards, int all) : ObservableObject
+/// <summary>A list on the board. Every list can be minimized to a narrow strip; a column (not Backlog,
+/// Completed or Unsorted, which are Tatty's own lists) can also be renamed and removed.</summary>
+public sealed partial class ListViewModel(BoardViewModel board, string id, string name, IEnumerable<CardViewModel> cards, int all,
+    bool minimized = false) : ObservableObject
 {
     public BoardViewModel Board { get; } = board;
     public string Id { get; } = id;
@@ -308,6 +381,26 @@ public sealed partial class ListViewModel(BoardViewModel board, string id, strin
     public string PickText => AllPicked ? "Unpick" : "Pick all";
     [RelayCommand] void Pick() => Board.PickList(this);
     public void PickedChanged() { OnPropertyChanged(nameof(AllPicked)); OnPropertyChanged(nameof(PickText)); }
+
+    public int All => all;
+    public bool IsColumn => Id is not (Core.Board.Backlog or Core.Board.Completed or Core.Board.Unsorted);
+    public bool IsMinimized { get; } = minimized;
+    public bool IsOpen => !IsMinimized;
+
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsHeaderPlain))] public partial bool IsRenaming { get; set; }
+    [ObservableProperty] public partial string EditName { get; set; } = name;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsHeaderPlain))] public partial bool ConfirmingRemove { get; set; }
+    [ObservableProperty] public partial string Error { get; set; } = "";
+    public bool IsHeaderPlain => !IsRenaming && !ConfirmingRemove;
+    public string RemoveQuestion => all == 0 ? $"Remove {Name}?" : $"Remove {Name}? Its {(all == 1 ? "card goes" : $"{all} cards go")} to the backlog.";
+
+    [RelayCommand] void ToggleMinimized() => Board.SetMinimized(this, !IsMinimized);
+    [RelayCommand] void StartRename() { if (!IsColumn) return; EditName = Name; Error = ""; IsRenaming = true; Board.Hold(this); }
+    [RelayCommand] void CommitRename() => Board.Rename(this, EditName);
+    [RelayCommand] void CancelRename() { IsRenaming = false; Error = ""; Board.Release(); }
+    [RelayCommand] void AskRemove() { if (!IsColumn) return; Error = ""; ConfirmingRemove = true; Board.Hold(this); }
+    [RelayCommand] void Remove() => Board.RemoveColumn(this);
+    [RelayCommand] void KeepIt() { ConfirmingRemove = false; Error = ""; Board.Release(); }
 }
 
 public sealed partial class CardViewModel : ObservableObject

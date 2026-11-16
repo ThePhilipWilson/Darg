@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.VisualTree;
 using Workbench.Desktop.ViewModels;
@@ -9,6 +10,14 @@ namespace Workbench.Desktop.Views;
 /// picks every card showing (a column header's Pick all, just that column), Escape unpicks them; picked cards can each be given an agent in one go.</summary>
 public partial class BoardView : UserControl
 {
+    /// <summary>A column's name box takes the keyboard, its text selected, the moment it shows.</summary>
+    static BoardView() =>
+        IsVisibleProperty.Changed.AddClassHandler<TextBox>((box, e) =>
+        {
+            if (e.NewValue is not true || !box.Classes.Contains("rename")) return;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => { box.Focus(); box.SelectAll(); }, Avalonia.Threading.DispatcherPriority.Input);
+        });
+
     public BoardView()
     {
         InitializeComponent();
@@ -21,6 +30,17 @@ public partial class BoardView : UserControl
             },
             click: (item, keys) => { if (DataContext is BoardViewModel board && item is CardViewModel card) board.Click(card, keys); });
         ChipDoubleClicks(this);
+        // a column's name: double-click to rename; in the box, Enter saves and Esc leaves it as it was
+        AddHandler(DoubleTappedEvent, (_, e) =>
+        {
+            if (e.Source is TextBlock { Tag: ListViewModel list } t && t.Classes.Contains("listname")) { list.StartRenameCommand.Execute(null); e.Handled = true; }
+        });
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Source is not TextBox { Tag: ListViewModel list } box || !box.Classes.Contains("rename")) return;
+            if (e.Key == Avalonia.Input.Key.Enter) { list.CommitRenameCommand.Execute(null); e.Handled = true; }
+            else if (e.Key == Avalonia.Input.Key.Escape) { list.CancelRenameCommand.Execute(null); e.Handled = true; }
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         KeyDown += (_, e) =>
         {
             if (DataContext is not BoardViewModel board || e.Source is TextBox) return;
