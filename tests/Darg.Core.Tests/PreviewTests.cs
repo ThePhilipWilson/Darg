@@ -55,7 +55,7 @@ public sealed class DevServerTests
         var found = new TaskCompletionSource<string>();
         s.UrlFound += u => found.TrySetResult(u);
         Assert.Same(found.Task, await Task.WhenAny(found.Task, Task.Delay(10000)));
-        Assert.Equal("http://localhost:65000/", found.Task.Result);
+        Assert.Equal("http://localhost:65000/", await found.Task);
         List<int> Pings() => System.Diagnostics.Process.GetProcessesByName("PING")
             .Where(p => { try { return p.StartTime > t0; } catch (Exception) { return false; } }).Select(p => p.Id).ToList();
         for (var i = 0; i < 20 && Pings().Count == 0; i++) await Task.Delay(100);
