@@ -17,6 +17,8 @@
             <Button Content="Unpick" Command="{Binding ClearPickedCommand}" IsVisible="{Binding HasPicked}" ToolTip.Tip="Unpick every note (Esc)"/>
             <Button Content="Pick all" Command="{Binding PickAllCommand}"
                     ToolTip.Tip="Pick every note showing (Ctrl+A). Ctrl- or Shift-click picks one at a time."/>
+            <Button Content="✦ Organise" Command="{Binding OrganiseAllCommand}"
+                    ToolTip.Tip="Fettle sorts the loose notes into columns and gives them tags and colours (only the picked ones if any are picked, else every note the filter shows). Notes with tickets are left alone."/>
             <Button Content="{Binding ArchiveText}" Command="{Binding ToggleArchiveCommand}" IsVisible="{Binding HasArchive}"
                     ToolTip.Tip="Notes whose ticket is completed move to the archive by themselves, and come back if the ticket is reopened"/>
           </StackPanel>

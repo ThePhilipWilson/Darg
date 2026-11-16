@@ -234,6 +234,27 @@ public partial class NotesViewModel : ObservableObject
         Reload();
     }
 
+    /// <summary>Set by the app: hand Fettle a job (the words shown in its chat, the full message). False
+    /// when Fettle is busy and nothing was sent.</summary>
+    public Func<string, string, bool>? Organise { get; set; }
+
+    /// <summary>Fettle sorts the loose notes showing (the filter decides what "all" is; picked notes, if
+    /// any, narrow it to those) into columns, with tags and colours. It edits the files; the wall follows.</summary>
+    [RelayCommand]
+    void OrganiseAll()
+    {
+        if (Organise is null) { Status = "Fettle isn't here to organise the notes."; return; }
+        var shown = Shown().Where(v => !v.HasTicket && (!HasPicked || v.IsPicked)).Select(v => v.Note).ToList();
+        var prompt = NoteStore.OrganisePrompt(Folder, shown, ColumnNames.Where(c => !c.Equals(NoteStore.Ticketed, StringComparison.OrdinalIgnoreCase)).ToList());
+        if (prompt is null) { Status = "No loose notes to organise (notes with tickets stay as they are)."; return; }
+        var what = HasPicked ? $"the {shown.Count} picked notes" : shown.Count == _all.Count(n => n.Ticket.Length == 0) ? "all the notes" : $"the {shown.Count} notes showing";
+        if (!Organise($"Organise {what}", prompt)) { Status = "Fettle is busy with something else: try again when it's done."; return; }
+        Editor = null;
+        ClearPicked();
+        _notice = $"Asked Fettle to organise {what}: its box says how it went";
+        Apply();
+    }
+
     [RelayCommand] void NewNote() => Editor = new NoteEditor(this, null);
     public void Edit(Note n) => Editor = new NoteEditor(this, n);
 

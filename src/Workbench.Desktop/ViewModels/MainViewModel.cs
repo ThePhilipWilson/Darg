@@ -108,6 +108,7 @@ public partial class MainViewModel : ObservableObject
             agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
             agents.Mascot = Mascot; // null while the app starts; set just after Bench is made
         }
+        if (vm.Notes is { } notes) notes.Organise = (shown, text) => Mascot?.Ask(shown, text) ?? false;
         return vm;
     }
 
