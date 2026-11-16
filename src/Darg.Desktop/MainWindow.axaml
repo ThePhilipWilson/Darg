@@ -59,7 +59,7 @@
         </Button>
         <Button DockPanel.Dock="Right" Content="🔧 Tools" Command="{Binding OpenToolsCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Forge, ComfyUI, Ollama, Pinokio and claude-draw on this machine"/>
-        <!-- Claude usage (WOR-0069): the 5-hour window as a bar, the time until it resets, and the week -->
+        <!-- Claude usage (WOR-0069): the 5-hour window as a bar, the time until it resets, and the week; today's Claude time sits to its left -->
         <Border DockPanel.Dock="Right" IsVisible="{Binding Usage.Visible}" Background="Transparent" VerticalAlignment="Center"
                 Margin="0,0,12,0" Padding="4,2" ToolTip.Tip="{Binding Usage.Tip}" AutomationProperties.Name="Claude usage"
                 chrome:WindowDecorationProperties.ElementRole="User"
@@ -81,6 +81,12 @@
                        IsVisible="{Binding Usage.Timer, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
             <TextBlock Classes="dim small" Text="{Binding Usage.Week}" VerticalAlignment="Center"/>
           </StackPanel>
+        </Border>
+        <!-- today's Claude time, from claude-code-timer's timings (WOR-0069) -->
+        <Border DockPanel.Dock="Right" IsVisible="{Binding Usage.Today, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                Background="Transparent" VerticalAlignment="Center" Margin="0,0,6,0" Padding="4,2" ToolTip.Tip="{Binding Usage.TodayTip}"
+                AutomationProperties.Name="Claude time today" chrome:WindowDecorationProperties.ElementRole="User">
+          <TextBlock Classes="dim small" Text="{Binding Usage.Today}" VerticalAlignment="Center"/>
         </Border>
         <ListBox x:Name="ProjectTabs" ItemsSource="{Binding Projects}" SelectedItem="{Binding Selected}" Background="Transparent"
                  VerticalAlignment="Bottom">
