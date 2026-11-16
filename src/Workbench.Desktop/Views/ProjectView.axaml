@@ -40,7 +40,7 @@
       <views:CodeView DataContext="{Binding Code}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnCode}"/>
       <views:GitHubView DataContext="{Binding Hub}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnHub}"/>
       <views:AgentsView DataContext="{Binding Agents}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnAgents}"/>
-      <Border x:Name="TerminalHost" IsVisible="{Binding OnTerminal}" Background="Black" Padding="6"/>
+      <views:ConsolesView DataContext="{Binding Consoles}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnTerminal}"/>
     </Panel>
   </Grid>
 </UserControl>

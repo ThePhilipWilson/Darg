@@ -78,6 +78,12 @@
           <TextBox Text="{Binding ReposText}" Classes="mono" AcceptsReturn="True" MinHeight="70"/>
         </StackPanel>
 
+        <StackPanel Spacing="4">
+          <TextBlock Text="Saved commands, one per line as Name: command (each opens a console running it)" Classes="dim small"/>
+          <TextBox Text="{Binding CommandsText}" Classes="mono" AcceptsReturn="True" MinHeight="70"
+                   PlaceholderText="Web: dotnet watch --project web/Alpha.Web"/>
+        </StackPanel>
+
         <TextBlock Text="Accounts" FontWeight="SemiBold" Margin="0,8,0,0"/>
         <StackPanel Spacing="4">
           <TextBlock Text="GitHub account for this project (empty: gh's active account)" Classes="dim small"/>

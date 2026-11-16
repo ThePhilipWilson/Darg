@@ -70,6 +70,8 @@ public sealed class ProjectConfig
     public List<string> Repos { get; set; } = [];
     /// <summary>The gh account this project's GitHub calls sign in as (null: gh's active account).</summary>
     public string? GitHub { get; set; }
+    /// <summary>Commands the project runs often (dev servers, tests, a stack's "up"): one click opens a console running one.</summary>
+    public List<SavedCommand> Commands { get; set; } = [];
 
     public string? NotesFolder() => Notes ?? (Boards is null ? null : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(Boards))!, "notes"));
     /// <summary>Features this project uses; an empty list means all of them.</summary>
@@ -81,6 +83,23 @@ public sealed class ProjectConfig
     public string WorkingFolder() =>
         Repos.FirstOrDefault(Directory.Exists) ?? (Boards is not null && Directory.Exists(Boards) ? Boards
             : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+}
+
+/// <summary>A command a project runs often. Cwd is relative to the project's first repo unless rooted.</summary>
+public sealed class SavedCommand
+{
+    public string Name { get; set; } = "";
+    public string Command { get; set; } = "";
+    public string? Cwd { get; set; }
+
+    /// <summary>"Name: command" per line (Setup's text box), and back.</summary>
+    public static List<SavedCommand> Parse(string text) =>
+        text.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => { var i = l.IndexOf(": ", StringComparison.Ordinal); return i > 0 ? new SavedCommand { Name = l[..i].Trim(), Command = l[(i + 2)..].Trim() } : new SavedCommand { Name = l, Command = l }; })
+            .Where(c => c.Command.Length > 0).ToList();
+
+    public static string Render(IEnumerable<SavedCommand> commands) =>
+        string.Join(Environment.NewLine, commands.Select(c => c.Name == c.Command ? c.Command : $"{c.Name}: {c.Command}"));
 }
 
 public static class Features

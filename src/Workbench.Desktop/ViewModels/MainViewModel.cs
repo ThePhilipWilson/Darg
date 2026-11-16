@@ -130,9 +130,8 @@ public partial class ProjectViewModel : ObservableObject
     public CodeViewModel? Code { get; }
     public GitHubViewModel? Hub { get; }
     public AgentsViewModel? Agents { get; }
-    public string TerminalFolder => Config.WorkingFolder();
-    public string Shell => OperatingSystem.IsWindows() ? "pwsh.exe" : Environment.GetEnvironmentVariable("SHELL") ?? "/bin/zsh";
-    public bool UsesTerminal => Config.Uses(Features.Terminal);
+    public ConsolesViewModel? Consoles { get; }
+    public bool UsesTerminal => Consoles is not null;
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnBoard), nameof(OnNotes), nameof(OnAgents), nameof(OnCode), nameof(OnHub), nameof(OnTerminal))]
     public partial Section Section { get; set; }
@@ -154,6 +153,7 @@ public partial class ProjectViewModel : ObservableObject
         Brush = Color.TryParse(config.Color, out var c) ? new SolidColorBrush(c) : Brushes.Orange;
         if (config.Uses(Features.Board)) Board = new BoardViewModel(config);
         if (config.Uses(Features.Agents)) Agents = new AgentsViewModel(config);
+        if (config.Uses(Features.Terminal)) Consoles = new ConsolesViewModel(config);
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
             Notes = new NotesViewModel(notes) { TicketBoard = () => Board?.Folder };
         if (config.Uses(Features.Code) && config.Repos.Count > 0) Code = new CodeViewModel(config);
@@ -175,12 +175,23 @@ public partial class ProjectViewModel : ObservableObject
 
     partial void OnSectionChanged(Section value)
     {
-        if (value == Section.Terminal) TerminalStarted = true;
+        if (value == Section.Terminal) { TerminalStarted = true; Consoles?.EnsureOne(); }
         if (value == Section.Code) Code?.Load();
         if (value == Section.GitHub) Hub?.Load();
     }
 
-    [RelayCommand] void Open(string section) => Section = Enum.Parse<Section>(section);
+    /// <summary>Show a section, if this project has it (an unticked feature's section never opens).</summary>
+    [RelayCommand]
+    void Open(string section)
+    {
+        var s = Enum.Parse<Section>(section);
+        var has = s switch
+        {
+            Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Agents => Agents is not null,
+            Section.Code => Code is not null, Section.GitHub => Hub is not null, _ => Consoles is not null,
+        };
+        if (has) Section = s;
+    }
 
     /// <summary>The project is leaving the app (removed or changed in Setup): stop its agents and its watcher.</summary>
     public void Close()

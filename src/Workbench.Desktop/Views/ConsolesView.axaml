@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Workbench.Desktop.ViewModels"
+             x:Class="Workbench.Desktop.Views.ConsolesView"
+             x:DataType="vm:ConsolesViewModel">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="8,4">
+      <DockPanel>
+        <!-- saved commands: one click opens a console running it -->
+        <ItemsControl DockPanel.Dock="Right" ItemsSource="{Binding Commands}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:ConsolesViewModel+CommandButton">
+              <Button Content="{Binding Name, StringFormat='▶ {0}'}" ToolTip.Tip="{Binding Tip}"
+                      Command="{Binding $parent[UserControl].((vm:ConsolesViewModel)DataContext).RunCommandCommand}" CommandParameter="{Binding}"/>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Button DockPanel.Dock="Left" Content="+ Shell" Command="{Binding NewShellCommand}" Margin="0,0,8,0"/>
+        <ListBox ItemsSource="{Binding Tabs}" SelectedItem="{Binding Selected}" Background="Transparent">
+          <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ConsoleTab">
+              <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding Cwd}">
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Classes.dim="{Binding Ended}"/>
+                <Button Content="×" Command="{Binding CloseCommand}" Padding="4,0" Background="Transparent" MinHeight="0"
+                        AutomationProperties.Name="Close console"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+    <!-- every console's terminal stays alive; only the selected one shows -->
+    <Panel x:Name="Hosts" Background="Black"/>
+  </DockPanel>
+</UserControl>
