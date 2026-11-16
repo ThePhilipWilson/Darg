@@ -205,7 +205,7 @@ public partial class AgentViewModel : ObservableObject
     public string? Project { get; set; }
     readonly List<string> _args;
     DateTime _created = DateTime.Now;
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou))] public partial AgentState State { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou), nameof(Open))] public partial AgentState State { get; set; }
     [ObservableProperty] public partial string Compose { get; set; } = "";
     [ObservableProperty] public partial string Model { get; set; } = "";
 
@@ -246,6 +246,8 @@ public partial class AgentViewModel : ObservableObject
     bool OnSubscription { get; set; } = true;
     public bool Working => State is AgentState.Working or AgentState.Starting;
     public bool NeedsYou => State == AgentState.NeedsYou;
+    /// <summary>True while a Claude process runs for this agent (what Close ends).</summary>
+    public bool Open => _session is not null;
     public string StateText => State switch
     {
         AgentState.Starting => "starting", AgentState.Working => "working", AgentState.NeedsYou => "needs you",
@@ -306,9 +308,11 @@ public partial class AgentViewModel : ObservableObject
         {
             List<string> args = resume && SessionId is not null ? ["--resume", SessionId, .. _args] : [.. _args];
             args.AddRange(AgentChoices.LaunchArgs(_model, _effort, _mode));
-            _session = AgentSession.Start(Cwd, extraArgs: args);
-            _session.Event += e => Dispatcher.UIThread.Post(() => On(e));
-            _session.Send(message);
+            var session = AgentSession.Start(Cwd, extraArgs: args);
+            _session = session;
+            // a session closed on request still reports its last events and its exit: they're not news
+            session.Event += e => Dispatcher.UIThread.Post(() => { if (_session == session) On(e); });
+            session.Send(message);
             State = AgentState.Starting;
         }
         catch (Exception e)
@@ -414,8 +418,8 @@ public partial class AgentViewModel : ObservableObject
             case SessionExited x:
                 // a session we closed ourselves (resume later) isn't news; one that died is
                 if (x.ExitCode != 0) Items.Add(new NoteItem($"Session ended ({x.ExitCode}) {Last(x.Stderr)}", true));
-                State = SessionId is not null && x.ExitCode == 0 ? AgentState.Saved : AgentState.Exited;
                 _session = null;
+                State = SessionId is not null && x.ExitCode == 0 ? AgentState.Saved : AgentState.Exited;
                 Save();
                 break;
         }
@@ -457,12 +461,30 @@ public partial class AgentViewModel : ObservableObject
     [RelayCommand]
     void Stop() => _session?.Interrupt();
 
-    /// <summary>End the session for good (its project is closing).</summary>
+    /// <summary>Close: end the Claude process but keep the agent, so sending it a message resumes the conversation.</summary>
+    [RelayCommand]
+    void Close()
+    {
+        if (_session is null) return;
+        var mid = Working || NeedsYou;
+        End();
+        Items.Add(new NoteItem(SessionId is null ? "Session closed before it began; start a new agent to carry on."
+            : mid ? "Session closed mid-turn. Send a message to carry on." : "Session closed. Send a message to carry on.", false));
+        Save();
+    }
+
+    /// <summary>End the session (closed on request, forgotten, or its project is closing). What it was
+    /// doing stops; the conversation can be resumed later if it has a session id.</summary>
     public void End()
     {
         var s = _session;
+        if (s is null) return;
         _session = null;
-        if (s is not null) _ = s.DisposeAsync().AsTask();
+        // a question or permission still waiting can't be answered now: its buttons go quiet
+        foreach (var p in Items.OfType<PermissionItem>().Where(p => p.Pending)) p.Decision = "No answer (session closed)";
+        foreach (var q in Items.OfType<QuestionItem>().Where(q => q.Pending)) q.Sent = true;
+        State = SessionId is not null ? AgentState.Saved : AgentState.Exited;
+        _ = s.DisposeAsync().AsTask();
     }
 
     internal void Answered(TranscriptItem item, Action<AgentSession> respond)
