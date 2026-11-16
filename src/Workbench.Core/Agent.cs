@@ -48,6 +48,62 @@ public static class AgentChoices
         new("dontAsk", "Don't ask (deny unallowed)"),
     ];
 
+    /// <summary>The model list with the default named, e.g. "Model: default (Opus 5.5)"; just "Model: default"
+    /// when it isn't known.</summary>
+    public static IReadOnlyList<AgentChoice> ModelsWithDefault(string? defaultModel) =>
+        string.IsNullOrWhiteSpace(defaultModel) ? Models
+            : [new(Default, $"Model: default ({ModelName(defaultModel)})"), .. Models.Skip(1)];
+
+    /// <summary>The model a session started in <paramref name="cwd"/> with no --model gets, as Claude Code
+    /// picks it: ANTHROPIC_MODEL, else "model" in the project's .claude/settings.local.json, its
+    /// .claude/settings.json, then the person's own settings.json. Null when none says (the account's default,
+    /// which only a running session reports).</summary>
+    public static string? DefaultModel(string? cwd, string? home = null)
+    {
+        if (Environment.GetEnvironmentVariable("ANTHROPIC_MODEL") is { Length: > 0 } env) return env;
+        home ??= Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR") is { Length: > 0 } dir ? dir
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
+        var files = new List<string>();
+        if (!string.IsNullOrEmpty(cwd))
+        {
+            files.Add(Path.Combine(cwd, ".claude", "settings.local.json"));
+            files.Add(Path.Combine(cwd, ".claude", "settings.json"));
+        }
+        files.Add(Path.Combine(home, "settings.json"));
+        foreach (var f in files)
+        {
+            try
+            {
+                if (File.Exists(f) && JsonNode.Parse(File.ReadAllText(f)) is JsonObject o
+                    && o["model"] is JsonValue v && v.TryGetValue<string>(out var m) && m.Trim().Length > 0) return m.Trim();
+            }
+            catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException) { }
+        }
+        return null;
+    }
+
+    /// <summary>A model id or alias as a person says it: "claude-opus-5-5" is "Opus 5.5", "opus[1m]" is
+    /// "Opus (1M)", "claude-haiku-4-5-20251001" is "Haiku 4.5". Anything else is shown as given.</summary>
+    public static string ModelName(string model)
+    {
+        var s = model.Trim();
+        var suffix = "";
+        if (s.EndsWith(']') && s.LastIndexOf('[') is var b and > 0)
+        {
+            suffix = $" ({s[(b + 1)..^1].ToUpperInvariant()})";
+            s = s[..b];
+        }
+        if (s.StartsWith("claude-", StringComparison.OrdinalIgnoreCase)) s = s["claude-".Length..];
+        var parts = s.Split('-', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (parts.Count == 0) return model;
+        if (parts.Count > 1 && parts[^1].Length == 8 && parts[^1].All(char.IsDigit)) parts.RemoveAt(parts.Count - 1); // a date stamp
+        if (!parts[0].All(char.IsLetter)) return model;
+        var name = char.ToUpperInvariant(parts[0][0]) + parts[0][1..].ToLowerInvariant();
+        var version = parts.Skip(1).ToList();
+        if (version.Count > 0 && !version.All(p => p.All(char.IsDigit))) return model;
+        return name + (version.Count > 0 ? " " + string.Join('.', version) : "") + suffix;
+    }
+
     /// <summary>The flags that start (or resume) a session with these choices; a default adds nothing.</summary>
     public static IEnumerable<string> LaunchArgs(string? model, string? effort, string? mode)
     {

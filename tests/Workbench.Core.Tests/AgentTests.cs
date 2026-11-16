@@ -99,6 +99,46 @@ public sealed class StreamParserTests
         Assert.Equal("Ask before acting", AgentChoices.Find(AgentChoices.Modes, "manual").Label);
         Assert.Equal("bypassPermissions", AgentChoices.Find(AgentChoices.Modes, "bypassPermissions").Value);
     }
+
+    [Theory]
+    [InlineData("claude-opus-5-5", "Opus 5.5")]
+    [InlineData("claude-opus-5-5[1m]", "Opus 5.5 (1M)")]
+    [InlineData("opus[1m]", "Opus (1M)")]
+    [InlineData("sonnet", "Sonnet")]
+    [InlineData("claude-haiku-4-5-20251001", "Haiku 4.5")]
+    [InlineData("claude-3-7-sonnet-latest", "claude-3-7-sonnet-latest")]
+    [InlineData("opusplan", "Opusplan")]
+    public void Model_ids_read_as_names(string id, string name) => Assert.Equal(name, AgentChoices.ModelName(id));
+
+    [Fact]
+    public void The_default_model_is_named_in_the_picker()
+    {
+        Assert.Equal("Model: default", AgentChoices.ModelsWithDefault(null)[0].Label);
+        var list = AgentChoices.ModelsWithDefault("claude-opus-5-5");
+        Assert.Equal("Model: default (Opus 5.5)", list[0].Label);
+        Assert.Equal(AgentChoices.Default, list[0].Value);
+        Assert.Equal(AgentChoices.Models.Count, list.Count);
+    }
+
+    [Fact]
+    public void The_default_model_comes_from_project_settings_before_the_persons_own()
+    {
+        if (Environment.GetEnvironmentVariable("ANTHROPIC_MODEL") is { Length: > 0 }) return; // that wins over both
+        var home = Directory.CreateTempSubdirectory("wb-home-").FullName;
+        var project = Directory.CreateTempSubdirectory("wb-proj-").FullName;
+        try
+        {
+            Assert.Null(AgentChoices.DefaultModel(project, home));
+            File.WriteAllText(Path.Combine(home, "settings.json"), """{ "model": "opus[1m]" }""");
+            Assert.Equal("opus[1m]", AgentChoices.DefaultModel(project, home));
+            Directory.CreateDirectory(Path.Combine(project, ".claude"));
+            File.WriteAllText(Path.Combine(project, ".claude", "settings.json"), """{ "model": "sonnet" }""");
+            Assert.Equal("sonnet", AgentChoices.DefaultModel(project, home));
+            File.WriteAllText(Path.Combine(project, ".claude", "settings.local.json"), "not json");
+            Assert.Equal("sonnet", AgentChoices.DefaultModel(project, home));
+        }
+        finally { Directory.Delete(home, true); Directory.Delete(project, true); }
+    }
 }
 
 /// <summary>Runs the real claude CLI. Opt in with WORKBENCH_LIVE=1 (it spends a little on a Haiku turn).</summary>
