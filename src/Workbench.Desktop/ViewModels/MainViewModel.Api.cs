@@ -26,6 +26,8 @@ public partial class MainViewModel
         Add("work-on", "start an agent on a board card, as the card's Work on button does (moves it to In Progress): {project, card}. Only when Philip asks.", WorkOn);
         Add("say", "send a message to a project's agent, as if Philip typed it: {id, text}. A saved agent resumes its session.", Say);
         Add("close-agents", "close agents' sessions: {ids} (a list, or ids separated by spaces). They stay listed and carry on when sent a message.", a => CloseAgents(a.List("ids")));
+        Add("forget-agents", "forget agents, as the × in the Agents list does: {ids}. Each one's session ends, it leaves the list and its saved file goes " +
+                             "(Claude Code keeps its history). Not one mid-turn. Only when Philip asks, or for agents whose card is done.", a => ForgetAgents(a.List("ids")));
         Add("flows", "the flows on file: name, max rounds, and the roles in order.", _ => Json(FlowList()));
         Add("run-flow", "run a flow: {project, flow, card} on a board card, or {project, flow, task} on a task in words. Only when Philip asks.", RunFlow);
         Add("run-command", "run one of a project's saved commands in its Terminal section: {project, command} (the command's name).", RunCommand);
@@ -163,6 +165,20 @@ public partial class MainViewModel
             throw new ApiError($"\"{agent.Name}\" is mid-turn ({agent.StateText}); send when it's done.");
         agent.Say(text, text);
         return $"Sent to \"{agent.Name}\".";
+    }
+
+    string ForgetAgents(IReadOnlyList<string> ids)
+    {
+        var lines = new List<string>();
+        foreach (var id in ids)
+        {
+            var hit = Projects.Select(p => (p, a: p.Agents?.Find(id))).FirstOrDefault(x => x.a is not null);
+            if (hit.a is not { } agent) { lines.Add($"{id}: no such agent"); continue; }
+            if (agent.State is AgentState.Starting or AgentState.Working) { lines.Add($"{id} ({agent.Name}): mid-turn, left alone"); continue; }
+            hit.p.Agents!.ForgetCommand.Execute(agent);
+            lines.Add($"{id} ({agent.Name}): forgotten");
+        }
+        return string.Join(Environment.NewLine, lines);
     }
 
     JsonArray FlowList()
