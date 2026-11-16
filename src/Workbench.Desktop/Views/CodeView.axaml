@@ -54,7 +54,7 @@
 
     <!-- open files -->
     <DockPanel Grid.Column="1">
-      <ListBox DockPanel.Dock="Top" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Current}" Background="{StaticResource Panel}"
+      <ListBox x:Name="FileTabs" DockPanel.Dock="Top" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Current}" Background="{StaticResource Panel}"
                BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" IsVisible="{Binding Tabs.Count}">
         <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
         <ListBox.ItemTemplate>

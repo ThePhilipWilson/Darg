@@ -15,7 +15,11 @@ public partial class ConsolesView : UserControl
     readonly Dictionary<ConsoleTab, TerminalControl> _terms = [];
     ConsolesViewModel? _vm;
 
-    public ConsolesView() => InitializeComponent();
+    public ConsolesView()
+    {
+        InitializeComponent();
+        TabDrag.Attach(ConsoleTabs, (from, to) => (DataContext as ConsolesViewModel)?.Tabs.Move(from, to));
+    }
 
     protected override void OnDataContextChanged(EventArgs e)
     {

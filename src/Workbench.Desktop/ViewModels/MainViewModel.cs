@@ -99,6 +99,17 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand] void OpenTools() => ToolsPage = new ToolsViewModel(this, InstanceConfig.Load().ToolsOrDefaults());
     public void CloseTools() => ToolsPage = null;
 
+    /// <summary>A project tab dragged to a new place: the order is saved, so it opens that way next time.</summary>
+    public void MoveProject(int from, int to)
+    {
+        Projects.Move(from, to);
+        var config = InstanceConfig.Load();
+        var order = Projects.Select((p, i) => (p.Config.Id, i)).ToDictionary(x => x.Id, x => x.i, StringComparer.OrdinalIgnoreCase);
+        config.Projects = config.Projects.OrderBy(c => order.GetValueOrDefault(c.Id, int.MaxValue)).ToList();
+        try { config.Save(); } catch (IOException) { } // the order still holds for this run
+        Mascot.Projects = config.Projects;
+    }
+
     /// <summary>A saved instance config, applied: projects whose settings didn't change stay exactly as
     /// they are (their agents and terminals keep running); changed ones are rebuilt; removed ones close.</summary>
     public void Apply(InstanceConfig config)
