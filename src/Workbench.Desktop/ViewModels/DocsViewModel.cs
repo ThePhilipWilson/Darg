@@ -172,8 +172,37 @@ public partial class DocsViewModel : ObservableObject
 
     [RelayCommand] void Cancel() => Editing = false;
 
+    /// <summary>Set by the app: show a markdown doc outside this folder in the project whose docs hold it.
+    /// False if no other project's do, and it opens here.</summary>
+    public Func<string, bool>? OpenElsewhere { get; set; }
+
+    /// <summary>Open a doc: one in the folder (relative path) selected in the tree, or one outside it (its full
+    /// path, e.g. another repo's README or a doc elsewhere in the vault) read, edited and saved here all the same,
+    /// its full path in the header. True if there was a doc to open.</summary>
+    public bool Show(string doc)
+    {
+        Find = "";
+        var full = Path.GetFullPath(Path.Combine(Folder, doc));
+        var rel = Path.GetRelativePath(Folder, full).Replace('\\', '/');
+        var inside = rel != ".." && !rel.StartsWith("../", StringComparison.Ordinal) && !Path.IsPathRooted(rel);
+        if (inside && _all.FirstOrDefault(f => f.Equals(rel, StringComparison.OrdinalIgnoreCase)) is { } hit)
+        {
+            Selected = Files.FirstOrDefault(f => f.Path == hit);
+            Reveal(hit);
+            return true;
+        }
+        if (!File.Exists(full)) { Status = $"No doc at {full}"; return false; }
+        var path = full.Replace('\\', '/');
+        if (!path.Equals(Selected?.Path, StringComparison.OrdinalIgnoreCase)) Selected = new DocEntry(path);
+        _revealing = true; SelectedNode = null; _revealing = false; // it isn't in the tree
+        Status = $"Outside the docs folder: {path}";
+        return true;
+    }
+
     /// <summary>A link in a doc: a doc in the folder opens here (a [[wikilink]] or a relative markdown link, as
-    /// DocLinks resolves it); a web link, mail link or other file opens in its own app; one that goes nowhere says why.</summary>
+    /// DocLinks resolves it); a markdown doc outside the folder (another repo, elsewhere in the vault) opens in
+    /// the project whose docs hold it, else here; a web link, mail link or other file opens in its own app; one
+    /// that goes nowhere says why.</summary>
     public void OpenLink(string link)
     {
         switch (Core.DocLinks.Resolve(link, Selected?.Path, _all, Folder))
@@ -182,9 +211,11 @@ public partial class DocsViewModel : ObservableObject
                 Status = "That link is to this doc.";
                 break;
             case Core.DocLink.Doc(var hit):
-                Find = "";
-                Selected = Files.FirstOrDefault(f => f.Path == hit);
-                Reveal(hit);
+                Show(hit);
+                break;
+            case Core.DocLink.Elsewhere(var full):
+                if (OpenElsewhere?.Invoke(full) == true) break; // another project's docs hold it: shown there
+                Show(full);
                 break;
             case Core.DocLink.External(var target):
                 try { Process.Start(new ProcessStartInfo(target) { UseShellExecute = true }); Status = $"Opened {target}"; }

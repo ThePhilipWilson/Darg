@@ -110,7 +110,24 @@ public partial class MainViewModel : ObservableObject
             agents.Mascot = Mascot; // null while the app starts; set just after Bench is made
         }
         if (vm.Notes is { } notes) notes.Organise = (shown, text) => Mascot?.Ask(shown, text) ?? false;
+        if (vm.Docs is { } docs) docs.OpenElsewhere = full => ShowDocElsewhere(vm, full);
         return vm;
+    }
+
+    /// <summary>A doc link that left a project's docs folder: if another project's docs hold the doc, that
+    /// project comes up with it open (the deepest folder wins when one is inside another).</summary>
+    bool ShowDocElsewhere(ProjectViewModel from, string full)
+    {
+        var owner = Projects.Where(p => p != from && p.Docs is not null)
+            .Select(p => (p, rel: Path.GetRelativePath(Path.GetFullPath(p.Docs!.Folder), full)))
+            .Where(x => x.rel != ".." && !x.rel.StartsWith(".." + Path.DirectorySeparatorChar) && !x.rel.StartsWith("../") && !Path.IsPathRooted(x.rel))
+            .OrderByDescending(x => x.p.Docs!.Folder.Length)
+            .Select(x => x.p).FirstOrDefault();
+        if (owner is null) return false;
+        Setup = null; ToolsPage = null;
+        Selected = owner;
+        owner.OpenCommand.Execute(nameof(Section.Docs));
+        return owner.Docs!.Show(full);
     }
 
     /// <summary>What Philip is looking at, in a line Bench reads before each message: the project, the
