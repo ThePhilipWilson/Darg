@@ -22,6 +22,12 @@ public partial class MainWindow : Window
             Topmost = true; Topmost = false; // Windows won't always let a background app take focus; this at least raises it
         };
         Closing += (_, _) => vm.SaveAll();
+        if (RestartButton.Flyout is Flyout restart)
+            restart.Opening += (_, _) =>
+            {
+                if (restart.Content is Control c) c.DataContext = vm.Restart;
+                vm.Restart.Refresh();
+            };
         Closed += (_, _) => Notifier.Clear();
 
         // Bench's box: Enter sends, Shift+Enter is a new line; the chat follows its newest line.

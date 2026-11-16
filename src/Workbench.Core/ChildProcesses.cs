@@ -18,7 +18,7 @@ public static class ChildProcesses
     public static void TieToThisProcess()
     {
         if (!OperatingSystem.IsWindows() || _job != IntPtr.Zero) return;
-        var job = KillOnCloseJob();
+        var job = KillOnCloseJob(breakawayOk: true); // only StartOutsideJob asks to break away
         if (!AssignProcessToJobObject(job, GetCurrentProcess())) throw new Win32Exception();
         _job = job; // held for the life of the process; never closed by hand
     }
@@ -49,13 +49,47 @@ public static class ChildProcesses
         }
     }
 
-    static IntPtr KillOnCloseJob()
+    /// <summary>Start a process that is not in Workbench's job, so it outlives Workbench (the restart and
+    /// update helper). Windows only; throws <see cref="Win32Exception"/> if Windows refuses, as it does
+    /// when Workbench itself runs inside another job that doesn't allow breaking away.</summary>
+    public static void StartOutsideJob(string exe, string arguments)
+    {
+        var si = new STARTUPINFO { cb = Marshal.SizeOf<STARTUPINFO>() };
+        var cmd = new System.Text.StringBuilder($"\"{exe}\" {arguments}");
+        var flags = _job != IntPtr.Zero ? CREATE_BREAKAWAY_FROM_JOB | CREATE_NO_WINDOW : CREATE_NO_WINDOW;
+        if (!CreateProcess(null, cmd, IntPtr.Zero, IntPtr.Zero, false, flags, IntPtr.Zero, null, ref si, out var pi))
+            throw new Win32Exception();
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+
+    const uint CREATE_BREAKAWAY_FROM_JOB = 0x01000000, CREATE_NO_WINDOW = 0x08000000;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct STARTUPINFO
+    {
+        public int cb;
+        public string? lpReserved, lpDesktop, lpTitle;
+        public int dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags;
+        public short wShowWindow, cbReserved2;
+        public IntPtr lpReserved2, hStdInput, hStdOutput, hStdError;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct PROCESS_INFORMATION { public IntPtr hProcess, hThread; public int dwProcessId, dwThreadId; }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    static extern bool CreateProcess(string? applicationName, System.Text.StringBuilder commandLine, IntPtr processAttributes,
+        IntPtr threadAttributes, bool inheritHandles, uint creationFlags, IntPtr environment, string? currentDirectory,
+        ref STARTUPINFO startupInfo, out PROCESS_INFORMATION processInformation);
+
+    static IntPtr KillOnCloseJob(bool breakawayOk = false)
     {
         var job = CreateJobObject(IntPtr.Zero, null);
         if (job == IntPtr.Zero) throw new Win32Exception();
         var info = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION
         {
-            BasicLimitInformation = new JOBOBJECT_BASIC_LIMIT_INFORMATION { LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE },
+            BasicLimitInformation = new JOBOBJECT_BASIC_LIMIT_INFORMATION { LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | (breakawayOk ? JOB_OBJECT_LIMIT_BREAKAWAY_OK : 0) },
         };
         var size = Marshal.SizeOf<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>();
         var ptr = Marshal.AllocHGlobal(size);
@@ -75,6 +109,8 @@ public static class ChildProcesses
 
     const int JobObjectExtendedLimitInformation = 9;
     const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000;
+    // lets a child started with CREATE_BREAKAWAY_FROM_JOB leave; children that don't ask still join
+    const uint JOB_OBJECT_LIMIT_BREAKAWAY_OK = 0x800;
 
     [StructLayout(LayoutKind.Sequential)]
     struct JOBOBJECT_BASIC_LIMIT_INFORMATION

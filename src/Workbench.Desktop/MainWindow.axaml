@@ -13,6 +13,33 @@
                    VerticalAlignment="Center" Margin="14,0,16,0"/>
         <Button DockPanel.Dock="Right" Content="⚙ Setup" Command="{Binding OpenSetupCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Which projects this instance has, and which features each uses"/>
+        <!-- restart, or update from the repo and restart: the build runs while Workbench stays open -->
+        <Button x:Name="RestartButton" DockPanel.Dock="Right" Content="{Binding Restart.HeaderLabel}" Background="Transparent"
+                VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Restart Workbench, or update it from its repo and restart"
+                AutomationProperties.Name="Restart and update">
+          <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedRight">
+              <StackPanel Width="360" Spacing="10" x:DataType="vm:RestartViewModel">
+                <TextBlock Text="Restart Workbench" FontWeight="Bold"/>
+                <TextBlock Classes="dim small" Text="{Binding SourceNote}" TextWrapping="Wrap"/>
+                <TextBlock Classes="small" Text="{Binding Warning}" IsVisible="{Binding HasWarning}" TextWrapping="Wrap"
+                           Foreground="{StaticResource Accent}"/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="{Binding RestartLabel}" Command="{Binding RestartCommand}" ToolTip.Tip="Close and reopen this build"/>
+                  <Button Classes="primary" Content="{Binding UpdateLabel}" Command="{Binding UpdateCommand}" IsVisible="{Binding CanUpdate}"
+                          IsEnabled="{Binding !Building}"/>
+                </StackPanel>
+                <TextBlock Classes="dim small" Text="{Binding Status}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                           TextWrapping="Wrap"/>
+                <DockPanel IsVisible="{Binding HasFailure}">
+                  <Button DockPanel.Dock="Right" Content="×" Command="{Binding DismissCommand}" Background="Transparent" Padding="6,0"
+                          VerticalAlignment="Top" ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss update error"/>
+                  <SelectableTextBlock Classes="small" Text="{Binding Failure}" TextWrapping="Wrap" Foreground="{StaticResource Bad}"/>
+                </DockPanel>
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
         <Button DockPanel.Dock="Right" Content="🔧 Tools" Command="{Binding OpenToolsCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Forge, ComfyUI, Ollama, Pinokio and claude-draw on this machine"/>
         <ListBox x:Name="ProjectTabs" ItemsSource="{Binding Projects}" SelectedItem="{Binding Selected}" Background="Transparent"
