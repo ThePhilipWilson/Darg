@@ -21,7 +21,13 @@ public partial class BoardView : UserControl
         InitializeComponent();
         AddHandler(PointerPressedEvent, Pressed, RoutingStrategies.Tunnel);
         AddHandler(PointerMovedEvent, Moved, RoutingStrategies.Tunnel);
-        AddHandler(PointerReleasedEvent, (_, _) => { _press = null; _pressed = null; }, RoutingStrategies.Tunnel);
+        AddHandler(PointerReleasedEvent, (_, e) =>
+        {
+            // pressed and released on a card without dragging, and not on one of its buttons: open it
+            var onButton = (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<Button>().Any() ?? false;
+            if (_pressed is not null && !_dragging && !onButton && DataContext is BoardViewModel board) board.Open(_pressed);
+            _press = null; _pressed = null;
+        }, RoutingStrategies.Tunnel);
         AddHandler(DragDrop.DragOverEvent, Over);
         AddHandler(DragDrop.DropEvent, Dropped);
     }

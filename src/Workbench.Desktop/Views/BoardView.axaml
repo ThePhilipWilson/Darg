@@ -3,10 +3,12 @@
              xmlns:vm="using:Workbench.Desktop.ViewModels"
              x:Class="Workbench.Desktop.Views.BoardView"
              x:DataType="vm:BoardViewModel">
+  <Grid ColumnDefinitions="*,Auto">
   <Grid RowDefinitions="Auto,Auto,*">
     <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
       <DockPanel>
         <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding Boards}" SelectedItem="{Binding SelectedBoard}" MinWidth="140" Margin="0,0,12,0"/>
+        <Button DockPanel.Dock="Right" Classes="primary" Content="+ Card" Command="{Binding NewCardCommand}" Margin="12,0,0,0"/>
         <CheckBox DockPanel.Dock="Right" Content="Show completed" IsChecked="{Binding ShowCompleted}" Margin="12,0,0,0"/>
         <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0"/>
         <TextBox Text="{Binding Filter}" PlaceholderText="Filter by ID, title or description…" MaxWidth="460" HorizontalAlignment="Left" MinWidth="280"/>
@@ -91,5 +93,29 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
     </ScrollViewer>
+  </Grid>
+
+    <!-- a card: new, or open to read and edit -->
+    <Border Grid.Column="1" Width="400" IsVisible="{Binding IsEditing}" Background="{StaticResource Panel}"
+            BorderBrush="{StaticResource Line}" BorderThickness="1,0,0,0">
+      <ScrollViewer>
+        <StackPanel DataContext="{Binding Editor}" x:DataType="vm:CardEditor" Margin="14" Spacing="10">
+          <DockPanel>
+            <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding Status}" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" Classes="mono" FontSize="13"/>
+          </DockPanel>
+          <TextBox Text="{Binding Title}" PlaceholderText="Title" FontSize="15" TextWrapping="Wrap"/>
+          <TextBox Text="{Binding Description}" PlaceholderText="Description (markdown)" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="220"/>
+          <TextBox Text="{Binding LabelsText}" PlaceholderText="Labels, comma separated"/>
+          <ComboBox ItemsSource="{Binding PriorityChoices}" SelectedItem="{Binding Priority}" PlaceholderText="Priority" HorizontalAlignment="Stretch"/>
+          <TextBlock Classes="bad" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="primary" Content="{Binding IsNew, Converter={x:Static vm:Bools.CreateOrSave}}" Command="{Binding SaveCommand}"/>
+            <Button Content="Close" Command="{Binding CancelCommand}"/>
+            <Button Content="▶ Work on this" Command="{Binding WorkOnCommand}" IsVisible="{Binding CanWorkOn}"/>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
   </Grid>
 </UserControl>

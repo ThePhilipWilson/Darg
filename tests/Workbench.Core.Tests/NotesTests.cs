@@ -36,6 +36,23 @@ public sealed class CreateCardTests : IDisposable
     [Fact]
     public void A_blank_title_is_refused() => Assert.Throws<ArgumentException>(() => BoardStore.Create(_dir, "  \n "));
 
+    [Fact]
+    public void Update_changes_only_what_it_is_given_and_keeps_other_sections()
+    {
+        var c = BoardStore.Create(_dir, "First go", "Old text.", ["a"]);
+        var path = Path.Combine(_dir, "items", c.File);
+        File.AppendAllText(path, "\n## Notes\n\nKeep me.\n");
+        var u = BoardStore.Update(_dir, c.Id, title: "Second go", description: "New text.\n\nTwo paragraphs.", priority: "High");
+        Assert.Equal("VOT-0008 - Second go.md", u.File);
+        Assert.False(File.Exists(path));
+        var text = File.ReadAllText(Path.Combine(_dir, "items", u.File));
+        Assert.Contains("# VOT-0008: Second go\n", text);
+        Assert.Contains("- **Priority:** High\n", text);
+        Assert.Contains("- **Labels:** a\n", text);
+        Assert.Contains("## Description\n\nNew text.\n\nTwo paragraphs.\n\n## Notes\n\nKeep me.\n", text);
+        Assert.Equal("New text.\n\nTwo paragraphs.", u.Description);
+    }
+
     public void Dispose() => Directory.Delete(_dir, true);
 }
 

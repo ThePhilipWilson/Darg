@@ -30,6 +30,10 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial string Filter { get; set; } = "";
     [ObservableProperty] public partial bool ShowCompleted { get; set; }
     [ObservableProperty] public partial string Status { get; set; } = "";
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsEditing))] public partial CardEditor? Editor { get; set; }
+    public bool IsEditing => Editor is not null;
+    [RelayCommand] void NewCard() { if (Folder is not null) Editor = new CardEditor(this, null); }
+    public void Open(CardViewModel card) => Editor = new CardEditor(this, card);
 
     public BoardViewModel(ProjectConfig project)
     {
@@ -167,3 +171,62 @@ public sealed class CardViewModel
 }
 
 public sealed record MoveTarget(string Label, IRelayCommand Command);
+
+/// <summary>The side panel for a new card, or for reading and editing one.</summary>
+public partial class CardEditor : ObservableObject
+{
+    public static readonly IReadOnlyList<string> Priorities = ["", "Highest", "High", "Medium", "Low", "Lowest"];
+    readonly BoardViewModel _board;
+    readonly CardViewModel? _card;
+    public bool IsNew => _card is null;
+    public string Heading => _card is null ? "New card" : _card.Id;
+    public string Status => _card?.Card.Status is { Length: > 0 } s ? s : "Backlog";
+    public IReadOnlyList<string> PriorityChoices => Priorities;
+    [ObservableProperty] public partial string Title { get; set; }
+    [ObservableProperty] public partial string Description { get; set; }
+    [ObservableProperty] public partial string LabelsText { get; set; }
+    [ObservableProperty] public partial string Priority { get; set; }
+    [ObservableProperty] public partial string Error { get; set; } = "";
+    public bool CanWorkOn => _card is not null && !_card.HasAgent;
+
+    public CardEditor(BoardViewModel board, CardViewModel? card)
+    {
+        _board = board; _card = card;
+        Title = card?.Title ?? "";
+        Description = card?.Description ?? "";
+        LabelsText = card is null ? "" : string.Join(", ", card.Labels);
+        Priority = card?.Priority ?? "";
+    }
+
+    IEnumerable<string> LabelList() => LabelsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    [RelayCommand]
+    void Save()
+    {
+        if (_board.Folder is null) return;
+        if (Title.Trim().Length == 0) { Error = "A card needs a title."; return; }
+        try
+        {
+            if (_card is null) BoardStore.Create(_board.Folder, Title, Description, LabelList(), Priority);
+            else BoardStore.Update(_board.Folder, _card.Id, Title, Description, LabelList(), Priority);
+        }
+        catch (Exception e) { Error = e.Message; return; }
+        _board.Editor = null;
+        _board.Reload();
+    }
+
+    [RelayCommand] void Cancel() => _board.Editor = null;
+
+    [RelayCommand]
+    void WorkOn()
+    {
+        if (_card is null) return;
+        _board.Editor = null;
+        _board.StartWork(_card);
+    }
+}
+
+public static class Bools
+{
+    public static readonly Avalonia.Data.Converters.FuncValueConverter<bool, string> CreateOrSave = new(isNew => isNew ? "Create" : "Save");
+}

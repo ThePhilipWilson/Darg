@@ -187,6 +187,51 @@ public static class BoardStore
         return Parse(text, file)!;
     }
 
+    /// <summary>Change a card's title, description, labels or priority (null leaves one as it is). The
+    /// rest of the file, sections Workbench doesn't edit included, stays as written. A new title renames
+    /// the file to match, as Tatty does. Returns the card as saved.</summary>
+    public static Card Update(string folder, string cardId, string? title = null, string? description = null,
+        IEnumerable<string>? labels = null, string? priority = null)
+    {
+        var card = ReadCards(folder).FirstOrDefault(c => c.Id == cardId)
+                   ?? throw new ArgumentException($"No card {cardId} on this board.", nameof(cardId));
+        var path = Path.Combine(folder, "items", card.File);
+        var raw = File.ReadAllText(path);
+        var crlf = raw.Contains("\r\n");
+        var text = raw.Replace("\r\n", "\n");
+        if (title is not null)
+        {
+            title = Regex.Replace(title.Replace('\n', ' '), @"\s+", " ").Trim();
+            if (title.Length == 0) throw new ArgumentException("A card needs a title.", nameof(title));
+            text = new Regex($@"^# {Regex.Escape(cardId)}: .*$", RegexOptions.Multiline).Replace(text, $"# {cardId}: {title}", 1);
+        }
+        if (labels is not null)
+            text = SetField(text, "Labels", string.Join(", ", labels.Select(l => l.Trim()).Where(l => l.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)));
+        if (priority is not null) text = SetField(text, "Priority", priority.Trim());
+        if (description is not null)
+        {
+            const string head = "\n## Description\n";
+            var d = text.IndexOf(head, StringComparison.Ordinal);
+            if (d < 0) text = text.TrimEnd('\n') + "\n" + head + "\n" + description.Trim() + "\n";
+            else
+            {
+                var start = d + head.Length;
+                var next = text.IndexOf("\n## ", start, StringComparison.Ordinal);
+                var tail = next >= 0 ? text[next..] : "\n";
+                text = text[..start] + "\n" + description.Trim() + "\n" + tail;
+            }
+        }
+        File.WriteAllText(path, crlf ? text.Replace("\n", "\r\n") : text, new UTF8Encoding(false));
+        var file = card.File;
+        if (title is not null && title != card.Title)
+        {
+            var wanted = $"{cardId} - {FileTitle(title)}.md";
+            var to = Path.Combine(folder, "items", wanted);
+            if (wanted != card.File && !File.Exists(to)) { File.Move(path, to); file = wanted; }
+        }
+        return Parse(text, file)!;
+    }
+
     /// <summary>A title as it goes in a file name, as Tatty does it: slashes become spaces, characters a
     /// file name can't hold go, and it's cut to 60 characters.</summary>
     public static string FileTitle(string title)
