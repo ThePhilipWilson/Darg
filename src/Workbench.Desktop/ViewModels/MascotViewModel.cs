@@ -91,7 +91,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     AgentViewModel Load(AgentRecord r) => Live().FirstOrDefault(a => a.Id == r.Id) ?? Wire(new AgentViewModel(r, Store));
 
     /// <summary>The chats running or open now: the one on screen and each other project's.</summary>
-    IEnumerable<AgentViewModel> Live() => _open.Values.Append(Agent).OfType<AgentViewModel>().Distinct();
+    public IEnumerable<AgentViewModel> Live() => _open.Values.Append(Agent).OfType<AgentViewModel>().Distinct();
 
     static bool NeedsTitle(string name) => name is "Bench" or "" || name.EndsWith('…');
 

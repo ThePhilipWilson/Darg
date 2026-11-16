@@ -1,4 +1,4 @@
-# publish.ps1: build Workbench for use (Release) into an install folder and make Start menu and desktop
+﻿# publish.ps1: build Workbench for use (Release) into an install folder and make Start menu and desktop
 # shortcuts. Run again to update; a running copy from that folder is closed first.
 #   pwsh -File tools/publish.ps1 [-To D:\Apps\Workbench] [-NoShortcuts]
 param([string]$To = 'D:\Apps\Workbench', [switch]$NoShortcuts)
@@ -27,6 +27,8 @@ $rid = if ($IsWindows) { 'win-x64' } elseif ($IsMacOS) { 'osx-arm64' } else { 'l
 dotnet publish (Join-Path $repo 'src/Workbench.Desktop') -c Release -r $rid --self-contained false -o $To -v q --nologo
 if ($LASTEXITCODE -ne 0) { throw "publish failed ($LASTEXITCODE)" }
 $exe = Join-Path $To 'Workbench.Desktop.exe'
+# where this build came from, so the app's ⟳ Update can rebuild it from here
+Set-Content -LiteralPath (Join-Path $To 'source.txt') -Value $repo
 "published to $To"
 
 if ($NoShortcuts -or -not $IsWindows) { return }

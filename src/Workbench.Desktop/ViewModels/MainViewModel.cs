@@ -36,7 +36,20 @@ public partial class MainViewModel : ObservableObject
             artifacts.CloseAgents = ids => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => CloseAgents(ids)).GetTask();
         }
         ArtifactHost.OpenRequested += file => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenArtifact(file));
+        Restart = new RestartViewModel(BusyAgents, SaveAll);
         DevHooks();
+    }
+
+    /// <summary>The header's ⟳ menu: restart, or update from the repo and restart.</summary>
+    public RestartViewModel Restart { get; }
+
+    /// <summary>Agents in the middle of a turn, by name (Fettle's chats as "Fettle: name"): what a restart would cut off.</summary>
+    IReadOnlyList<string> BusyAgents()
+    {
+        static bool Busy(AgentViewModel a) => a.State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou;
+        return Projects.SelectMany(p => p.Agents?.Agents ?? []).Where(Busy).Select(a => $"\"{a.Name}\"")
+            .Concat(Mascot.Live().Where(Busy).Select(a => $"Fettle's \"{a.Name}\""))
+            .Distinct().ToList();
     }
 
     /// <summary>What an artifact page sent: to the agent that made it, as a message from the person.</summary>
