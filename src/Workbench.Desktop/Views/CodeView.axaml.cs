@@ -24,7 +24,23 @@ public partial class CodeView : UserControl
             if (e.InitialPressMouseButton == MouseButton.Left && Tree.SelectedItem is TreeNode n && _vm is not null) n.Activate(_vm);
         }, Avalonia.Interactivity.RoutingStrategies.Bubble, handledEventsToo: true);
         Tree.KeyDown += (_, e) => { if (e.Key == Key.Enter && Tree.SelectedItem is TreeNode n && _vm is not null) n.Activate(_vm); };
+        // typing marks the open file edited; its text is kept with it when another tab is shown
+        Editor.TextChanged += (_, _) =>
+        {
+            if (_loading || _shown is null) return;
+            _shown.Edited = Editor.Text;
+            _shown.Dirty = true;
+        };
+        Editor.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.S || !e.KeyModifiers.HasFlag(KeyModifiers.Control) || _shown is null || _vm is null) return;
+            e.Handled = true;
+            _vm.Status = _shown.Save() is { } why ? $"Couldn't save: {why}" : _shown.Saved ?? "";
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
     }
+
+    bool _loading;
+    OpenFile? _shown;
 
     protected override void OnDataContextChanged(EventArgs e)
     {
@@ -47,8 +63,11 @@ public partial class CodeView : UserControl
         Why.IsVisible = f is not null && !f.IsText && !f.IsImage;
         Why.Text = f?.Why ?? "";
         Picture.Source = f?.Image;
+        _shown = f?.IsText == true ? f : null;
         if (f?.IsText != true) return;
-        Editor.Text = f.Text;
+        _loading = true;
+        Editor.Text = f.Edited ?? f.Text;
+        _loading = false;
         Editor.ScrollToHome();
         _textMate.SetGrammar(Grammars.GetScopeByExtension(f.Extension)); // null: plain text
     }

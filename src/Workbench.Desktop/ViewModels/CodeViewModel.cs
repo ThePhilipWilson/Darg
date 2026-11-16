@@ -72,8 +72,18 @@ public partial class CodeViewModel(ProjectConfig project) : ObservableObject
         Current = existing;
     }
 
+    OpenFile? _warned;
+
     public void Close(OpenFile f)
     {
+        if (f.Dirty && _warned != f)
+        {
+            _warned = f;
+            Status = $"{f.Name} has unsaved changes: Ctrl+S to save, or × again to drop them.";
+            Current = f;
+            return;
+        }
+        _warned = null;
         var i = Tabs.IndexOf(f);
         Tabs.Remove(f);
         if (Current == f) Current = Tabs.Count == 0 ? null : Tabs[Math.Min(i, Tabs.Count - 1)];
@@ -192,6 +202,25 @@ public sealed partial class OpenFile : ObservableObject
     public bool IsImage => Image is not null;
     public string Change => Repo.Status.Changed.TryGetValue(Path, out var c) ? c.Trim() : "";
     public IRelayCommand CloseCommand { get; }
+    /// <summary>The text as edited and not yet saved (null: as on disk).</summary>
+    public string? Edited { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Title))] public partial bool Dirty { get; set; }
+    [ObservableProperty] public partial string? Saved { get; set; }
+    public string Title => Dirty ? Name + " ●" : Name;
+
+    /// <summary>Write the edits to the file. Returns why not, or null when saved.</summary>
+    public string? Save()
+    {
+        if (!Dirty || Edited is null) return null;
+        try
+        {
+            File.WriteAllText(FullPath, Edited, new System.Text.UTF8Encoding(false));
+            Dirty = false;
+            Saved = $"Saved {Path} at {DateTime.Now:HH:mm:ss}";
+            return null;
+        }
+        catch (Exception e) { return e.Message; }
+    }
 
     public OpenFile(CodeViewModel code, RepoTree repo, string path)
     {

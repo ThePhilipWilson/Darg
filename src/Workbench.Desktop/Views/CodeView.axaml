@@ -60,7 +60,7 @@
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:OpenFile">
             <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding FullPath}">
-              <TextBlock Text="{Binding Name}" Classes="mono" VerticalAlignment="Center"/>
+              <TextBlock Text="{Binding Title}" Classes="mono" VerticalAlignment="Center"/>
               <TextBlock Text="{Binding Change}" Foreground="{StaticResource Accent}" FontSize="11" VerticalAlignment="Center"/>
               <Button Content="×" Command="{Binding CloseCommand}" Padding="4,0" Background="Transparent" MinHeight="0"/>
             </StackPanel>
@@ -68,7 +68,7 @@
         </ListBox.ItemTemplate>
       </ListBox>
       <Panel>
-        <ae:TextEditor x:Name="Editor" IsReadOnly="True" ShowLineNumbers="True" FontFamily="{StaticResource Mono}" FontSize="13"
+        <ae:TextEditor x:Name="Editor" IsReadOnly="False" ShowLineNumbers="True" FontFamily="{StaticResource Mono}" FontSize="13"
                        Background="{StaticResource Bg}" Padding="6,4" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"/>
         <ScrollViewer x:Name="ImageBox" IsVisible="False" HorizontalScrollBarVisibility="Auto">
           <Image x:Name="Picture" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12"/>
