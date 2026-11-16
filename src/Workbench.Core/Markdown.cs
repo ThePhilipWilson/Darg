@@ -113,7 +113,8 @@ public static class Markdown
         return t.Split('|').Select(c => (IReadOnlyList<Span>)Inline(c.Trim())).ToList();
     }
 
-    /// <summary>Inline styling: `code`, **bold**, *italic* / _italic_, [text](url). Unclosed markers stay as text.</summary>
+    /// <summary>Inline styling: `code`, **bold**, *italic* / _italic_, [text](url), [[wikilinks]], &lt;https://…&gt; and
+    /// bare https:// links. Unclosed markers stay as text.</summary>
     public static List<Span> Inline(string s)
     {
         var spans = new List<Span>();
@@ -146,7 +147,7 @@ public static class Markdown
             if (c == '[')
             {
                 var close = s.IndexOf("](", i + 1, StringComparison.Ordinal);
-                var paren = close < 0 ? -1 : s.IndexOf(')', close + 2);
+                var paren = close < 0 ? -1 : CloseParen(s, close + 2);
                 if (close > i && paren > close)
                 {
                     Emit();
@@ -154,6 +155,25 @@ public static class Markdown
                     i = paren;
                     continue;
                 }
+            }
+            if (c == '<' && Url(s, i + 1) is { } inAngles && i + 1 + inAngles < s.Length && s[i + 1 + inAngles] == '>')
+            {
+                // <https://example.com>
+                Emit();
+                var url = s.Substring(i + 1, inAngles);
+                spans.Add(new Span(url, bold, italic, Link: url));
+                i += inAngles + 1;
+                continue;
+            }
+            if ((c == 'h' || c == 'H') && (i == 0 || !char.IsLetterOrDigit(s[i - 1])) && Url(s, i) is { } bare)
+            {
+                // a bare https://example.com/page, without the full stop or bracket after it
+                var url = s.Substring(i, bare).TrimEnd('.', ',', ';', ':', '!', '?', '\'', '"', '*');
+                while (url.EndsWith(')') && url.Count(ch => ch == ')') > url.Count(ch => ch == '(')) url = url[..^1];
+                Emit();
+                spans.Add(new Span(url, bold, italic, Link: url));
+                i += url.Length - 1;
+                continue;
             }
             if ((c == '*' || c == '_') && i + 1 < s.Length && s[i + 1] == c && s.IndexOf(new string(c, 2), i + 2, StringComparison.Ordinal) > 0 | bold)
             {
@@ -168,5 +188,34 @@ public static class Markdown
         }
         Emit();
         return spans;
+    }
+
+    /// <summary>The length of an http(s) URL starting at <paramref name="at"/> (up to whitespace or &lt;&gt;), or null.</summary>
+    static int? Url(string s, int at)
+    {
+        var rest = s.AsSpan(at);
+        var scheme = rest.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? 8 : rest.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ? 7 : 0;
+        if (scheme == 0) return null;
+        var n = scheme;
+        while (n < rest.Length && !char.IsWhiteSpace(rest[n]) && rest[n] is not ('<' or '>' or '`')) n++;
+        return n > scheme ? n : null;
+    }
+
+    /// <summary>The ')' that closes a link target opened just before <paramref name="from"/>, allowing
+    /// balanced brackets inside it (https://en.wikipedia.org/wiki/Foo_(bar)) and a &lt;target in angles&gt;; -1 if none.</summary>
+    static int CloseParen(string s, int from)
+    {
+        if (from < s.Length && s[from] == '<')
+        {
+            var gt = s.IndexOf('>', from);
+            if (gt > 0) return s.IndexOf(')', gt);
+        }
+        var depth = 0;
+        for (var i = from; i < s.Length; i++)
+        {
+            if (s[i] == '(') depth++;
+            else if (s[i] == ')' && depth-- == 0) return i;
+        }
+        return s.IndexOf(')', from);
     }
 }

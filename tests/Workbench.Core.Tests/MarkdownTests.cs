@@ -4,6 +4,28 @@ namespace Workbench.Core.Tests;
 
 public sealed class MarkdownTests
 {
+    [Theory]
+    [InlineData("see https://example.com/page.", "https://example.com/page", "see ", ".")]
+    [InlineData("(https://example.com/a)", "https://example.com/a", "(", ")")]
+    [InlineData("go to <https://example.com> now", "https://example.com", "go to ", " now")]
+    [InlineData("[wiki](https://en.wikipedia.org/wiki/Foo_(bar)) after", "https://en.wikipedia.org/wiki/Foo_(bar)", "", " after")]
+    [InlineData("[notes](<My Notes.md>) after", "<My Notes.md>", "", " after")]
+    public void Links_are_found(string text, string link, string before, string after)
+    {
+        var spans = Markdown.Inline(text);
+        var i = spans.FindIndex(s => s.Link == link);
+        Assert.True(i >= 0, string.Join(" | ", spans.Select(s => $"{s.Text}->{s.Link}")));
+        Assert.Equal(before, string.Concat(spans.Take(i).Select(s => s.Text)));
+        Assert.Equal(after, string.Concat(spans.Skip(i + 1).Select(s => s.Text)));
+    }
+
+    [Fact]
+    public void Urls_in_code_and_words_stay_text()
+    {
+        Assert.DoesNotContain(Markdown.Inline("run `curl https://x.io` now"), s => s.Link is not null);
+        Assert.DoesNotContain(Markdown.Inline("nothttps://x.io"), s => s.Link is not null);
+    }
+
     [Fact]
     public void Blocks_come_out_in_order()
     {
