@@ -40,6 +40,14 @@
     <PackageReference Include="System.Speech" Version="10.0.0" />
   </ItemGroup>
 
+  <!-- A live copy (WOR-0126, tools/live.ps1) runs under dotnet watch: C# changes apply through .NET hot reload,
+       .axaml changes through HotAvalonia. Only in the Debug builds live.ps1 starts (MSBuild sees its DARG_LIVE_TREE
+       variable), so other debug builds and the published Release copy are as they were. -->
+  <ItemGroup Condition="'$(Configuration)' == 'Debug' And '$(DARG_LIVE_TREE)' != ''">
+    <PackageReference Include="Avalonia.Markup.Xaml.Loader" Version="12.1.6" PrivateAssets="All" />
+    <PackageReference Include="HotAvalonia" Version="3.1.5" PrivateAssets="All" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Darg.Core\Darg.Core.csproj" />
   </ItemGroup>
