@@ -24,13 +24,23 @@
       <TextBlock Text="{Binding Text}" Classes="dim small" TextWrapping="Wrap" Classes.bad="{Binding Bad}"/>
     </DataTemplate>
     <DataTemplate DataType="vm:ToolItem">
-      <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6">
+      <!-- Classes="toolstep": inside an ItemsControl.folded (Fettle's box) a step is one dim line that opens on click -->
+      <Border Classes="toolstep">
         <StackPanel>
-          <DockPanel Margin="9,5">
-            <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" Foreground="{DynamicResource Info}" FontWeight="SemiBold" Classes="mono" Margin="0,0,8,0"/>
-            <TextBlock DockPanel.Dock="Right" Text="✓" Foreground="{DynamicResource Ok}" IsVisible="{Binding Done}" Margin="8,0,0,0"/>
-            <TextBlock Text="{Binding Summary}" Classes="dim mono" TextTrimming="CharacterEllipsis"/>
-          </DockPanel>
+          <Button Classes="toolhead" Command="{Binding ToggleExpandedCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                  Background="Transparent" Padding="9,5" MinHeight="0" CornerRadius="6" AutomationProperties.Name="{Binding Name}">
+            <DockPanel>
+              <Panel DockPanel.Dock="Left" Classes="fold" Margin="0,0,6,0">
+                <TextBlock Classes="mono dim" Text="▸" IsVisible="{Binding !Expanded}"/>
+                <TextBlock Classes="mono dim" Text="▾" IsVisible="{Binding Expanded}"/>
+              </Panel>
+              <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" Foreground="{DynamicResource Info}" FontWeight="SemiBold" Classes="mono" Margin="0,0,8,0"/>
+              <TextBlock DockPanel.Dock="Right" Text="✓" Foreground="{DynamicResource Ok}" IsVisible="{Binding Ok}" Margin="8,0,0,0"/>
+              <TextBlock DockPanel.Dock="Right" Text="✗" Foreground="{DynamicResource Bad}" IsVisible="{Binding IsError}" Margin="8,0,0,0"/>
+              <TextBlock Text="{Binding Summary}" Classes="dim mono" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+          </Button>
+          <StackPanel Classes="tooldetail" Classes.open="{Binding Expanded}">
           <Image Source="{Binding Image}" IsVisible="{Binding HasImage}" MaxHeight="420" HorizontalAlignment="Left" Margin="9,0,9,9" Stretch="Uniform"/>
           <!-- what the step made: thumbnails, click for the full image -->
           <ItemsControl ItemsSource="{Binding Gallery}" IsVisible="{Binding HasGallery}" Margin="9,0,9,9">
@@ -62,6 +72,7 @@
           <Border IsVisible="{Binding Result, Converter={x:Static ObjectConverters.IsNotNull}}" Background="{DynamicResource Sunk}" Padding="10,6">
             <SelectableTextBlock Classes="mono" Text="{Binding Result}" TextWrapping="Wrap" Foreground="{DynamicResource Dim}"/>
           </Border>
+          </StackPanel>
         </StackPanel>
       </Border>
     </DataTemplate>
@@ -461,6 +472,42 @@
       <Setter Property="IsVisible" Value="False"/>
     </Style>
     <Style Selector="Button.critter.needs Border.badge">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <!-- a tool step: in full everywhere (the head does nothing on click), folded to one quiet line in an ItemsControl.folded
+         (Fettle's box, WOR-0089): the head opens and closes what the step did, ▸ turning to ▾ -->
+    <Style Selector="Border.toolstep">
+      <Setter Property="Background" Value="{DynamicResource Panel}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="6"/>
+    </Style>
+    <Style Selector="Button.toolhead">
+      <Setter Property="IsHitTestVisible" Value="False"/>
+    </Style>
+    <Style Selector="Button.toolhead Panel.fold">
+      <Setter Property="IsVisible" Value="False"/>
+    </Style>
+    <Style Selector="ItemsControl.folded Button.toolhead">
+      <Setter Property="IsHitTestVisible" Value="True"/>
+      <Setter Property="Padding" Value="4,1"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="ItemsControl.folded Button.toolhead Panel.fold">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="ItemsControl.folded Border.toolstep">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Opacity" Value="0.75"/>
+    </Style>
+    <Style Selector="ItemsControl.folded Border.toolstep TextBlock.mono">
+      <Setter Property="FontSize" Value="11"/>
+    </Style>
+    <Style Selector="ItemsControl.folded StackPanel.tooldetail">
+      <Setter Property="IsVisible" Value="False"/>
+    </Style>
+    <Style Selector="ItemsControl.folded StackPanel.tooldetail.open">
       <Setter Property="IsVisible" Value="True"/>
     </Style>
     <Style Selector="Button.primary">

@@ -1076,8 +1076,13 @@ public sealed partial class ToolItem : TranscriptItem
     public bool HasArtifact => ArtifactPath is not null;
     [RelayCommand] void OpenArtifact() { if (ArtifactPath is not null) ArtifactHost.Open(ArtifactPath); }
     [ObservableProperty] public partial string? Result { get; set; }
-    [ObservableProperty] public partial bool IsError { get; set; }
-    [ObservableProperty] public partial bool Done { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Ok))] public partial bool IsError { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Ok))] public partial bool Done { get; set; }
+    /// <summary>Finished without an error: a tick. An error shows a cross instead.</summary>
+    public bool Ok => Done && !IsError;
+    /// <summary>Opened to show its detail where steps are shown folded (Fettle's box, WOR-0089); the Agents view always shows it.</summary>
+    [ObservableProperty] public partial bool Expanded { get; set; }
+    [RelayCommand] void ToggleExpanded() => Expanded = !Expanded;
 
     /// <summary>Images the step made or pointed at (a generator's output, a script's saved file, an image
     /// the tool sent back): thumbnails under the step; click one for the full image.</summary>
