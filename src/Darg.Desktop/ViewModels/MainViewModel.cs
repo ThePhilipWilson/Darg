@@ -499,7 +499,8 @@ public partial class ProjectViewModel : ObservableObject
             Board.EnteredDone = (card, file) =>
             {
                 var folder = Reports!.Folder; var repo = CardFolder(card);
-                var live = Agents.ForCard(card.Id) is { State: AgentState.Starting or AgentState.Working };
+                // a QA agent writes no report of its own, so Darg writes the done report for it; a card agent writes its own
+                var live = Agents.ForCard(card.Id) is { State: AgentState.Starting or AgentState.Working, Purpose: not AgentPurposes.Qa };
                 var archived = DecisionReport.Archive(folder, card.Id);
                 if (live) return;
                 _ = Task.Run(() => { try { DecisionReport.WriteDone(folder, card, file, repo, DateTime.Now, archived, TimeSpan.FromMinutes(10)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
