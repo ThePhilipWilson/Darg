@@ -31,7 +31,32 @@ public partial class NotesViewModel : ObservableObject
         ["yellow"] = Color.Parse("#f2dd7a"), ["pink"] = Color.Parse("#f2a7c3"), ["blue"] = Color.Parse("#9fd0f2"),
         ["green"] = Color.Parse("#b6e3a0"), ["orange"] = Color.Parse("#f5bf86"),
     };
-    public static IBrush BrushFor(string colour) => new SolidColorBrush(Paper.GetValueOrDefault(colour, Paper["yellow"]));
+    public static IBrush BrushFor(string colour) => new SolidColorBrush(ColourOf(colour));
+    static Color ColourOf(string colour) => Paper.GetValueOrDefault(colour, Paper["yellow"]);
+
+    /// <summary>A post-it's paper as light falls on it: a touch darker along the glued strip at the top,
+    /// lightest across the middle, and shaded again at the bottom where the paper curls off the wall.</summary>
+    public static IBrush PaperFor(string colour) => Shaded(ColourOf(colour), (0, 0.93), (0.1, 0.98), (0.45, 1.03), (0.82, 1), (1, 0.9));
+
+    /// <summary>A polaroid's card: off-white, with the faintest fall of light from top to bottom.</summary>
+    public static readonly IBrush PolaroidCard = Shaded(Color.Parse("#f6f3ea"), (0, 1.02), (1, 0.95));
+
+    /// <summary>The strip of tape holding a polaroid up, in the note's colour and letting the card show through.</summary>
+    public static IBrush TapeFor(string colour) => new SolidColorBrush(ColourOf(colour), 0.78);
+
+    static IBrush Shaded(Color c, params (double At, double By)[] stops)
+    {
+        var brush = new LinearGradientBrush { StartPoint = new(0, 0, Avalonia.RelativeUnit.Relative), EndPoint = new(0, 1, Avalonia.RelativeUnit.Relative) };
+        foreach (var (at, by) in stops) brush.GradientStops.Add(new GradientStop(Scale(c, by), at));
+        return brush;
+    }
+
+    /// <summary>A colour made lighter (above 1) or darker (below 1), each channel kept in range.</summary>
+    static Color Scale(Color c, double by)
+    {
+        byte Ch(byte v) => (byte)Math.Clamp(by >= 1 ? v + (255 - v) * (by - 1) * 4 : v * by, 0, 255);
+        return Color.FromArgb(c.A, Ch(c.R), Ch(c.G), Ch(c.B));
+    }
 
     readonly FileSystemWatcher? _watch, _watchBoards, _watchWall;
     readonly DispatcherTimer _debounce;
@@ -440,11 +465,11 @@ public sealed partial class NoteViewModel(Note note, NotesViewModel wall, string
     public string Id => Note.Id;
     public string Text => Note.Text;
     /// <summary>The note's picture, small (it sits on a polaroid), or null: a note with one is drawn as a polaroid.</summary>
-    public Bitmap? Picture { get; } = NotesViewModel.LoadPicture(wall.Folder, note.Image, 260);
+    public Bitmap? Picture { get; } = NotesViewModel.LoadPicture(wall.Folder, note.Image, 400);
     public bool HasPicture => Picture is not null;
-    /// <summary>What the paper is: the note's colour, or a polaroid's white card when it has a picture (the colour shows as a strip).</summary>
-    public IBrush Paper => HasPicture ? PolaroidWhite : Brush;
-    static readonly IBrush PolaroidWhite = new SolidColorBrush(Color.Parse("#f7f4ec"));
+    /// <summary>What the paper is: the note's colour, shaded like paper, or a polaroid's card when it has a picture (the colour shows as its tape).</summary>
+    public IBrush Paper => HasPicture ? NotesViewModel.PolaroidCard : NotesViewModel.PaperFor(note.Colour);
+    public IBrush Tape => NotesViewModel.TapeFor(note.Colour);
     public IBrush Brush { get; } = NotesViewModel.BrushFor(note.Colour);
     public string Meta => string.Join(" ", Note.Tags.Select(t => "#" + t));
     /// <summary>"→ WOR-0015 · In Progress": the ticket and where it is on the board ("not found" once it's gone).</summary>
