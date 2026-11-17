@@ -217,6 +217,8 @@ public partial class ReportRow(AgentReport r) : ObservableObject
         Report.Commits.Count switch { 0 => "", 1 => "1 commit", var n => $"{n} commits" },
     }.Where(s => s.Length > 0));
     public string Body => Report.Body;
+    /// <summary>The report's folder, where a picture named by a relative path is looked for.</summary>
+    public string? Folder => System.IO.Path.GetDirectoryName(Report.File);
     public IReadOnlyList<string> Commits => Report.Commits;
     public bool HasCommits => Report.Commits.Count > 0;
     public bool HasCard => Report.Card.Length > 0;

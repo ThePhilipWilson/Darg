@@ -78,7 +78,7 @@
           </StackPanel>
         </Border>
         <ScrollViewer>
-          <views:MarkdownView Markdown="{Binding Selected.Body, FallbackValue=''}" Margin="18,14" MaxWidth="980" HorizontalAlignment="Left"/>
+          <views:MarkdownView Markdown="{Binding Selected.Body, FallbackValue=''}" BaseFolder="{Binding Selected.Folder, FallbackValue={x:Null}}" Margin="18,14" MaxWidth="980" HorizontalAlignment="Left"/>
         </ScrollViewer>
       </DockPanel>
       <TextBlock Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" MaxWidth="480" TextWrapping="Wrap"
