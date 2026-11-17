@@ -37,6 +37,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public Action<string, string, string, IReadOnlyList<string>>? StartAgent { get; set; }
     /// <summary>Set by the project: start an agent that rounds a thin card out (passed the card's file path).</summary>
     public Action<Card, string>? Improve { get; set; }
+    /// <summary>Set by the project: start an agent reworking a card sent back from QA (passed the card's file path
+    /// and the person's notes, already written into the card).</summary>
+    public Action<Card, string, string>? Rework { get; set; }
     FileSystemWatcher? _watchBoards;
 
     public ObservableCollection<string> Boards { get; } = [];
@@ -466,6 +469,29 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// the first column) if it was waiting in the backlog or the first column, and the agent opens.</summary>
     public void StartWork(CardViewModel card) => StartWork(card.Card, [], show: true, reload: true);
 
+    /// <summary>Whether a card sits in the board's QA column: Work on then gets the work running to try (WOR-0075),
+    /// and it can be sent back with notes (WOR-0079).</summary>
+    public bool InQa(Card card) =>
+        _board is not null && BoardColumns.Qa(_board.Columns) is { } qa && BoardStore.PlaceOf(card.Status, _board.Columns) == BoardStore.PlaceOf(qa, _board.Columns);
+
+    /// <summary>Send a card in QA back (WOR-0079): the notes go into the card under QA notes, an agent starts on
+    /// them, and the card goes back to the working column. Returns what went wrong, or null.</summary>
+    public string? SendBack(CardViewModel card, string notes)
+    {
+        if (Folder is null || _board is null || Rework is null) return "This board can't start agents.";
+        if (notes.Trim().Length == 0) return "Say what's wrong first: the agent works from your notes.";
+        if (AgentFor?.Invoke(card.Id) is not null) return $"{card.Id} already has an agent.";
+        var file = Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File));
+        try { QaNotes.Add(file, notes, DateTime.Now); }
+        catch (Exception e) { return $"Couldn't write the notes into the card: {e.Message}"; }
+        Rework(card.Card, file, notes);
+        _notice = $"Sent {card.Id} back with your notes";
+        var working = _board.Columns.FirstOrDefault(c => c.Name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) ?? _board.Columns.FirstOrDefault();
+        if (working is not null && BoardStore.PlaceOf(card.Card.Status, _board.Columns) != working.Id) Move(card.Card.Id, working.Id);
+        else Reload();
+        return null;
+    }
+
     /// <summary>Make a card for work that starts without one (a drafted README) and start an agent on it, so
     /// the work is on the board. False when the project has no board to put it on.</summary>
     public bool StartNewCard(string title, string description, string repo)
@@ -676,8 +702,11 @@ public sealed partial class CardViewModel : ObservableObject
         WorkOnCommand = new RelayCommand(() => board.StartWork(this));
         OpenAgentCommand = new RelayCommand(() => { if (Agent is not null) board.OpenAgent?.Invoke(Agent); });
         ImproveCommand = new RelayCommand(() => board.StartImprove(this));
+        var inQa = board.InQa(card);
         MoveTargets = [
-            new MoveTarget(agent is null ? "Work on this with an agent" : "Open its agent", agent is null ? WorkOnCommand : OpenAgentCommand),
+            new MoveTarget(agent is not null ? "Open its agent" : inQa ? "▶ Get it running for me to try" : "Work on this with an agent", agent is null ? WorkOnCommand : OpenAgentCommand),
+            // sending back takes notes, typed in the card's panel
+            .. agent is null && inQa ? [new MoveTarget("↩ Send back with notes…", new RelayCommand(() => board.Open(this)))] : Array.Empty<MoveTarget>(),
             .. agent is null ? [new MoveTarget("✦ Improve this card (an agent fills it out)", ImproveCommand)] : Array.Empty<MoveTarget>(),
             .. (agent is null ? board.FlowList() : []).Select(f => new MoveTarget("Run flow: " + f.Name, new RelayCommand(() => board.StartFlow(this, f)))),
             .. lists.Select(l => new MoveTarget("Move to " + l.Name, new RelayCommand(() => board.Move(this, l.Id)))),
@@ -755,6 +784,12 @@ public partial class CardEditor : ObservableObject
     /// <summary>The card's live agent, looked up now: the panel can outlast the agent (forgotten while it's open).</summary>
     bool HasAgent => _card is not null && (_board.AgentFor?.Invoke(_card.Id) is not null);
     public bool CanWorkOn => _card is not null && !HasAgent;
+    /// <summary>The card is in the board's QA column: Work on gets it running to try, and it can be sent back.</summary>
+    public bool InQa => _card is not null && _board.InQa(_card.Card);
+    public bool CanSendBack => InQa && CanWorkOn;
+    public string WorkOnText => InQa ? "▶ Get it running to try" : "▶ Work on this";
+    /// <summary>What's wrong, typed while trying a card in QA: it goes into the card and to the agent that reworks it.</summary>
+    [ObservableProperty] public partial string SendBackNotes { get; set; } = "";
     /// <summary>A button per flow, to run it on this card.</summary>
     public IReadOnlyList<MoveTarget> FlowTargets { get; private set; } = [];
 
@@ -782,6 +817,7 @@ public partial class CardEditor : ObservableObject
         FlowTargets = MakeFlowTargets();
         OnPropertyChanged(nameof(FlowTargets));
         OnPropertyChanged(nameof(CanWorkOn));
+        OnPropertyChanged(nameof(CanSendBack));
     }
 
     IEnumerable<string> LabelList() => LabelsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -838,6 +874,16 @@ public partial class CardEditor : ObservableObject
         if (_card is null) return;
         _board.Editor = null;
         _board.StartWork(_card);
+    }
+
+    /// <summary>Send a card in QA back (WOR-0079): the notes go into the card and an agent reworks it from them.
+    /// The panel closes first, so a Save here can't write over what the agent writes.</summary>
+    [RelayCommand]
+    void SendBack()
+    {
+        if (_card is null) return;
+        if (_board.SendBack(_card, SendBackNotes) is { } error) { Error = error; return; }
+        _board.Editor = null;
     }
 
     /// <summary>An agent rounds the card out. The panel closes first, so a Save here can't write over what it writes.</summary>
