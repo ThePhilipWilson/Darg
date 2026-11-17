@@ -194,7 +194,7 @@ public partial class MainViewModel
         if (p.Board is null || p.Agents is null) throw new ApiError($"{p.Name} needs a board and agents for that.");
         var id = a.Need("card");
         if (p.Board.Show(id) is not { } card) throw new ApiError($"No card {id} on {p.Name}'s boards.");
-        if (!p.Board.InQa(card.Card)) throw new ApiError($"{id} isn't in the QA column ({card.Card.Status}); only a card in QA is sent back.");
+        if (!p.Board.InQa(card.Card) && !p.Board.InAttention(card.Card)) throw new ApiError($"{id} isn't in the QA or needs-attention column ({card.Card.Status}); only a card there is sent back.");
         if (p.Board.SendBack(card, a.Need("notes")) is { } error) throw new ApiError(error);
         return p.Agents.ForCard(id) is { } started ? $"Sent {id} back; \"{started.Name}\" (id {started.Id}) is on it." : $"Sent {id} back.";
     }

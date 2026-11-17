@@ -461,6 +461,16 @@ public partial class ProjectViewModel : ObservableObject
             Board.Reloaded += Agents.RefreshCards;
             Reports!.OpenCard = id => { if (!Board.OpenById(id)) return false; Section = Section.Board; return true; };
             Agents.RefreshCards();
+            // a card landing in Needs Attention gets its decision report, whoever moved it (WOR-0092)
+            Board.NeedsAttention = (card, file) =>
+            {
+                var folder = Reports!.Folder; var repo = CardFolder(card);
+                _ = Task.Run(() => { try { DecisionReport.Write(folder, card, file, repo, DateTime.Now, TimeSpan.FromMinutes(2)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
+            };
+            Board.ReportFor = id => Reports!.LatestFor(id);
+            Board.OpenReport = file => { Reports!.Show(file); Section = Section.Reports; };
+            Reports!.ApproveCard = Board.Approve;
+            Reports.SendCardBack = Board.SendBackById;
             // a card looks up its agent only when the board rebuilds: forgetting the agent frees the card now
             Agents.Forgotten += a => { if (a.CardId is { } card) Board.AgentGone(card); };
             Board.OpenAgent = a => { Agents.Selected = a; Section = Section.Agents; };
@@ -477,7 +487,7 @@ public partial class ProjectViewModel : ObservableObject
                 var repo = Directory.Exists(Path.Combine(folder, ".git")) || File.Exists(Path.Combine(folder, ".git")) ? folder : null;
                 var commits = Core.Commits.For(Config, folder) is { } rule ? Core.Commits.Describe(rule, folder) : null;
                 // done and a report when it's sure, the board's QA column when I should look (WOR-0061)
-                var finish = ReportStore.Rules(Reports!.Folder, card, BoardColumns.Qa(Board.Columns), agentId);
+                var finish = ReportStore.Rules(Reports!.Folder, card, BoardColumns.Qa(Board.Columns), agentId, AttentionColumn.Find(Board.Columns));
                 return AgentsViewModel.CardPrompt(Name, card, file, others, repo, commits, finish);
             }
             // what picks a card agent's model profile: the card's words, type and labels, not the house rules around them
