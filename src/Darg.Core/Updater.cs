@@ -83,6 +83,11 @@ public static class Updater
     /// <summary>Where an update is built before it replaces the install.</summary>
     public static string StagingFolder(string installFolder) => Path.TrimEndingDirectorySeparator(installFolder) + ".next";
 
+    /// <summary>Has the repo changed since the update waiting in the staging folder was built (WOR-0104)? Then
+    /// restarting into it would leave those changes out, so the menu offers to build again.</summary>
+    public static bool StagedBuildIsStale(string repo, string installFolder) =>
+        HasChanges(repo, StagingFolder(installFolder)) == true;
+
     public static string RuntimeId =>
         OperatingSystem.IsWindows() ? "win-x64" : OperatingSystem.IsMacOS() ? "osx-arm64" : "linux-x64";
 
