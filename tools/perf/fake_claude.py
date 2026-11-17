@@ -16,9 +16,17 @@ log_file = os.environ.get("FAKE_LOG")
 def log(kind, **fields):
     if not log_file:
         return
+    line = json.dumps(dict(kind=kind, pid=os.getpid(), **fields)) + "\n"
+    # several fakes (an agent and a model pick) open the log at once, and Windows refuses the second open
+    # for a moment: retry, and never let the log take the fake down with it
     with lock:
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(dict(kind=kind, pid=os.getpid(), **fields)) + "\n")
+        for _ in range(100):
+            try:
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write(line)
+                return
+            except OSError:
+                time.sleep(0.02)
 
 def emit(o):
     with lock:

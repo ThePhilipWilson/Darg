@@ -25,7 +25,7 @@ public class CardWorkTests
         Assert.Equal(AgentPurposes.Work, agent.Purpose);
         Assert.Equal(Section.Board, app.Project.Section);
         Assert.Equal("In Progress", app.Read(card.Id).Status);
-        await DargApp.Until(() => app.Prompts().Count > 0, "the agent to be sent its prompt");
+        await app.Until(() => app.Prompts().Count > 0, "the agent to be sent its prompt");
         var prompt = app.Prompts()[0];
         Assert.Contains(card.Id, prompt);
         Assert.Contains("Card file:", prompt);
@@ -39,7 +39,7 @@ public class CardWorkTests
         var card = app.Card("fix the logo aliasing", "To Do");
         await app.Start();
         await app.Api("work-on", new { project = "proj", card = card.Id });
-        await DargApp.Until(() => app.ClaudeCalls().Any(c => (string?)c["kind"] == "start"), "the agent's process to start");
+        await app.Until(() => app.ClaudeCalls().Any(c => (string?)c["kind"] == "start"), "the agent's process to start");
 
         var args = app.ClaudeCalls().First(c => (string?)c["kind"] == "start")["args"]!.AsArray().Select(a => (string)a!).ToList();
         Assert.Contains("--permission-prompt-tool", args);
@@ -60,7 +60,7 @@ public class CardWorkTests
         await app.Start();
         await app.Api("work-on", new { project = "proj", card = card.Id });
         var agent = app.Agents.ForCard(card.Id)!;
-        await DargApp.Until(() => agent.State == AgentState.Idle, "the fake agent's turn to end");
+        await app.Until(() => agent.State == AgentState.Idle, "the fake agent's turn to end");
         Assert.False(agent.IsFailed);
         await DargApp.Settle(300);
         Assert.Empty(Sandbox.Notifications);
@@ -83,7 +83,7 @@ public class CardWorkTests
         var agent = app.Agents.ForCard(card.Id);
         Assert.NotNull(agent);
         Assert.Equal(AgentPurposes.Rework, agent.Purpose);
-        await DargApp.Until(() => app.Prompts().Count > 0, "the rework agent to be sent its prompt");
+        await app.Until(() => app.Prompts().Count > 0, "the rework agent to be sent its prompt");
         Assert.StartsWith("This card came back from QA.", app.Prompts()[0]);
         Assert.Contains("still jagged at 150% zoom", app.Prompts()[0]);
     }
@@ -111,14 +111,14 @@ public class CardWorkTests
             await app.Start();
             await app.Api("send-back", new { project = "proj", card = card.Id, notes = "still jagged" });
             var rework = app.Agents.ForCard(card.Id)!;
-            await DargApp.Until(() => rework.State == AgentState.Working, "the rework agent to start working");
+            await app.Until(() => rework.State == AgentState.Working, "the rework agent to start working");
 
             // the agent puts the card back in QA mid-turn, as a real one does as its last steps
             BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("QA Ready"));
             await DargApp.Settle(1000);
             Assert.DoesNotContain(app.Agents.Agents, a => a.Purpose == AgentPurposes.Qa); // not while it's still working
 
-            await DargApp.Until(() => app.Agents.Agents.Any(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Qa),
+            await app.Until(() => app.Agents.Agents.Any(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Qa),
                 "a QA agent on the card once the rework turn ended");
             Assert.Equal(AgentState.Idle, rework.State);
         }
@@ -134,7 +134,7 @@ public class CardWorkTests
         await app.Api("work-on", new { project = "proj", card = card.Id });
         var agent = app.Agents.ForCard(card.Id)!;
         BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("QA Ready"));
-        await DargApp.Until(() => agent.State == AgentState.Idle, "the agent's turn to end");
+        await app.Until(() => agent.State == AgentState.Idle, "the agent's turn to end");
         await DargApp.Settle(1500);
         Assert.DoesNotContain(app.Agents.Agents, a => a.Purpose == AgentPurposes.Qa);
     }
