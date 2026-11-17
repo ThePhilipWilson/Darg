@@ -478,6 +478,8 @@ public partial class ProjectViewModel : ObservableObject
             // a card agent shows its card's state: "Complete, pending removal" once the card is done
             Agents.CardIsDone = Board.IsDone;
             Board.Reloaded += Agents.RefreshCards;
+            Reports!.StoryMap = Board.CardBoards;
+            Reports.Reload();
             Reports!.OpenCard = id => { if (!Board.OpenById(id)) return false; Section = Section.Board; return true; };
             Agents.RefreshCards();
             // a card landing in Needs Attention gets its decision report, whoever moved it (WOR-0092)

@@ -15,12 +15,73 @@ namespace Darg.Core;
 /// <param name="Cnr">Could not reproduce (<c>status: cnr</c>, WOR-0109): a bug card found already fixed or not
 /// reproducible; listed with the investigations, since nothing was changed.</param>
 public sealed record AgentReport(string File, string Card, string Title, string Agent, IReadOnlyList<string> Commits,
-    string Repo, string Date, bool Read, string Body, bool Qa = false, bool Investigation = false, string Decision = "", bool Cnr = false)
+    string Repo, string Date, bool Read, string Body, bool Qa = false, bool Investigation = false, string Decision = "", bool Cnr = false, string Story = "")
 {
+    /// <summary>Done and settled (WOR-0113): a QA report, or a decision report nobody has settled, still needs the person, so it stays in the main list.</summary>
+    public bool Archivable => !Qa && Decision != DecisionReport.Pending;
     /// <summary>Which of the three lists it belongs to (WOR-0091): QA wins, then investigation, else a finished task.</summary>
     public ReportKind Kind => Qa ? ReportKind.Qa : Investigation ? ReportKind.Investigation : ReportKind.Finished;
     public string Id => Path.GetFileNameWithoutExtension(File);
     public string Heading => Card.Length > 0 && Title.Length > 0 ? $"{Card}: {Title}" : Title.Length > 0 ? Title : Card.Length > 0 ? Card : Id;
+}
+
+/// <summary>Story archiving for done reports (WOR-0113): a story's reports (the board their cards are on) move together into
+/// <c>reports/archive/&lt;story&gt;/</c>, out of the main list, and can come back. A folder inside reports, so a card agent's
+/// access to reports covers it, and <see cref="ReportStore.List"/> (top level only) no longer shows them.</summary>
+public static class ReportArchive
+{
+    public const string FolderName = "archive";
+    public static string Folder(string reportsFolder) => Path.Combine(reportsFolder, FolderName);
+
+    static string Safe(string s) => string.Concat(s.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
+
+    /// <summary>Every archived report, newest first, its story the folder it is in.</summary>
+    public static List<AgentReport> List(string reportsFolder)
+    {
+        var root = Folder(reportsFolder);
+        if (!Directory.Exists(root)) return [];
+        var all = new List<AgentReport>();
+        foreach (var dir in Directory.GetDirectories(root))
+            foreach (var f in Directory.GetFiles(dir, "*.md"))
+            {
+                try { all.Add(ReportStore.Parse(File.ReadAllText(f), f) with { Story = Path.GetFileName(dir) }); }
+                catch (IOException) { }
+            }
+        return all.OrderByDescending(r => r.Date, StringComparer.Ordinal).ThenByDescending(r => r.Id, StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>Move reports into a story's archive folder; returns how many moved. Reports that still need the person are left.</summary>
+    public static int Archive(string reportsFolder, string story, IEnumerable<AgentReport> reports)
+    {
+        var dir = Path.Combine(Folder(reportsFolder), Safe(story.Length > 0 ? story : "No story"));
+        var n = 0;
+        foreach (var r in reports.Where(r => r.Archivable))
+        {
+            Directory.CreateDirectory(dir);
+            var to = Path.Combine(dir, Path.GetFileName(r.File));
+            if (File.Exists(to)) continue;
+            File.Move(r.File, to);
+            n++;
+        }
+        return n;
+    }
+
+    /// <summary>Move archived reports back into the main list; returns how many moved.</summary>
+    public static int Restore(string reportsFolder, IEnumerable<AgentReport> reports)
+    {
+        var n = 0;
+        foreach (var r in reports)
+        {
+            var to = Path.Combine(reportsFolder, Path.GetFileName(r.File));
+            if (File.Exists(to)) continue;
+            File.Move(r.File, to);
+            n++;
+        }
+        var root = Folder(reportsFolder);
+        if (Directory.Exists(root))
+            foreach (var d in Directory.GetDirectories(root)) if (Directory.GetFileSystemEntries(d).Length == 0) Directory.Delete(d);
+        return n;
+    }
 }
 
 /// <summary>The three kinds of report the Reports section divides into (WOR-0091).</summary>

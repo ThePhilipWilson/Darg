@@ -33,6 +33,57 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     ReportKind? KindShown => KindIndex switch { 1 => ReportKind.Finished, 2 => ReportKind.Investigation, 3 => ReportKind.Qa, _ => null };
     [ObservableProperty] public partial string Status { get; set; } = "";
 
+    /// <summary>The story filter (WOR-0113): a story is the board a report's card is on. "All stories", then each with its count.</summary>
+    public ObservableCollection<string> Stories { get; } = [AllStories];
+    const string AllStories = "All stories";
+    List<string> _storyNames = [];
+    [ObservableProperty] public partial int StoryIndex { get; set; }
+    partial void OnStoryIndexChanged(int value) { if (value >= 0 && !_relabel) Apply(); }
+    string? StoryShown => StoryIndex > 0 && StoryIndex <= _storyNames.Count ? _storyNames[StoryIndex - 1] : null;
+    /// <summary>Set by the project: each card's board by card id, read when the list loads.</summary>
+    public Func<IReadOnlyDictionary<string, string>>? StoryMap { get; set; }
+    Dictionary<string, string> _map = new(StringComparer.OrdinalIgnoreCase);
+    string StoryOf(AgentReport r) => r.Story.Length > 0 ? r.Story : _map.GetValueOrDefault(r.Card, "No story");
+
+    /// <summary>Browse the archive instead of the main list: finished stories' reports, pulled out of the way.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ArchiveToggleText), nameof(CanArchive), nameof(CanRestore))] public partial bool ShowArchived { get; set; }
+    partial void OnShowArchivedChanged(bool value) { StoryIndex = 0; Apply(); }
+    public string ArchiveToggleText => ShowArchived ? "← Back to reports" : $"Archive ({_archived.Count})";
+    public bool CanArchive => !ShowArchived && StoryShown is not null;
+    public bool CanRestore => ShowArchived;
+    List<AgentReport> _archived = [];
+    [RelayCommand] void ToggleArchived() => ShowArchived = !ShowArchived;
+
+    /// <summary>Move every finished report of the picked story into the archive.</summary>
+    [RelayCommand]
+    void ArchiveStory()
+    {
+        if (StoryShown is not { } story) { Status = "Pick a story first."; return; }
+        try
+        {
+            var n = ReportArchive.Archive(Folder, story, _all.Where(r => StoryOf(r) == story));
+            Status = n == 0 ? $"Nothing to archive in {story}: its reports are QA or waiting for a decision." : $"Archived {n} {story} {(n == 1 ? "report" : "reports")}.";
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Can't archive: {e.Message}"; }
+        StoryIndex = 0;
+        Reload();
+    }
+
+    /// <summary>Bring the picked story's archived reports back (all of them with no story picked).</summary>
+    [RelayCommand]
+    void RestoreStory()
+    {
+        var story = StoryShown;
+        try
+        {
+            var n = ReportArchive.Restore(Folder, _archived.Where(r => story is null || r.Story == story));
+            Status = $"Restored {n} {(n == 1 ? "report" : "reports")}.";
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Can't restore: {e.Message}"; }
+        StoryIndex = 0;
+        Reload();
+    }
+
     /// <summary>Raised with every report after each reload: the agents that wrote them can go.</summary>
     public event Action<IReadOnlyList<AgentReport>>? Loaded;
     /// <summary>Show a card on the board (set by the project); false: no such card there.</summary>
@@ -45,13 +96,16 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial string DecisionNotes { get; set; } = "";
 
     /// <summary>The newest report for a card (its file), from the last load.</summary>
-    public string? LatestFor(string card) => _all.FirstOrDefault(r => r.Card == card)?.File;
+    public string? LatestFor(string card) => (_all.FirstOrDefault(r => r.Card == card) ?? _archived.FirstOrDefault(r => r.Card == card))?.File;
 
     /// <summary>Select a report by file, showing the list unfiltered if it was hidden.</summary>
     public void Show(string file)
     {
         Reload();
         UnreadOnly = false;
+        ShowArchived = _archived.Any(r => r.File == file);
+        KindIndex = 0;
+        StoryIndex = 0;
         Selected = Reports.FirstOrDefault(r => r.Report.File == file);
     }
 
@@ -126,6 +180,10 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     {
         using var timing = StallWatch.Shared.Section("Reports.Reload");
         _all = ReportStore.List(Folder);
+        _archived = ReportArchive.List(Folder);
+        try { _map = new Dictionary<string, string>(StoryMap?.Invoke() ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); } catch (IOException) { }
+        OnPropertyChanged(nameof(ArchiveToggleText));
+        if (ShowArchived && _archived.Count == 0) ShowArchived = false;
         Apply();
         Loaded?.Invoke(_all);
     }
@@ -135,9 +193,13 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     void Apply()
     {
         var keep = Selected?.Report.File;
-        RelabelKinds();
+        var source = ShowArchived ? _archived : _all;
+        RelabelStories(source);
+        RelabelKinds(source);
+        OnPropertyChanged(nameof(CanArchive));
         var kind = KindShown;
-        var shown = _all.Where(r => (kind is null || r.Kind == kind) && (!UnreadOnly || !r.Read || r.File == keep)).ToList();
+        var story = StoryShown;
+        var shown = source.Where(r => (kind is null || r.Kind == kind) && (story is null || StoryOf(r) == story) && (!UnreadOnly || !r.Read || r.File == keep)).ToList();
         Reports.Clear();
         foreach (var r in shown) Reports.Add(new ReportRow(r));
         Selected = Reports.FirstOrDefault(r => r.Report.File == keep);
@@ -148,10 +210,10 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Put each kind's count in its label, keeping the pick (replacing an item can clear the selection).</summary>
-    void RelabelKinds()
+    void RelabelKinds(List<AgentReport> source)
     {
-        string[] labels = [$"{AllLabel} ({_all.Count})", $"{FinishedLabel} ({_all.Count(r => r.Kind == ReportKind.Finished)})",
-            $"{InvestigationLabel} ({_all.Count(r => r.Kind == ReportKind.Investigation)})", $"{QaLabel} ({_all.Count(r => r.Kind == ReportKind.Qa)})"];
+        string[] labels = [$"{AllLabel} ({source.Count})", $"{FinishedLabel} ({source.Count(r => r.Kind == ReportKind.Finished)})",
+            $"{InvestigationLabel} ({source.Count(r => r.Kind == ReportKind.Investigation)})", $"{QaLabel} ({source.Count(r => r.Kind == ReportKind.Qa)})"];
         var pick = KindIndex;
         _relabel = true;
         for (var i = 0; i < labels.Length; i++) if (Kinds[i] != labels[i]) Kinds[i] = labels[i];
@@ -159,6 +221,20 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
         if (KindIndex != pick) KindIndex = pick;
     }
     bool _relabel;
+
+    /// <summary>The stories of the list shown, each with its count, keeping the pick by name.</summary>
+    void RelabelStories(List<AgentReport> source)
+    {
+        var pick = StoryShown;
+        var groups = source.GroupBy(StoryOf).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase).ToList();
+        _relabel = true;
+        _storyNames = groups.Select(g => g.Key).ToList();
+        Stories.Clear();
+        Stories.Add($"{AllStories} ({source.Count})");
+        foreach (var g in groups) Stories.Add($"{g.Key} ({g.Count()})");
+        StoryIndex = pick is not null && _storyNames.IndexOf(pick) is var i and >= 0 ? i + 1 : 0;
+        _relabel = false;
+    }
 
     void Count() => Unread = _all.Count(r => !r.Read);
 

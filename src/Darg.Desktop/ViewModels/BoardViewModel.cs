@@ -298,6 +298,16 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     }
     public void Open(CardViewModel card) => Root.Editor = new CardEditor(this, card);
 
+    /// <summary>Each card's board (its story, WOR-0113), by card id, from the boards on disk.</summary>
+    public Dictionary<string, string> CardBoards()
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (_project.Boards is null) return map;
+        foreach (var b in BoardStore.List(_project.Boards))
+            foreach (var c in BoardStore.ReadCards(Path.Combine(_project.Boards, b))) map.TryAdd(c.Id, b);
+        return map;
+    }
+
     /// <summary>Open a card by its ID, on whichever board holds it (clearing filters that hide it).</summary>
     public bool OpenById(string id)
     {
