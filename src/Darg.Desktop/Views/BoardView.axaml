@@ -267,6 +267,16 @@
             <Button Content="{Binding WorkOnText}" Command="{Binding WorkOnCommand}" IsVisible="{Binding CanWorkOn}"/>
             <Button Content="📋 Report" Command="{Binding OpenReportCommand}" IsVisible="{Binding HasReport}" ToolTip.Tip="Open the report written for this card (its decision report, when it's in Needs Attention)"/>
           </StackPanel>
+          <!-- WOR-0095: start the QA verdict on a card in QA whose agent is done -->
+          <StackPanel Spacing="6" IsVisible="{Binding CanQaVerdict}">
+            <TextBlock Classes="dim small" TextWrapping="Wrap" Text="QA: where does this card go?"/>
+            <WrapPanel>
+              <Button Content="🔔 Needs my attention" Command="{Binding QaToAttentionCommand}" IsVisible="{Binding HasAttentionColumn}" Margin="0,0,8,4"
+                      ToolTip.Tip="Move it to Needs Phil Attention; Darg writes a decision report there"/>
+              <Button Content="✓ Done" Command="{Binding QaDoneCommand}" Margin="0,0,8,4" ToolTip.Tip="It's right: move it to the done column"/>
+              <TextBlock Classes="dim small" VerticalAlignment="Center" Text="Needs more work: say what's wrong below and Send back"/>
+            </WrapPanel>
+          </StackPanel>
           <!-- a card in QA that isn't right: what's wrong goes into the card and to an agent that reworks it (WOR-0079) -->
           <StackPanel Spacing="6" IsVisible="{Binding CanSendBack}">
             <TextBlock Classes="dim small" TextWrapping="Wrap" Text="Tried it and it isn't right? Say what's wrong and send it back:"/>
