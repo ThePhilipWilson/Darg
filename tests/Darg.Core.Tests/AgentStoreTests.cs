@@ -7,6 +7,16 @@ public sealed class AgentStoreTests : IDisposable
     readonly string _dir = Directory.CreateTempSubdirectory("wb-agents-").FullName;
 
     [Fact]
+    public void An_agents_purpose_is_saved_and_an_older_save_has_none()
+    {
+        AgentStore.Save(_dir, new AgentRecord { Id = "q", Purpose = AgentPurposes.Qa });
+        AgentStore.Save(_dir, new AgentRecord { Id = "old" });
+        var list = AgentStore.List(_dir);
+        Assert.Equal(AgentPurposes.Qa, list.Single(r => r.Id == "q").Purpose);
+        Assert.Null(list.Single(r => r.Id == "old").Purpose);
+    }
+
+    [Fact]
     public void Saves_lists_newest_first_and_deletes()
     {
         AgentStore.Save(_dir, new AgentRecord { Id = "a", Name = "old", SessionId = "s1", Updated = new DateTime(2026, 11, 1), Items = [new() { Kind = "user", Text = "hi" }] });

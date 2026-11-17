@@ -35,6 +35,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     /// <summary>Set by the project: the live agent working on a card, if any.</summary>
     public Func<string, AgentViewModel?>? AgentFor { get => _parent is null ? field : _parent.AgentFor; set; }
+    /// <summary>Whether a QA agent (Run QA) is running on a card: Run QA is offered unless one is, whatever other agents the card has (WOR-0110).</summary>
+    public Func<string, bool>? QaRunning { get => _parent is null ? field : _parent.QaRunning; set; }
     /// <summary>Set by the project: start an agent on a card. Passed: the card's file path, the ids of cards
     /// other agents are being started on at the same time, and whether to show the agent.</summary>
     public Action<Card, string, IReadOnlyList<string>, bool>? WorkOn { get => _parent is null ? field : _parent.WorkOn; set; }
@@ -706,7 +708,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         CardViewModel ViewOf(Card c)
         {
             var agent = AgentFor?.Invoke(c.Id);
-            var vm = oldCards.TryGetValue(c.Id, out var old) && old.Agent == agent && old.Card.SameAs(c) && used.Add(old)
+            var vm = oldCards.TryGetValue(c.Id, out var old) && old.Agent == agent && old.QaWasRunning == (QaRunning?.Invoke(c.Id) == true) && old.Card.SameAs(c) && used.Add(old)
                 ? old : new CardViewModel(c, targets, this, agent, OtherBoards);
             vm.IsPicked = _picked.Contains(c.Id);
             return vm;
@@ -1100,12 +1102,15 @@ public sealed partial class CardViewModel : ObservableObject
     public IRelayCommand ImproveCommand { get; }
     public IRelayCommand RunQaCommand { get; }
 
+    /// <summary>A QA agent was running on the card when this was built (its context menu's Run QA depends on it).</summary>
+    public bool QaWasRunning { get; }
     public CardViewModel(Card card, IEnumerable<(string Id, string Name)> lists, BoardViewModel board, AgentViewModel? agent = null,
         IEnumerable<string>? otherBoards = null)
     {
         Card = card;
         Board = board;
         Agent = agent;
+        QaWasRunning = board.QaRunning?.Invoke(card.Id) == true;
         WorkOnCommand = new RelayCommand(() => board.StartWork(this));
         OpenAgentCommand = new RelayCommand(() => { if (Agent is not null) board.OpenAgent?.Invoke(Agent); });
         ImproveCommand = new RelayCommand(() => board.StartImprove(this));
@@ -1113,7 +1118,7 @@ public sealed partial class CardViewModel : ObservableObject
         var inQa = board.InQa(card);
         MoveTargets = [
             new MoveTarget(agent is not null ? "Open its agent" : inQa ? "▶ Get it running for me to try" : "Work on this with an agent", agent is null ? WorkOnCommand : OpenAgentCommand),
-            .. agent is null && inQa ? [new MoveTarget("🧪 Run QA (an agent checks it)", RunQaCommand)] : Array.Empty<MoveTarget>(),
+            .. inQa && !QaWasRunning ? [new MoveTarget("🧪 Run QA (an agent checks it)", RunQaCommand)] : Array.Empty<MoveTarget>(),
             // sending back takes notes, typed in the card's panel
             .. agent is null && (inQa || board.InAttention(card)) ? [
                 new MoveTarget("✓ Approve: move to done", new RelayCommand(() => { if (board.Approve(card.Id) is null) board.Root.Approved?.Invoke(card.Id); })),
@@ -1206,7 +1211,7 @@ public partial class CardEditor : ObservableObject
     /// <summary>The card is in the board's QA column: Work on gets it running to try, and it can be sent back.</summary>
     public bool InQa => _card is not null && _board.InQa(_card.Card);
     public bool InAttention => _card is not null && _board.InAttention(_card.Card);
-    public bool CanRunQa => InQa && CanWorkOn;
+    public bool CanRunQa => InQa && _card is not null && _board.QaRunning?.Invoke(_card.Id) != true;
     [RelayCommand]
     void RunQa()
     {

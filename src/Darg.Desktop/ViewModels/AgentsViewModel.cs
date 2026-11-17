@@ -251,6 +251,10 @@ public partial class AgentsViewModel : ObservableObject
     /// <summary>The newest agent started on a card that hasn't ended.</summary>
     public AgentViewModel? ForCard(string cardId) =>
         Agents.FirstOrDefault(a => a.CardId == cardId && a.State != AgentState.Exited);
+    /// <summary>A QA agent (Run QA) is at work on the card, or waiting on the person: one that has finished its turn
+    /// doesn't count, so Run QA is offered again (WOR-0110).</summary>
+    public bool QaRunningFor(string cardId) =>
+        Agents.Any(a => a.CardId == cardId && a.Purpose == AgentPurposes.Qa && a.State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou);
 
     /// <summary>The flows this project can run: the shared ones (the instance's flows folder) and its own, read again on Reload.</summary>
     public ObservableCollection<Flow> Flows { get; } = [];
@@ -348,7 +352,7 @@ public partial class AgentsViewModel : ObservableObject
             {
                 Kind = JobKinds.Flow, Role = s.Role, Text = $"Role: {s.Role}\n{s.Brief.Trim()}\n\nThe task:\n{(job?.Text ?? task).Trim()}",
             };
-            var a = Start(prompt, cwd, cardId, $"{name} · {s.Role}", stageJob);
+            var a = Start(prompt, cwd, cardId, $"{name} · {s.Role}", stageJob, purpose: AgentPurposes.Flow);
             a.Flow = r;
             return a;
         });
@@ -361,7 +365,7 @@ public partial class AgentsViewModel : ObservableObject
     {
         var prompt = NewPrompt.Trim();
         if (prompt.Length == 0) return;
-        Start(prompt, Folder);
+        Start(prompt, Folder, purpose: AgentPurposes.Chat);
         NewPrompt = "";
     }
 
@@ -369,7 +373,7 @@ public partial class AgentsViewModel : ObservableObject
     /// <param name="id">The agent's id, when its prompt has to name it (a card agent's report does); a new one otherwise.</param>
     /// <param name="dirs">More folders it may work in (--add-dir), beyond the project's repos.</param>
     public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null, AgentJob? job = null, string? id = null,
-        IReadOnlyList<string>? dirs = null)
+        IReadOnlyList<string>? dirs = null, string? purpose = null)
     {
         using var timing = StallWatch.Shared.Section("Agents.Start");
         id ??= NewId();
@@ -380,7 +384,7 @@ public partial class AgentsViewModel : ObservableObject
         var profile = Task.Run(() => ModelProfiles.Pick(ModelProfiles.Load(), forJob));
         var folder = string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd;
         var agent = new AgentViewModel(folder, prompt, cardId, name ?? ChatTitle.Guess(prompt),
-            args: [.. ArtifactArgs(id), .. RepoArgs(folder), .. (dirs ?? []).SelectMany(d => new[] { "--add-dir", d })], id: id, profile: profile) { StoreFolder = _store };
+            args: [.. ArtifactArgs(id), .. RepoArgs(folder), .. (dirs ?? []).SelectMany(d => new[] { "--add-dir", d })], id: id, profile: profile) { StoreFolder = _store, Purpose = purpose };
         Add(agent, select: true);
         agent.Save();
         if (name is null) _ = Retitle(agent, prompt); // a card's agent is already named for the card
@@ -470,6 +474,8 @@ public partial class AgentViewModel : ObservableObject
     public string Id { get; private init; } = Guid.NewGuid().ToString("N")[..10];
     /// <summary>The board card this agent was started on, if any.</summary>
     public string? CardId { get; }
+    /// <summary>What it was started for (<see cref="AgentPurposes"/>); null for one saved before agents had one.</summary>
+    public string? Purpose { get; init; }
     /// <summary>A question, a permission ask, or the end of a long turn (<see cref="Decisions"/>, WOR-0078).</summary>
     public event Action<string, string>? Notify;
     /// <summary>Every question and permission ask has been answered, so the notifications for them are stale (WOR-0094).</summary>
@@ -742,7 +748,7 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>An agent from an earlier run of Darg: its transcript, and its session to resume.</summary>
     public AgentViewModel(AgentRecord r, string storeFolder)
     {
-        Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; SessionId = r.SessionId; Project = r.Project;
+        Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; Purpose = r.Purpose; SessionId = r.SessionId; Project = r.Project;
         _args = r.Args; _created = r.Created; StoreFolder = storeFolder;
         _model = r.Model; _effort = r.Effort; _mode = r.Mode;
         NameDefaultModel(AgentChoices.DefaultModel(Cwd));
@@ -793,7 +799,7 @@ public partial class AgentViewModel : ObservableObject
             // the record is a snapshot taken here; it is written in the background (WOR-0076)
             AgentStore.SaveLater(StoreFolder, new AgentRecord
             {
-                Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Project = Project, SessionId = SessionId, Args = [.. _args],
+                Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Purpose = Purpose, Project = Project, SessionId = SessionId, Args = [.. _args],
                 Model = _model, Effort = _effort, Mode = _mode, ContinueAt = ContinueAt,
                 Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
             });

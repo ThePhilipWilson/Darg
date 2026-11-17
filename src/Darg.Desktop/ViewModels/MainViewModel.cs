@@ -474,6 +474,7 @@ public partial class ProjectViewModel : ObservableObject
         if (Board is not null && Agents is not null)
         {
             Board.AgentFor = Agents.ForCard;
+            Board.QaRunning = Agents.QaRunningFor;
             // a card agent shows its card's state: "Complete, pending removal" once the card is done
             Agents.CardIsDone = Board.IsDone;
             Board.Reloaded += Agents.RefreshCards;
@@ -536,21 +537,24 @@ public partial class ProjectViewModel : ObservableObject
                 var id = AgentsViewModel.NewId();
                 // a card in QA: Work on gets the result running for me to try (WOR-0075), not more work
                 var inQa = Board.InQa(card);
-                Watch(Agents.Start(inQa ? ReportStore.CheckPrompt(Name, card, file) : CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id));
+                Watch(Agents.Start(inQa ? ReportStore.CheckPrompt(Name, card, file) : CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id, purpose: inQa ? AgentPurposes.Qa : AgentPurposes.Work));
                 if (show) Section = Section.Agents;
             };
             // Run QA (WOR-0108): an agent checks the card from its How to check section; the board stays showing
             Board.RunQa = (card, file) =>
             {
                 var id = AgentsViewModel.NewId();
-                Watch(Agents.Start(ReportStore.QaRunPrompt(Name, card, file), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (QA)", job: CardJob(card), id: id));
+                Watch(Agents.Start(ReportStore.QaRunPrompt(Name, card, file), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (QA)", job: CardJob(card), id: id, purpose: AgentPurposes.Qa));
+                // the button comes back once the QA agent's turn ends: the board reads its state again
+                if (Agents.Find(id) is { } qa)
+                    qa.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State)) Board.ReloadAll(); };
             };
             // sent back from QA with notes (WOR-0079): the usual card prompt, after the notes and how to build on the last round
             Board.Rework = (card, file, notes) =>
             {
                 var id = AgentsViewModel.NewId();
                 var prompt = ReportStore.ReworkPreface(notes) + Environment.NewLine + Environment.NewLine + CardPrompt(card, file, [], id);
-                Watch(Agents.Start(prompt, CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (sent back)", job: CardJob(card), id: id));
+                Watch(Agents.Start(prompt, CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (sent back)", job: CardJob(card), id: id, purpose: AgentPurposes.Rework));
                 Section = Section.Agents;
             };
             // not tied to the card (no cardId): once the card is filled out, Work on is free straight away.
@@ -561,7 +565,7 @@ public partial class ProjectViewModel : ObservableObject
                 var folder = Path.GetDirectoryName(file)!;
                 var commits = Core.Commits.For(Config, folder) is { } rule ? Core.Commits.Describe(rule, folder) : null;
                 var prompt = CardImprover.Prompt(Name, card, file, CardImprover.NoteFile(Config.NotesFolder(), card.Description), commits);
-                Agents.Start(prompt, CardFolder(card), name: $"Improve {card.Id} {card.Title}", job: CardJob(card));
+                Agents.Start(prompt, CardFolder(card), name: $"Improve {card.Id} {card.Title}", job: CardJob(card), purpose: AgentPurposes.Improve);
             };
             Board.Flows = () => Agents.Flows;
             Board.RunFlow = (card, file, flow) =>

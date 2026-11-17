@@ -21,6 +21,13 @@ public sealed class ItemRecord
     public List<string>? Images { get; set; }
 }
 
+/// <summary>What an agent was started for (WOR-0110), so a running one can be recognised: a card in QA shows Run QA
+/// unless a QA agent is at work on it, whatever other agents the card has.</summary>
+public static class AgentPurposes
+{
+    public const string Chat = "chat", Work = "work", Qa = "qa", Improve = "improve", Rework = "rework", Flow = "flow";
+}
+
 /// <summary>An agent as saved between runs of Darg: enough to list it, show what it did, and
 /// carry on (Claude Code keeps the conversation itself; --resume with the session id picks it up).</summary>
 public sealed class AgentRecord
@@ -29,6 +36,8 @@ public sealed class AgentRecord
     public string Name { get; set; } = "";
     public string Cwd { get; set; } = "";
     public string? CardId { get; set; }
+    /// <summary>What it was started for (<see cref="AgentPurposes"/>); null: saved before agents had one.</summary>
+    public string? Purpose { get; set; }
     /// <summary>For a Bench chat: the project it was started in (it lists only there). Null: from before chats had one.</summary>
     public string? Project { get; set; }
     public string? SessionId { get; set; }
