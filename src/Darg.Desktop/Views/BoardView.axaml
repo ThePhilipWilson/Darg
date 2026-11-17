@@ -67,6 +67,8 @@
           <TextBlock Text="{Binding PickedText}" IsVisible="{Binding HasPicked}" VerticalAlignment="Center" Foreground="{DynamicResource Accent}"/>
           <Button Classes="primary" Content="{Binding WorkOnPickedText}" Command="{Binding WorkOnPickedCommand}" IsVisible="{Binding CanWorkOnPicked}"
                   ToolTip.Tip="Start an agent on each picked card, all at once in the project's folder; each is told which others are running beside it. Cards that already have an agent are skipped."/>
+          <Button Content="{Binding ImprovePickedText}" Command="{Binding ImprovePickedCommand}" IsVisible="{Binding CanWorkOnPicked}"
+                  ToolTip.Tip="Improve each picked card: an agent per card fills its description out (what's wanted, where in the code, done when), asking you first if the words are unclear. The work itself isn't done. Cards that already have an agent are skipped."/>
           <Button Content="Unpick" Command="{Binding ClearPickedCommand}" IsVisible="{Binding HasPicked}" ToolTip.Tip="Unpick every card (Esc)"/>
           <Button Content="Pick all" Command="{Binding PickAllCommand}"
                   ToolTip.Tip="Pick every card showing (Ctrl+A). A column's own Pick all picks just that column; Ctrl- or Shift-click picks one at a time."/>

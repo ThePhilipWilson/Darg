@@ -386,6 +386,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>"▶ Work on 3", counting only picked cards with no agent on them yet.</summary>
     public string WorkOnPickedText => $"▶ Work on {ToStart}";
     public bool CanWorkOnPicked => ToStart > 0;
+    /// <summary>"✦ Improve 3": the same cards ▶ Work on would start (an agent at work on a card is left to it).</summary>
+    public string ImprovePickedText => $"✦ Improve {ToStart}";
 
     /// <summary>A click on a card: with Ctrl or Shift held, or once anything is picked, it picks or unpicks
     /// the card; otherwise it opens the card.</summary>
@@ -408,6 +410,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         root.OnPropertyChanged(nameof(PickedText));
         root.OnPropertyChanged(nameof(WorkOnPickedText));
         root.OnPropertyChanged(nameof(CanWorkOnPicked));
+        root.OnPropertyChanged(nameof(ImprovePickedText));
     }
 
     /// <summary>Pick every card showing, on every row (the filter, and Show completed, decide what "all" is).</summary>
@@ -467,6 +470,32 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (picked.Count > 1) { Root._notice = $"Started {all.Count} agents on {picked.Count} boards"; Root.Apply(); }
     }
 
+    /// <summary>✦ Improve N (WOR-0099): an Improve agent on every picked card with no agent at work on it, on
+    /// every row, all at once, one per card. The picks are cleared and the board stays showing; the agents are in
+    /// Agents, named "Improve WOR-… title", and any that asks a question notifies.</summary>
+    [RelayCommand]
+    void ImprovePicked()
+    {
+        var picked = Root.Rows.Select(r => (Row: r, Cards: r.Shown().Where(c => c.IsPicked && !c.HasAgent).Select(c => c.Card).ToList()))
+            .Where(p => p.Cards.Count > 0).ToList();
+        if (picked.Count == 0) return;
+        var started = new List<string>();
+        using (StallWatch.Shared.Section("Improve picked"))
+            foreach (var (row, cards) in picked)
+            {
+                row._picked.Clear();
+                foreach (var card in cards)
+                {
+                    try { row.StartImprove(card); }
+                    catch (Exception e) { Root._notice = $"Improving {Ids(started)}; stopped at {card.Id}: {e.Message}"; ApplyAll(); return; }
+                    started.Add(card.Id);
+                }
+            }
+        Root._notice = started.Count == 1 ? $"Improving {started[0]}: its agent is in Agents" : $"Improving {started.Count} cards, an agent each in Agents: {Ids(started)}";
+        ApplyAll();
+        static string Ids(List<string> ids) => ids.Count == 0 ? "none" : string.Join(", ", ids);
+    }
+
     /// <summary>Start agents on cards of the shown board by id, together, as ▶ Work on N does (the API's work-on
     /// with several cards). Cards that already have an agent are left out. Says what was started.</summary>
     public string WorkOnCards(IReadOnlyList<string> ids)
@@ -477,6 +506,20 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (cards.Count == 0) return "None of those cards is on the board without an agent.";
         WorkOnAll(cards);
         return _notice ?? "";
+    }
+
+    /// <summary>Improve agents on cards of the shown board by id, one each, as ✦ Improve N does (the API's
+    /// improve-card with several cards). Cards with an agent at work are left out. Says what was started.</summary>
+    public string ImproveCards(IReadOnlyList<string> ids)
+    {
+        if (_board is null) return "No board is showing.";
+        var cards = ids.Select(id => _board.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
+            .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null).DistinctBy(c => c.Id).ToList();
+        if (cards.Count == 0) return "None of those cards is on the board without an agent.";
+        foreach (var card in cards) StartImprove(card);
+        _notice = cards.Count == 1 ? $"Improving {cards[0].Id}: its agent is in Agents" : $"Improving {cards.Count} cards, an agent each in Agents: {string.Join(", ", cards.Select(c => c.Id))}";
+        Apply();
+        return _notice;
     }
 
     void WorkOnAll(List<Card> cards, IReadOnlyList<string>? alongside = null)
@@ -814,12 +857,14 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     /// <summary>Improve a card (WOR-0073): an agent fills its description out, asking first if the words are
     /// unclear. The card stays where it is and free for Work on once that's done.</summary>
-    public void StartImprove(CardViewModel card)
+    public void StartImprove(CardViewModel card) => StartImprove(card.Card);
+
+    void StartImprove(Card card)
     {
         if (Folder is null || Improve is null) return;
         // the card's panel, left open, would save its old text over what the agent writes
         if (Root.Editor?.CardId == card.Id) Root.Editor = null;
-        Improve(card.Card, Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File)));
+        Improve(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)));
     }
 
     /// <summary>Run a flow on a card: like Work on, it goes to the working column if it was waiting.</summary>
