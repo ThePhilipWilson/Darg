@@ -1027,7 +1027,9 @@ public sealed partial class CardViewModel : ObservableObject
         MoveTargets = [
             new MoveTarget(agent is not null ? "Open its agent" : inQa ? "▶ Get it running for me to try" : "Work on this with an agent", agent is null ? WorkOnCommand : OpenAgentCommand),
             // sending back takes notes, typed in the card's panel
-            .. agent is null && inQa ? [new MoveTarget("↩ Send back with notes…", new RelayCommand(() => board.Open(this)))] : Array.Empty<MoveTarget>(),
+            .. agent is null && (inQa || board.InAttention(card)) ? [
+                new MoveTarget("✓ Approve: move to done", new RelayCommand(() => { if (board.Approve(card.Id) is null) board.Root.Approved?.Invoke(card.Id); })),
+                new MoveTarget("↩ Send back with notes…", new RelayCommand(() => board.Open(this)))] : Array.Empty<MoveTarget>(),
             .. agent is null ? [new MoveTarget("✦ Improve this card (an agent fills it out)", ImproveCommand)] : Array.Empty<MoveTarget>(),
             .. (agent is null ? board.FlowList() : []).Select(f => new MoveTarget("Run flow: " + f.Name, new RelayCommand(() => board.StartFlow(this, f)))),
             .. lists.Select(l => new MoveTarget("Move to " + l.Name, new RelayCommand(() => board.Move(this, l.Id)))),
@@ -1151,7 +1153,7 @@ public partial class CardEditor : ObservableObject
         FlowTargets = MakeFlowTargets();
         OnPropertyChanged(nameof(FlowTargets));
         OnPropertyChanged(nameof(CanWorkOn));
-        OnPropertyChanged(nameof(CanSendBack)); OnPropertyChanged(nameof(CanQaVerdict)); OnPropertyChanged(nameof(HasReport)); OnPropertyChanged(nameof(InAttention));
+        OnPropertyChanged(nameof(CanSendBack)); OnPropertyChanged(nameof(CanQaVerdict)); OnPropertyChanged(nameof(CanToAttention)); OnPropertyChanged(nameof(HasReport)); OnPropertyChanged(nameof(InAttention));
     }
 
     IEnumerable<string> LabelList() => LabelsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -1213,7 +1215,8 @@ public partial class CardEditor : ObservableObject
 
     /// <summary>The QA verdict buttons (WOR-0095): a card in QA with no agent running can be sent to Needs Phil Attention
     /// (its decision report is written by the board's reload), approved to done, or sent back with notes below.</summary>
-    public bool CanQaVerdict => InQa && CanWorkOn;
+    public bool CanQaVerdict => (InQa || InAttention) && CanWorkOn;
+    public bool CanToAttention => InQa && HasAttentionColumn;
     public bool HasAttentionColumn => _board.HasAttentionColumn;
     [RelayCommand]
     void QaToAttention()
