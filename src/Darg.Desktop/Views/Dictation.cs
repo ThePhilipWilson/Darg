@@ -72,9 +72,19 @@ public static class Dictation
             engine.SpeechRecognized += (_, r) =>
             {
                 var text = r.Result.Text;
-                if (r.Result.Confidence < 0.3 || string.IsNullOrWhiteSpace(text)) return;
+                if (string.IsNullOrWhiteSpace(text)) return;
                 Dispatcher.UIThread.Post(() => Insert(box, text));
             };
+            // Feedback, so a silent failure is visible: the button shows the input level, the tooltip what's being heard.
+            engine.AudioLevelUpdated += (_, a) =>
+            {
+                var lvl = a.AudioLevel;
+                Dispatcher.UIThread.Post(() => { if (active == b) b.Content = lvl switch { < 2 => "⏺", < 15 => "🔉", _ => "🔊" }; });
+            };
+            engine.SpeechHypothesized += (_, h) =>
+                Dispatcher.UIThread.Post(() => { if (active == b) ToolTip.SetTip(b, "Hearing: " + h.Result.Text); });
+            engine.SpeechRecognitionRejected += (_, _) =>
+                Dispatcher.UIThread.Post(() => { if (active == b) ToolTip.SetTip(b, "Heard something but couldn't make it out; speak closer or clearer."); });
             engine.RecognizeAsync(RecognizeMode.Multiple);
             active = b;
             Show(b, true);
