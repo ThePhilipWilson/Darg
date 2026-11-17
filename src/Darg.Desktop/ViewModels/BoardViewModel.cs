@@ -466,6 +466,19 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// the first column) if it was waiting in the backlog or the first column, and the agent opens.</summary>
     public void StartWork(CardViewModel card) => StartWork(card.Card, [], show: true, reload: true);
 
+    /// <summary>Make a card for work that starts without one (a drafted README) and start an agent on it, so
+    /// the work is on the board. False when the project has no board to put it on.</summary>
+    public bool StartNewCard(string title, string description, string repo)
+    {
+        if (Folder is null || !File.Exists(Path.Combine(Folder, "board.json"))) return false;
+        Card card;
+        try { card = BoardStore.Create(Folder, title, description, [$"repo:{Path.GetFileName(repo.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}"]); }
+        catch (Exception e) { Status = $"Couldn't make the card: {e.Message}"; return false; }
+        Reload();
+        StartWork(card, [], show: false, reload: true);
+        return true;
+    }
+
     void StartWork(Card card, IReadOnlyList<string> alongside, bool show, bool reload)
     {
         if (Folder is null || _board is null || WorkOn is null) return;

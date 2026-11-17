@@ -184,7 +184,9 @@ public partial class HomeViewModel : ObservableObject
                      " Read the code and any CLAUDE.md first. Say what the project is in a sentence or two, then how to build and run it and how it is laid out." +
                      " If the repo already has a screenshot or logo, show it near the top with a relative path. Keep it short and plain." +
                      " It is shown as the project's Home page in Darg.";
-        _project.Agents.Start(prompt, repo, name: $"README for {Name}");
+        // A card first, so the work shows on the board and the agent is a card agent that files its report.
+        if (_project.Board?.StartNewCard($"README for {Name}", prompt, repo) != true)
+            _project.Agents.Start(prompt, repo, name: $"README for {Name}");
         _project.OpenCommand.Execute(nameof(Section.Agents));
     }
 
