@@ -368,9 +368,13 @@ public partial class NotesViewModel : ObservableObject
     }
 
     /// <summary>Haiku retitles a card just made from a note, in the background (<see cref="TicketTitle"/>); the
-    /// board and wall follow the file change.</summary>
-    public static void Retitle(string board, Card card, string noteText) =>
-        _ = TicketTitle.Retitle(board, card.Id, card.Title, noteText);
+    /// board and wall follow the file change. Then <see cref="Ticketed"/> hears of it.</summary>
+    public void Retitle(string board, Card card, string noteText) =>
+        Ticketed?.Invoke(board, card.Id, TicketTitle.Retitle(board, card.Id, card.Title, noteText));
+
+    /// <summary>Set by the app: a ticket was made on this board, with the task retitling it (the board's story
+    /// placement waits for that, WOR-0087).</summary>
+    public Action<string, string, Task>? Ticketed { get; set; }
 
     /// <summary>Set by the app: hand Fettle a job (the words shown in its chat, the full message). False
     /// when Fettle is busy and nothing was sent.</summary>
@@ -572,7 +576,7 @@ public partial class NoteEditor : ObservableObject
         {
             var note = Current();
             var (_, card) = NoteStore.MakeTicket(_wall.Folder, note, board);
-            NotesViewModel.Retitle(board, card, note.Text);
+            _wall.Retitle(board, card, note.Text);
             _wall.Saved($"Made {card.Id}: {card.Title}");
         }
         catch (Exception e) { Error = e.Message; }

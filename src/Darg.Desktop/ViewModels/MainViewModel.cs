@@ -442,7 +442,9 @@ public partial class ProjectViewModel : ObservableObject
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
             Notes = new NotesViewModel(notes, config.Boards)
             {
-                TicketBoard = () => Board?.Folder,
+                // tickets land on the inbox board, and Haiku moves each to its story's board (WOR-0087)
+                TicketBoard = () => Board?.InboxFolder,
+                Ticketed = (board, id, retitled) => Board?.PlaceLater(board, id, retitled),
                 OpenTicket = id => { if (Board?.OpenById(id) == true) Section = Section.Board; },
             };
         if (config.Uses(Features.Code) && config.Repos.Count > 0) Code = new CodeViewModel(config);
@@ -482,7 +484,7 @@ public partial class ProjectViewModel : ObservableObject
             static AgentJob CardJob(Card card) => new(JobKinds.Card, $"{card.Title}\n\n{card.Description}".Trim(), card.Type, card.Labels);
             // the card shows the agent's state; when the agent ends, the card drops its link
             void Watch(AgentViewModel a) =>
-                a.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State) && a.State == AgentState.Exited) Board.Reload(); };
+                a.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State) && a.State == AgentState.Exited) Board.ReloadAll(); };
             Board.WorkOn = (card, file, alongside, show) =>
             {
                 using var timing = StallWatch.Shared.Section("Board.WorkOn");
@@ -516,9 +518,11 @@ public partial class ProjectViewModel : ObservableObject
                 var current = Agents.Flows.FirstOrDefault(f => f.Name == flow.Name) ?? flow;
                 var run = Agents.RunFlow(current, CardPrompt(card, file, []), $"{card.Id} {card.Title}", cwd: CardFolder(card), cardId: card.Id, job: CardJob(card));
                 // each stage is a new agent: the card follows the one at work
-                run.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(FlowRun.Status)) Board.Reload(); };
+                run.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(FlowRun.Status)) Board.ReloadAll(); };
                 Section = Section.Agents;
             };
+            // the boards were read before their cards' agents could be looked up
+            Board.ReloadAll();
         }
     }
 
