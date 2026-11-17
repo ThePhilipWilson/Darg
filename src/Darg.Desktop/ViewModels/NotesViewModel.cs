@@ -352,6 +352,10 @@ public partial class NotesViewModel : ObservableObject
         List<Card> cards;
         try { cards = NoteStore.MakeTickets(Folder, notes, board); }
         catch (Exception e) { _notice = $"Stopped making tickets: {e.Message}"; Reload(); return; }
+        var texts = notes.ToDictionary(n => n.Id, n => n.Text);
+        foreach (var n in NoteStore.List(Folder))
+            if (cards.FirstOrDefault(c => c.Id == n.Ticket) is { } card && texts.TryGetValue(n.Id, out var text))
+                Retitle(board, card, text);
         _picked.Clear();
         _notice = cards.Count switch
         {
@@ -361,6 +365,11 @@ public partial class NotesViewModel : ObservableObject
         };
         Reload();
     }
+
+    /// <summary>Haiku retitles a card just made from a note, in the background (<see cref="TicketTitle"/>); the
+    /// board and wall follow the file change.</summary>
+    public static void Retitle(string board, Card card, string noteText) =>
+        _ = TicketTitle.Retitle(board, card.Id, card.Title, noteText);
 
     /// <summary>Set by the app: hand Fettle a job (the words shown in its chat, the full message). False
     /// when Fettle is busy and nothing was sent.</summary>
@@ -560,7 +569,9 @@ public partial class NoteEditor : ObservableObject
         if (Text.Trim().Length == 0) { Error = "A note needs some text."; return; }
         try
         {
-            var (_, card) = NoteStore.MakeTicket(_wall.Folder, Current(), board);
+            var note = Current();
+            var (_, card) = NoteStore.MakeTicket(_wall.Folder, note, board);
+            NotesViewModel.Retitle(board, card, note.Text);
             _wall.Saved($"Made {card.Id}: {card.Title}");
         }
         catch (Exception e) { Error = e.Message; }
