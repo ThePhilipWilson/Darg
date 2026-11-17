@@ -6,20 +6,38 @@ using Darg.Core;
 
 namespace Darg.Desktop.ViewModels;
 
-/// <summary>A project's boards: one shown at a time, filtered by text and labels, kept live from disk
-/// (Tatty, Obsidian or an agent changing a card shows here within a moment).</summary>
+/// <summary>A project's boards: the one picked, and any others shown with it a row each (WOR-0087: a board per
+/// story), filtered by text and labels, kept live from disk (Tatty, Obsidian or an agent changing a card shows here
+/// within a moment). Each further row is a BoardViewModel of its own whose <see cref="Root"/> is this one: the
+/// filter, label chips, Show completed, the card panel and the toolbar's picks are the root's.</summary>
 public partial class BoardViewModel : ObservableObject, IDisposable
 {
     readonly ProjectConfig _project;
+    readonly BoardViewModel? _parent;
     FileSystemWatcher? _watch;
     DispatcherTimer? _debounce;
     Board? _board;
 
+    /// <summary>The board section's own view model: this one, or the one whose further row this is.</summary>
+    public BoardViewModel Root => _parent ?? this;
+    /// <summary>The boards on screen, a row each: the picked one first, then the others shown with it.</summary>
+    public ObservableCollection<BoardViewModel> Rows { get; } = [];
+    /// <summary>The others shown with the picked one (kept in the instance, <see cref="ShownBoards"/>).</summary>
+    readonly HashSet<string> _also = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>The other boards, each with a tick for showing it as a row too.</summary>
+    public ObservableCollection<BoardChoice> Choices { get; } = [];
+    /// <summary>A row's header (its board's name) shows once there is more than one row.</summary>
+    [ObservableProperty] public partial bool ShowsHeader { get; set; }
+    public bool IsExtraRow => _parent is not null;
+    /// <summary>Set by the view: a row's height, so several share the screen.</summary>
+    [ObservableProperty] public partial double RowHeight { get; set; } = double.NaN;
+    public string ShowBoardsText => Rows.Count > 1 ? $"⧉ {Rows.Count} boards" : "⧉ Boards";
+
     /// <summary>Set by the project: the live agent working on a card, if any.</summary>
-    public Func<string, AgentViewModel?>? AgentFor { get; set; }
+    public Func<string, AgentViewModel?>? AgentFor { get => _parent is null ? field : _parent.AgentFor; set; }
     /// <summary>Set by the project: start an agent on a card. Passed: the card's file path, the ids of cards
     /// other agents are being started on at the same time, and whether to show the agent.</summary>
-    public Action<Card, string, IReadOnlyList<string>, bool>? WorkOn { get; set; }
+    public Action<Card, string, IReadOnlyList<string>, bool>? WorkOn { get => _parent is null ? field : _parent.WorkOn; set; }
     /// <summary>Picked card ids. Only ever cards that are showing: a filter that hides one unpicks it, so a
     /// batch never touches a card you can't see.</summary>
     readonly HashSet<string> _picked = [];
@@ -27,19 +45,19 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// the file watcher does a moment later, until the filter changes or a card is picked.</summary>
     string? _notice;
     /// <summary>Set by the project: the flows a card can be run through.</summary>
-    public Func<IReadOnlyList<Flow>>? Flows { get; set; }
+    public Func<IReadOnlyList<Flow>>? Flows { get => _parent is null ? field : _parent.Flows; set; }
     /// <summary>Set by the project: run a flow on a card (passed the card's file path).</summary>
-    public Action<Card, string, Flow>? RunFlow { get; set; }
+    public Action<Card, string, Flow>? RunFlow { get => _parent is null ? field : _parent.RunFlow; set; }
     /// <summary>Set by the project: show an agent.</summary>
-    public Action<AgentViewModel>? OpenAgent { get; set; }
+    public Action<AgentViewModel>? OpenAgent { get => _parent is null ? field : _parent.OpenAgent; set; }
     /// <summary>Set by the project: start an agent and show it. Passed: the prompt, its folder, its name and more
     /// folders it may work in.</summary>
-    public Action<string, string, string, IReadOnlyList<string>>? StartAgent { get; set; }
+    public Action<string, string, string, IReadOnlyList<string>>? StartAgent { get => _parent is null ? field : _parent.StartAgent; set; }
     /// <summary>Set by the project: start an agent that rounds a thin card out (passed the card's file path).</summary>
-    public Action<Card, string>? Improve { get; set; }
+    public Action<Card, string>? Improve { get => _parent is null ? field : _parent.Improve; set; }
     /// <summary>Set by the project: start an agent reworking a card sent back from QA (passed the card's file path
     /// and the person's notes, already written into the card).</summary>
-    public Action<Card, string, string>? Rework { get; set; }
+    public Action<Card, string, string>? Rework { get => _parent is null ? field : _parent.Rework; set; }
     FileSystemWatcher? _watchBoards;
 
     public ObservableCollection<string> Boards { get; } = [];
@@ -52,7 +70,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial string Status { get; set; } = "";
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsEditing))] public partial CardEditor? Editor { get; set; }
     public bool IsEditing => Editor is not null;
-    [RelayCommand] void NewCard() { if (Folder is not null) Editor = new CardEditor(this, null); }
+    [RelayCommand] void NewCard() { if (Folder is not null) Root.Editor = new CardEditor(this, null); }
 
     /// <summary>The side panel for making boards: one by hand, or an agent sorting the cards into several.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsMaking))] public partial BoardMaker? Maker { get; set; }
@@ -117,9 +135,12 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             "this is your working folder.",
             "",
             "1. Read every card on every board. Skip Completed cards unless they decide a grouping.",
-            "2. Work out how best to organise them: a handful of boards (usually 2 to 6) that each hold one kind of work someone " +
-            "would sit down to do together (an area of the app, a feature, a kind of task). Every card goes on exactly one board. " +
-            "Keep a board that already fits rather than renaming it.",
+            "2. Work out how best to organise them: a board per story, a handful (usually 2 to 6) that each hold one piece of work " +
+            "someone would name in a line and sit down to do together (a feature, an area of the app). Every card goes on exactly one board. " +
+            "Keep a board that already fits rather than renaming it. " +
+            (StoryBoards.Inbox(boards) is { } inbox
+                ? $"Keep the {inbox} board: it is the inbox, where new cards land before Darg moves each to its story, and it keeps the cards that fit no story."
+                : ""),
             "3. Ask me with AskUserQuestion before changing anything. Put the proposal in the question itself, since I may only see " +
             "the question: each board's name, one line on what it holds, and the card IDs going there. Make your proposal the " +
             "first option, marked (Recommended); add one or two real alternatives (fewer boards, or a different cut) and a " +
@@ -158,10 +179,93 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         }
         if (SelectedBoard is null && Boards.Count > 0) SelectedBoard = Boards[0];
         OnPropertyChanged(nameof(OtherBoards));
+        SyncRows();
     }
 
     /// <summary>The project's other boards, for "Move to board".</summary>
-    public IReadOnlyList<string> OtherBoards => Boards.Where(b => b != SelectedBoard).ToList();
+    public IReadOnlyList<string> OtherBoards => Root.Boards.Where(b => b != SelectedBoard).ToList();
+
+    /// <summary>The rows and the ticks brought up to date with the boards on disk, the picked one and the others shown.</summary>
+    void SyncRows()
+    {
+        if (_parent is not null) return;
+        var others = Boards.Where(b => b != SelectedBoard).ToList();
+        if (!others.SequenceEqual(Choices.Select(c => c.Name)) || Choices.Any(c => c.IsShown != _also.Contains(c.Name)))
+        {
+            Choices.Clear();
+            foreach (var b in others) Choices.Add(new BoardChoice(this, b, _also.Contains(b)));
+        }
+        var want = others.Where(_also.Contains).ToList();
+        foreach (var row in Rows.Skip(1).Where(r => !want.Contains(r.SelectedBoard!)).ToList()) { Rows.Remove(row); row.Dispose(); }
+        for (var i = 0; i < want.Count; i++)
+        {
+            var at = Rows.Skip(1).ToList().FindIndex(r => r.SelectedBoard == want[i]);
+            if (at == i) continue;
+            if (at >= 0) Rows.Move(at + 1, i + 1);
+            else Rows.Insert(i + 1, new BoardViewModel(this, want[i]));
+        }
+        foreach (var r in Rows) r.ShowsHeader = Rows.Count > 1;
+        OnPropertyChanged(nameof(ShowBoardsText));
+        RowsChanged?.Invoke();
+        SyncLabels();
+        ApplyAll();
+    }
+
+    /// <summary>A list on any row, by its <see cref="ListViewModel.Key"/>.</summary>
+    public ListViewModel? ListByKey(string key) => Root.Rows.SelectMany(r => r.Lists).FirstOrDefault(l => l.Key == key);
+
+    /// <summary>Raised when a row comes or goes, so the view shares the height out again.</summary>
+    public event Action? RowsChanged;
+
+    /// <summary>Show a board as a row of its own beside the picked one, or stop showing it.</summary>
+    public void SetShown(string board, bool shown)
+    {
+        if (shown ? !_also.Add(board) : !_also.Remove(board)) return;
+        ShownBoards.Save(_project.Id, _also.Order(StringComparer.OrdinalIgnoreCase));
+        SyncRows();
+    }
+
+    /// <summary>Show every board at once.</summary>
+    [RelayCommand]
+    void ShowAllBoards()
+    {
+        foreach (var b in Boards) _also.Add(b);
+        ShownBoards.Save(_project.Id, _also.Order(StringComparer.OrdinalIgnoreCase));
+        SyncRows();
+    }
+
+    /// <summary>Back to the picked board alone.</summary>
+    [RelayCommand]
+    void ShowOneBoard()
+    {
+        _also.Clear();
+        ShownBoards.Save(_project.Id, []);
+        SyncRows();
+    }
+
+    /// <summary>A row's ✕: stop showing its board.</summary>
+    [RelayCommand] void HideRow() { if (_parent is not null && SelectedBoard is { } b) _parent.SetShown(b, false); }
+
+    /// <summary>The board new cards land on (a note's ticket, + Card on it), from where Haiku moves each to its story's
+    /// board (<see cref="StoryBoards"/>). The picked board while there's only one.</summary>
+    public string? InboxFolder => _project.Boards is null || StoryBoards.Inbox(Root.Boards) is not { } inbox ? Folder : Path.Combine(_project.Boards, inbox);
+
+    /// <summary>A card was just made on <paramref name="boardFolder"/>: if that's the inbox and the project has other
+    /// boards, Haiku moves it to the story it fits once <paramref name="after"/> (its retitling) is done.</summary>
+    public void PlaceLater(string boardFolder, string cardId, Task? after = null)
+    {
+        if (_project.Boards is not { } boards || Root.Boards.Count < 2 || StoryBoards.Inbox(Root.Boards) is not { } inbox) return;
+        if (!string.Equals(Path.GetFullPath(boardFolder).TrimEnd('\\', '/'), Path.GetFullPath(Path.Combine(boards, inbox)).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)) return;
+        var root = Root;
+        _ = Run();
+        async Task Run()
+        {
+            if (after is not null) { try { await after; } catch (Exception) { } }
+            var to = await StoryBoards.Place(boards, inbox, cardId, id => root.AgentFor?.Invoke(id) is not null);
+            if (to is null) return;
+            Dispatcher.UIThread.Post(() => { root._notice = $"Haiku put {cardId} on {to}"; root.ApplyAll(); });
+        }
+    }
 
     /// <summary>Move a card to another of the project's boards (it keeps its ID).</summary>
     public void MoveToBoard(CardViewModel card, string board)
@@ -172,13 +276,13 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _notice = $"Moved {card.Id} to {board}";
         Reload();
     }
-    public void Open(CardViewModel card) => Editor = new CardEditor(this, card);
+    public void Open(CardViewModel card) => Root.Editor = new CardEditor(this, card);
 
     /// <summary>Open a card by its ID, on whichever board holds it (clearing filters that hide it).</summary>
     public bool OpenById(string id)
     {
         if (Show(id) is not { } card) return false;
-        Open(card);
+        card.Board.Open(card);
         return true;
     }
 
@@ -190,14 +294,16 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         {
             if (_project.Boards is null) break;
             if (!BoardStore.ReadCards(Path.Combine(_project.Boards, b)).Any(c => c.Id == id)) continue;
-            if (SelectedBoard != b) SelectedBoard = b;
+            // a board showing as a row stays where it is; another becomes the picked one
+            var row = Rows.FirstOrDefault(r => r.SelectedBoard == b);
+            if (row is null) { SelectedBoard = b; row = this; }
             // a card made a moment ago (a ticket from a note) is on disk before the watcher's debounced
             // reload has run, so the lists don't have it yet: read the board now rather than find nothing
-            if (_board?.AllCards.Any(c => c.Id == id) != true) Reload();
+            if (row._board?.AllCards.Any(c => c.Id == id) != true) row.Reload();
             Filter = "";
             foreach (var l in Labels) l.Mode = ChipMode.Off;
-            if (!ShowCompleted && _board?.Lists[Board.Completed].Any(c => c.Id == id) == true) ShowCompleted = true;
-            return Lists.SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == id);
+            if (!ShowCompleted && row._board?.Lists[Board.Completed].Any(c => c.Id == id) == true) ShowCompleted = true;
+            return row.Lists.SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == id);
         }
         Status = $"No card {id} on this project's boards.";
         return null;
@@ -212,10 +318,23 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public BoardViewModel(ProjectConfig project)
     {
         _project = project;
+        Rows.Add(this);
+        foreach (var b in ShownBoards.Load(project.Id)) _also.Add(b);
         foreach (var b in BoardStore.List(project.Boards)) Boards.Add(b);
         SelectedBoard = Boards.FirstOrDefault();
         if (Boards.Count == 0) Status = project.Boards is null ? "This project has no boards folder set." : $"No boards in {project.Boards}. + Board makes one.";
         WatchBoards();
+        SyncRows();
+    }
+
+    /// <summary>A further row: another board shown with the picked one. Its callbacks are the root's, read through
+    /// (rows kept from the last session are made before the project sets them).</summary>
+    BoardViewModel(BoardViewModel parent, string board)
+    {
+        _project = parent._project;
+        _parent = parent;
+        ShowsHeader = true;
+        SelectedBoard = board;
     }
 
     /// <summary>A board made or removed outside Darg (an agent sorting cards, Tatty) shows in the list.</summary>
@@ -228,14 +347,26 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _watchBoards.Created += Poke; _watchBoards.Deleted += Poke; _watchBoards.Renamed += (s, e) => Poke(s, e);
     }
 
-    partial void OnSelectedBoardChanged(string? value) { _notice = null; OnPropertyChanged(nameof(OtherBoards)); Watch(); Reload(); }
-    partial void OnFilterChanged(string value) { _notice = null; Apply(); }
-    partial void OnShowCompletedChanged(bool value) { _notice = null; Apply(); }
+    partial void OnSelectedBoardChanged(string? value)
+    {
+        _notice = null;
+        OnPropertyChanged(nameof(OtherBoards));
+        Watch();
+        Reload();
+        SyncRows(); // the picked board leaves the rows below it, if it was one
+    }
+    partial void OnFilterChanged(string value) { _notice = null; ApplyAll(); }
+    partial void OnShowCompletedChanged(bool value) { _notice = null; ApplyAll(); }
 
-    public bool HasPicked => _picked.Count > 0;
-    public string PickedText => _picked.Count == 1 ? "1 picked" : $"{_picked.Count} picked";
+    /// <summary>Every row through the filter again.</summary>
+    void ApplyAll() { foreach (var r in Root.Rows) r.Apply(); }
+
+    // picks are each row's own, but the toolbar counts and acts on them all
+    int PickedCount => Root.Rows.Sum(r => r._picked.Count);
+    public bool HasPicked => PickedCount > 0;
+    public string PickedText => PickedCount == 1 ? "1 picked" : $"{PickedCount} picked";
     IEnumerable<CardViewModel> Shown() => Lists.SelectMany(l => l.Cards);
-    int ToStart => Shown().Count(c => c.IsPicked && !c.HasAgent);
+    int ToStart => Root.Rows.Sum(r => r.Shown().Count(c => c.IsPicked && !c.HasAgent));
     /// <summary>"▶ Work on 3", counting only picked cards with no agent on them yet.</summary>
     public string WorkOnPickedText => $"▶ Work on {ToStart}";
     public bool CanWorkOnPicked => ToStart > 0;
@@ -246,7 +377,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     {
         const Avalonia.Input.KeyModifiers pick = Avalonia.Input.KeyModifiers.Control | Avalonia.Input.KeyModifiers.Shift | Avalonia.Input.KeyModifiers.Meta;
         if (!HasPicked && (keys & pick) == 0) { Open(card); return; }
-        Editor = null;
+        Root.Editor = null;
         _notice = null;
         card.IsPicked = !card.IsPicked;
         if (card.IsPicked) _picked.Add(card.Id); else _picked.Remove(card.Id);
@@ -255,28 +386,32 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     void PickedChanged()
     {
-        OnPropertyChanged(nameof(HasPicked));
-        OnPropertyChanged(nameof(PickedText));
-        OnPropertyChanged(nameof(WorkOnPickedText));
-        OnPropertyChanged(nameof(CanWorkOnPicked));
         foreach (var l in Lists) l.PickedChanged();
+        var root = Root;
+        root.OnPropertyChanged(nameof(HasPicked));
+        root.OnPropertyChanged(nameof(PickedText));
+        root.OnPropertyChanged(nameof(WorkOnPickedText));
+        root.OnPropertyChanged(nameof(CanWorkOnPicked));
     }
 
-    /// <summary>Pick every card showing (the filter, and Show completed, decide what "all" is).</summary>
+    /// <summary>Pick every card showing, on every row (the filter, and Show completed, decide what "all" is).</summary>
     [RelayCommand]
     void PickAll()
     {
-        Editor = null;
-        _notice = null;
-        foreach (var c in Shown()) { c.IsPicked = true; _picked.Add(c.Id); }
-        PickedChanged();
+        Root.Editor = null;
+        foreach (var r in Root.Rows)
+        {
+            r._notice = null;
+            foreach (var c in r.Shown()) { c.IsPicked = true; r._picked.Add(c.Id); }
+            r.PickedChanged();
+        }
     }
 
     /// <summary>Pick every card showing in one column, or unpick them all if they already are.</summary>
     public void PickList(ListViewModel list)
     {
         if (list.Cards.Count == 0) return;
-        Editor = null;
+        Root.Editor = null;
         _notice = null;
         var pick = !list.AllPicked;
         foreach (var c in list.Cards)
@@ -290,21 +425,30 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public void ClearPicked()
     {
-        foreach (var c in Shown()) c.IsPicked = false;
-        _picked.Clear();
-        PickedChanged();
+        foreach (var r in Root.Rows)
+        {
+            foreach (var c in r.Shown()) c.IsPicked = false;
+            r._picked.Clear();
+            r.PickedChanged();
+        }
     }
 
-    /// <summary>Start an agent on every picked card that has none, all at once in the project's folder;
-    /// each is told which other cards are being worked on beside it. The board stays showing, and each
+    /// <summary>Start an agent on every picked card that has none, on every row, all at once in the project's
+    /// folder; each is told which other cards are being worked on beside it. The board stays showing, and each
     /// card shows its agent's state.</summary>
     [RelayCommand]
     void WorkOnPicked()
     {
-        var cards = Shown().Where(c => c.IsPicked && !c.HasAgent).Select(c => c.Card).ToList();
-        if (cards.Count == 0) return;
-        _picked.Clear();
-        WorkOnAll(cards);
+        var picked = Root.Rows.Select(r => (Row: r, Cards: r.Shown().Where(c => c.IsPicked && !c.HasAgent).Select(c => c.Card).ToList()))
+            .Where(p => p.Cards.Count > 0).ToList();
+        if (picked.Count == 0) return;
+        var all = picked.SelectMany(p => p.Cards).Select(c => c.Id).ToList();
+        foreach (var (row, cards) in picked)
+        {
+            row._picked.Clear();
+            row.WorkOnAll(cards, all);
+        }
+        if (picked.Count > 1) { Root._notice = $"Started {all.Count} agents on {picked.Count} boards"; Root.Apply(); }
     }
 
     /// <summary>Start agents on cards of the shown board by id, together, as ▶ Work on N does (the API's work-on
@@ -319,13 +463,14 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         return _notice ?? "";
     }
 
-    void WorkOnAll(List<Card> cards)
+    void WorkOnAll(List<Card> cards, IReadOnlyList<string>? alongside = null)
     {
         using var timing = StallWatch.Shared.Section("Work on picked");
         var started = new List<string>();
+        var together = alongside ?? cards.Select(c => c.Id).ToList();
         foreach (var card in cards)
         {
-            try { StartWork(card, cards.Where(c => c != card).Select(c => c.Id).ToList(), show: false, reload: false); }
+            try { StartWork(card, together.Where(id => id != card.Id).ToList(), show: false, reload: false); }
             catch (Exception e) { _notice = $"Started {Ids(started)}; stopped at {card.Id}: {e.Message}"; Reload(); return; }
             started.Add(card.Id);
         }
@@ -406,8 +551,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// come back), on the board and in the card's panel if it's open.</summary>
     public void AgentGone(string cardId)
     {
-        Reload();
-        if (Editor is { } e && e.CardId == cardId) e.AgentChanged();
+        foreach (var r in Root.Rows) r.Reload();
+        if (Root.Editor is { } e && e.CardId == cardId) e.AgentChanged();
     }
 
     /// <summary>Reload now. A header being edited is given up (this is a click elsewhere: a move, another board).</summary>
@@ -419,19 +564,26 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         using var timing = StallWatch.Shared.Section("Board.Reload");
         try { using var loading = StallWatch.Shared.Section("BoardStore.Load"); _board = BoardStore.Load(Folder); }
         catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
-        var names = _board.AllCards.SelectMany(c => c.Labels).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
-        if (names.SequenceEqual(Labels.Select(l => l.Name))) { Apply(); Reloaded?.Invoke(); return; } // the same labels: the chips stay
+        if (Root.SyncLabels()) ApplyAll(); else Apply();
+        Root.Reloaded?.Invoke();
+    }
+
+    /// <summary>The label chips, one per label on any row's cards; false when they were already those (the chips stay).</summary>
+    bool SyncLabels()
+    {
+        var names = Rows.Where(r => r._board is not null).SelectMany(r => r._board!.AllCards).SelectMany(c => c.Labels)
+            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        if (names.SequenceEqual(Labels.Select(l => l.Name))) return false;
         var was = Labels.ToDictionary(l => l.Name, l => l.Mode, StringComparer.OrdinalIgnoreCase);
-        foreach (var chip in Labels) chip.Changed -= Apply;
+        foreach (var chip in Labels) chip.Changed -= ApplyAll;
         Labels.Clear();
         foreach (var name in names)
         {
             var chip = new LabelChip(name) { Mode = was.GetValueOrDefault(name) };
-            chip.Changed += Apply;
+            chip.Changed += ApplyAll;
             Labels.Add(chip);
         }
-        Apply();
-        Reloaded?.Invoke();
+        return true;
     }
 
     /// <summary>Raised after each reload of the board from disk.</summary>
@@ -467,8 +619,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     {
         if (_board is null) return;
         using var timing = StallWatch.Shared.Section("Board.Apply");
-        var words = Filter.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var (any, all) = LabelChip.Picked(Labels);
+        var root = Root;
+        var words = root.Filter.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var (any, all) = LabelChip.Picked(root.Labels);
         bool Keep(Card c) =>
             LabelFilter.Matches(c.Labels, any, all) &&
             words.All(w => c.Id.Contains(w, StringComparison.OrdinalIgnoreCase) || c.Title.Contains(w, StringComparison.OrdinalIgnoreCase)
@@ -500,7 +653,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         var total = 0;
         foreach (var (id, name) in _board.ListOrder())
         {
-            if (id == Board.Completed && !ShowCompleted) continue;
+            if (id == Board.Completed && !root.ShowCompleted) continue;
             var cards = _board.Lists[id].Where(Keep).Select(ViewOf).ToList();
             total += cards.Count;
             var minimized = _board.Minimized.Contains(id);
@@ -572,7 +725,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     {
         if (Folder is null || Improve is null) return;
         // the card's panel, left open, would save its old text over what the agent writes
-        if (Editor?.CardId == card.Id) Editor = null;
+        if (Root.Editor?.CardId == card.Id) Root.Editor = null;
         Improve(card.Card, Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File)));
     }
 
@@ -596,6 +749,34 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// picked; otherwise just it.</summary>
     public IReadOnlyList<CardViewModel> Carried(CardViewModel card) =>
         card.IsPicked ? Shown().Where(c => c.IsPicked).ToList() : [card];
+
+    /// <summary>Cards dropped on one of this row's lists: moved there, those from another row's board brought over to
+    /// this board first (they keep their ids). A card with a live agent stays on its board: the agent holds its file's path.</summary>
+    public void Drop(IReadOnlyList<CardViewModel> cards, ListViewModel list, string? beforeId)
+    {
+        if (cards.All(c => c.Board == this)) { Move(cards, list.Id, beforeId); return; }
+        if (Folder is null) return;
+        var moved = new List<string>();
+        var stayed = new List<string>();
+        foreach (var c in cards)
+        {
+            try
+            {
+                if (c.Board != this)
+                {
+                    if (c.Board.Folder is not { } from || AgentFor?.Invoke(c.Id) is not null) { stayed.Add(c.Id); continue; }
+                    BoardStore.Transfer(from, Folder, c.Id);
+                    moved.Add(c.Id);
+                }
+                BoardStore.Move(Folder, c.Id, list.Id, beforeId);
+            }
+            catch (Exception e) { stayed.Add($"{c.Id} ({e.Message})"); }
+        }
+        foreach (var from in cards.Select(c => c.Board).Distinct().Where(b => b != this)) from.Reload();
+        _notice = stayed.Count > 0 ? $"Moved {moved.Count} to {SelectedBoard}; left {string.Join(", ", stayed)} where it was (an agent holds it)"
+            : moved.Count == 1 ? $"Moved {moved[0]} to {SelectedBoard}" : $"Moved {moved.Count} cards to {SelectedBoard}";
+        Reload();
+    }
 
     /// <summary>Move several cards to a list together, in the order given, all landing before
     /// <paramref name="beforeId"/> (or at the end); one reload after.</summary>
@@ -630,7 +811,14 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
     }
 
-    public void Dispose() { _watch?.Dispose(); _watchBoards?.Dispose(); }
+    /// <summary>Reload every row (an agent ended: its card may be on any of them).</summary>
+    public void ReloadAll() { foreach (var r in Root.Rows) r.Reload(); }
+
+    public void Dispose()
+    {
+        _watch?.Dispose(); _watchBoards?.Dispose();
+        foreach (var r in Rows.Where(r => r != this)) r.Dispose();
+    }
 }
 
 public enum ChipMode { Off, Any, All }
@@ -686,6 +874,8 @@ public sealed partial class ListViewModel(BoardViewModel board, string id, strin
 {
     public BoardViewModel Board { get; } = board;
     public string Id { get; } = id;
+    /// <summary>The list among every row's (each board has its own c1, c2…): the board's name and the list's id.</summary>
+    public string Key => $"{Board.SelectedBoard}/{Id}";
     public string Name { get; } = name;
     public ObservableCollection<CardViewModel> Cards { get; } = new(cards);
     int all = all;
@@ -741,6 +931,8 @@ public sealed partial class CardViewModel : ObservableObject
     /// <summary>Picked for a batch (a white frame).</summary>
     [ObservableProperty] public partial bool IsPicked { get; set; }
     public Card Card { get; }
+    /// <summary>The row (board) it's on.</summary>
+    public BoardViewModel Board { get; }
     public string Id => Card.Id;
     public string Title => Card.Title;
     public string Priority => Card.Priority;
@@ -763,6 +955,7 @@ public sealed partial class CardViewModel : ObservableObject
         IEnumerable<string>? otherBoards = null)
     {
         Card = card;
+        Board = board;
         Agent = agent;
         WorkOnCommand = new RelayCommand(() => board.StartWork(this));
         OpenAgentCommand = new RelayCommand(() => { if (Agent is not null) board.OpenAgent?.Invoke(Agent); });
@@ -783,6 +976,14 @@ public sealed partial class CardViewModel : ObservableObject
 
 public sealed record MoveTarget(string Label, IRelayCommand Command);
 
+/// <summary>One of the project's other boards, with a tick for showing it as a row beside the picked one.</summary>
+public sealed partial class BoardChoice(BoardViewModel board, string name, bool shown) : ObservableObject
+{
+    public string Name { get; } = name;
+    [ObservableProperty] public partial bool IsShown { get; set; } = shown;
+    partial void OnIsShownChanged(bool value) => board.SetShown(Name, value);
+}
+
 /// <summary>The side panel for making boards: a new one by hand, or an agent sorting the cards into several.</summary>
 public partial class BoardMaker(BoardViewModel board, IEnumerable<string> columns) : ObservableObject
 {
@@ -798,11 +999,11 @@ public partial class BoardMaker(BoardViewModel board, IEnumerable<string> column
     {
         try { board.CreateBoard(Name, Columns.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)); }
         catch (Exception e) { Error = e.Message; return; }
-        board.Maker = null;
+        board.Root.Maker = null;
     }
 
     [RelayCommand] void Sort() => board.SortIntoBoards(Hint.Trim());
-    [RelayCommand] void Cancel() => board.Maker = null;
+    [RelayCommand] void Cancel() => board.Root.Maker = null;
 }
 
 /// <summary>The side panel for a new card, or for reading and editing one.</summary>
@@ -872,7 +1073,7 @@ public partial class CardEditor : ObservableObject
 
     List<MoveTarget> MakeFlowTargets() => _card is not { } card || HasAgent ? [] : _board.FlowList().Select(f => new MoveTarget("▶ " + f.Name, new RelayCommand(() =>
     {
-        _board.Editor = null;
+        _board.Root.Editor = null;
         _board.StartFlow(card, f);
     }))).ToList();
 
@@ -894,17 +1095,18 @@ public partial class CardEditor : ObservableObject
         if (Title.Trim().Length == 0) { Error = "A card needs a title."; return; }
         try
         {
-            if (_card is null) BoardStore.Create(_board.Folder, Title, Description, LabelList(), Priority, Type);
+            // a card made on the inbox goes on to the story board Haiku says it fits (WOR-0087)
+            if (_card is null) _board.PlaceLater(_board.Folder, BoardStore.Create(_board.Folder, Title, Description, LabelList(), Priority, Type).Id);
             else BoardStore.Update(_board.Folder, _card.Id, Title, Description, LabelList(), Priority,
                 // a blank Type stays blank unless it was changed (blank already reads as Task)
                 _card.Card.Type.Length == 0 && Type == CardTypes.Task ? null : Type);
         }
         catch (Exception e) { Error = e.Message; return; }
-        _board.Editor = null;
+        _board.Root.Editor = null;
         _board.Reload();
     }
 
-    [RelayCommand] void Cancel() => _board.Editor = null;
+    [RelayCommand] void Cancel() => _board.Root.Editor = null;
 
     public bool CanDone => _card is not null;
     [ObservableProperty] public partial bool ConfirmingDelete { get; set; }
@@ -916,7 +1118,7 @@ public partial class CardEditor : ObservableObject
     void Done()
     {
         if (_card is null) return;
-        _board.Editor = null;
+        _board.Root.Editor = null;
         _board.MarkDone(_card);
     }
 
@@ -928,7 +1130,7 @@ public partial class CardEditor : ObservableObject
         if (!ConfirmingDelete) { ConfirmingDelete = true; return; }
         try { BoardStore.Delete(_board.Folder, _card.Id); }
         catch (Exception e) { Error = e.Message; return; }
-        _board.Editor = null;
+        _board.Root.Editor = null;
         _board.Reload();
         _board.Status = $"Deleted {_card.Id} (it's in the board's .deleted folder)";
     }
@@ -937,7 +1139,7 @@ public partial class CardEditor : ObservableObject
     void WorkOn()
     {
         if (_card is null) return;
-        _board.Editor = null;
+        _board.Root.Editor = null;
         _board.StartWork(_card);
     }
 
@@ -948,7 +1150,7 @@ public partial class CardEditor : ObservableObject
     {
         if (_card is null) return;
         if (_board.SendBack(_card, SendBackNotes) is { } error) { Error = error; return; }
-        _board.Editor = null;
+        _board.Root.Editor = null;
     }
 
     /// <summary>An agent rounds the card out. The panel closes first, so a Save here can't write over what it writes.</summary>
@@ -956,7 +1158,7 @@ public partial class CardEditor : ObservableObject
     void Improve()
     {
         if (_card is null) return;
-        _board.Editor = null;
+        _board.Root.Editor = null;
         _board.StartImprove(_card);
     }
 }

@@ -22,13 +22,24 @@ public partial class BoardView : UserControl
         };
         _ = new DragLift(this, Overlay, "card", "list",
             itemsOf: list => (list as ListViewModel)?.Cards.Cast<object>().ToList() ?? [],
+            // each row is a board: a card dropped on another row's list goes to that board
             drop: (items, list, before) =>
             {
-                if (DataContext is BoardViewModel board)
-                    board.Move(items.OfType<CardViewModel>().ToList(), list, (before as CardViewModel)?.Id);
+                if (DataContext is BoardViewModel board && board.ListByKey(list) is { } l)
+                    l.Board.Drop(items.OfType<CardViewModel>().ToList(), l, (before as CardViewModel)?.Id);
             },
-            click: (item, keys) => { if (DataContext is BoardViewModel board && item is CardViewModel card) board.Click(card, keys); },
-            carried: item => DataContext is BoardViewModel board && item is CardViewModel card ? board.Carried(card) : [item]);
+            click: (item, keys) => { if (item is CardViewModel card) card.Board.Click(card, keys); },
+            carried: item => item is CardViewModel card ? card.Board.Carried(card) : [item]);
+        // several boards share the height, up to three on screen at once; more scroll
+        RowsScroll.SizeChanged += (_, _) => Fit();
+        BoardViewModel? watched = null;
+        DataContextChanged += (_, _) =>
+        {
+            if (watched is not null) watched.RowsChanged -= Fit;
+            watched = DataContext as BoardViewModel;
+            if (watched is not null) watched.RowsChanged += Fit;
+            Fit();
+        };
         ChipDoubleClicks(this);
         // a column's name: double-click to rename; in the box, Enter saves and Esc leaves it as it was
         AddHandler(DoubleTappedEvent, (_, e) =>
@@ -47,6 +58,15 @@ public partial class BoardView : UserControl
             if (e.Key == Avalonia.Input.Key.A && e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control)) { board.PickAllCommand.Execute(null); e.Handled = true; }
             else if (e.Key == Avalonia.Input.Key.Escape && board.HasPicked) { board.ClearPicked(); e.Handled = true; }
         };
+    }
+
+    void Fit()
+    {
+        if (DataContext is not BoardViewModel board || RowsScroll.Bounds.Height <= 0) return;
+        var h = RowsScroll.Bounds.Height;
+        var n = board.Rows.Count;
+        var each = n <= 1 ? h : Math.Max(320, Math.Floor(h / Math.Min(n, 3)));
+        foreach (var row in board.Rows) row.RowHeight = each;
     }
 
     /// <summary>A double-click on a filter chip makes it "must have" (AND). Seen on the second press (its
