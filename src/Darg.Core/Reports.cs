@@ -141,13 +141,17 @@ public static partial class ReportStore
 
     /// <summary>The prompt for Run QA on a card in QA (WOR-0108): the agent does the checking itself, from the How to check
     /// section, and reports what passed and what didn't. Free of double quotes, angle brackets, ampersands and pipes.</summary>
-    public static string QaRunPrompt(string projectName, Card card, string file) =>
+    public static string QaRunPrompt(string projectName, Card card, string file, string? doneColumn = null, string? attentionColumn = null, string? reworkColumn = null) =>
         $"Work on this card from the {projectName} board: {card.Id}: {card.Title}{Environment.NewLine}Card file: {file}{Environment.NewLine}{Environment.NewLine}" +
         "This card is in QA: the work is done and I want you to QA it for me, not change it. Read the card file, especially its How to check section, " +
         "and the project's CLAUDE.md. Then do the checking yourself as far as you can: build it from the branch or commit the card names " +
         "(in a git worktree of its own if that is not what the main folder is on), run the tests and the commands the section gives, and exercise what it says to look for. " +
-        "Say in one message what you checked and how, what passed, what failed or looks wrong, and what you could not check and why, so I only have to look at that. " +
-        "Change no code and don't move the card or write a report: the verdict is mine. If something won't build or the How to check section is missing, say so plainly.";
+        "Say in one message what you checked and how, what passed, what failed or looks wrong, and what you could not check and why. Change no code. " +
+        "Then, as the last thing you do, move the card on the board by your verdict: " +
+        (doneColumn is not null ? $"everything passed and nothing needs my eyes: set its Status to {doneColumn}, add a Done line with today's date, and move its id into that column in board.json's order; " : "everything passed: leave it where it is; ") +
+        (attentionColumn is not null ? $"it passed but something needs my judgement or you could not check part of it: move it to {attentionColumn} the same way (Darg writes the decision report itself); " : "") +
+        (reworkColumn is not null ? $"something failed or looks wrong: put the findings under a QA notes style list in the card file and move it to {reworkColumn} the same way. " : "something failed: leave it in QA and say so plainly. ") +
+        "If something won't build or the How to check section is missing, say so plainly and move it to " + (reworkColumn ?? attentionColumn ?? "nowhere, leave it") + ".";
 
     /// <summary>What goes before a card agent's usual prompt when the person sends a card back from QA with
     /// notes (WOR-0079): build on the work the How to check section names, fix what the notes say, and give the

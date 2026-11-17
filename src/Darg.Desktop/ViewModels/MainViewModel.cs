@@ -543,11 +543,13 @@ public partial class ProjectViewModel : ObservableObject
             // Run QA (WOR-0108): an agent checks the card from its How to check section; the board stays showing
             Board.RunQa = (card, file) =>
             {
+                if (Agents.QaRunningFor(card.Id)) return;
                 var id = AgentsViewModel.NewId();
-                Watch(Agents.Start(ReportStore.QaRunPrompt(Name, card, file), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (QA)", job: CardJob(card), id: id, purpose: AgentPurposes.Qa));
+                Watch(Agents.Start(ReportStore.QaRunPrompt(Name, card, file, Board.Columns.LastOrDefault()?.Name, AttentionColumn.Find(Board.Columns), Board.Columns.Take(Math.Max(0, Board.Columns.Count - 1)).FirstOrDefault(c => System.Text.RegularExpressions.Regex.IsMatch(c.Name, @"more work|rework|send back", System.Text.RegularExpressions.RegexOptions.IgnoreCase))?.Name), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (QA)", job: CardJob(card), id: id, purpose: AgentPurposes.Qa));
                 // the button comes back once the QA agent's turn ends: the board reads its state again
                 if (Agents.Find(id) is { } qa)
                     qa.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State)) Board.ReloadAll(); };
+                Board.ReloadAll(); // the button goes at once, not when the agent's state next changes
             };
             // sent back from QA with notes (WOR-0079): the usual card prompt, after the notes and how to build on the last round
             Board.Rework = (card, file, notes) =>
