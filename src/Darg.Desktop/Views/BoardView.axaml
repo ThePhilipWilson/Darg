@@ -224,7 +224,14 @@
           <StackPanel Orientation="Horizontal" Spacing="8">
             <Button Classes="primary" Content="{Binding IsNew, Converter={x:Static vm:Bools.CreateOrSave}}" Command="{Binding SaveCommand}"/>
             <Button Content="Close" Command="{Binding CancelCommand}"/>
-            <Button Content="▶ Work on this" Command="{Binding WorkOnCommand}" IsVisible="{Binding CanWorkOn}"/>
+            <Button Content="{Binding WorkOnText}" Command="{Binding WorkOnCommand}" IsVisible="{Binding CanWorkOn}"/>
+          </StackPanel>
+          <!-- a card in QA that isn't right: what's wrong goes into the card and to an agent that reworks it (WOR-0079) -->
+          <StackPanel Spacing="6" IsVisible="{Binding CanSendBack}">
+            <TextBlock Classes="dim small" TextWrapping="Wrap" Text="Tried it and it isn't right? Say what's wrong and send it back:"/>
+            <TextBox Text="{Binding SendBackNotes}" PlaceholderText="What's wrong, what you expected" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80"/>
+            <Button Content="↩ Send back" Command="{Binding SendBackCommand}" HorizontalAlignment="Left"
+                    ToolTip.Tip="Your notes go into the card under QA notes, the card goes back to In Progress, and an agent starts on them: it reads the How to check section, fixes what you say on top of that work, and brings it back to QA"/>
           </StackPanel>
           <Button Content="✦ Improve this card" Command="{Binding ImproveCommand}" IsVisible="{Binding CanWorkOn}"
                   ToolTip.Tip="An agent reads the card, the note it came from and the code, asks you if the words could mean several things, then fills the description out: what's wanted, where it lives, done when. It doesn't do the work, and the card stays where it is."/>

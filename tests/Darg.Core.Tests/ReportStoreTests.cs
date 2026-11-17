@@ -125,6 +125,49 @@ public class ReportStoreTests
     }
 
     [Fact]
+    public void Qa_notes_go_in_a_section_of_their_own_one_dated_entry_per_send_back()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "darg-qanotes-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(Path.Combine(dir, "items"));
+        try
+        {
+            var file = Path.Combine(dir, "items", "WOR-0001 - X.md");
+            File.WriteAllText(file, "# WOR-0001: X\r\n\r\n- **Status:** QA Ready\r\n\r\n## Description\r\n\r\nDo it.\r\n\r\n## How to check\r\n\r\nRun it.\r\n");
+            QaNotes.Add(file, "The button is grey.\n", new DateTime(2026, 11, 17, 9, 5, 0));
+            QaNotes.Add(file, "Still grey.", new DateTime(2026, 11, 17, 10, 0, 0));
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("\n\n\n", text.Replace("\r\n", "\n"));
+            Assert.Contains("\r\n", text); // the file's line endings are kept
+            var t = text.Replace("\r\n", "\n");
+            Assert.Single(System.Text.RegularExpressions.Regex.Matches(t, "## QA notes"));
+            Assert.True(t.IndexOf("## How to check") < t.IndexOf("## QA notes"));
+            Assert.True(t.IndexOf("### 2026-11-17 09:05\n\nThe button is grey.") < t.IndexOf("### 2026-11-17 10:00\n\nStill grey."));
+            // the board still reads the description alone
+            var card = BoardStore.Parse(t, "WOR-0001 - X.md")!;
+            Assert.Equal("Do it.", card.Description);
+
+            // a section after the notes stays after them
+            File.WriteAllText(file, "# WOR-0001: X\n\n## Description\n\nDo it.\n\n## QA notes\n\n### old\n\nA.\n\n## How to check\n\nRun it.\n");
+            QaNotes.Add(file, "B.", new DateTime(2026, 11, 17, 11, 0, 0));
+            t = File.ReadAllText(file);
+            Assert.Contains("### old\n\nA.\n\n### 2026-11-17 11:00\n\nB.\n\n## How to check\n\nRun it.\n", t);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void Rework_preface_carries_the_notes_and_points_at_how_to_check()
+    {
+        var p = ReportStore.ReworkPreface("  The button is grey.  ");
+        Assert.Contains("The button is grey.", p);
+        Assert.Contains("How to check", p);
+        Assert.Contains("## QA notes", p);
+        var own = p.Replace("The button is grey.", "");
+        Assert.DoesNotContain("\"", own);
+        foreach (var c in "<>&|") Assert.DoesNotContain(c, own);
+    }
+
+    [Fact]
     public void Check_prompt_points_at_the_card_and_goes_on_a_command_line()
     {
         var card = new Card("WOR-0075", "QA", "QA Ready", "", "Task", [], "x.md", "");

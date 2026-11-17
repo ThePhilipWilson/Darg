@@ -109,6 +109,19 @@ public static partial class ReportStore
         "the card names, in a git worktree of its own if that is not what the main folder is on, and leave it running. Say in one message what is running, " +
         "from which commit, and what to look at. Change no code and don't move the card. If something won't build or the How to check section is missing, say so plainly.";
 
+    /// <summary>What goes before a card agent's usual prompt when the person sends a card back from QA with
+    /// notes (WOR-0079): build on the work the How to check section names, fix what the notes say, and give the
+    /// next round its own How to check. Free of double quotes, angle brackets, ampersands and pipes in its own words.</summary>
+    public static string ReworkPreface(string notes) =>
+        "This card came back from QA. I tried the work its How to check section describes and it isn't right yet. " +
+        $"What I found (also kept in the card file under {QaNotes.Heading}, newest last):{Environment.NewLine}{Environment.NewLine}" +
+        notes.Trim() + Environment.NewLine + Environment.NewLine +
+        "Read the card's How to check section before anything else: it says what was done and in which commits. " +
+        "Build on that work rather than starting again, fix what my notes say, and leave what already works alone. " +
+        "If a note could mean several things, ask me with AskUserQuestion before changing anything. " +
+        "Going back to QA, replace the How to check section with one for this round (what changed since, the new commits, what to look for) " +
+        $"rather than adding a second one, and leave the {QaNotes.Heading} section as it is.";
+
     static bool IsTrue(string v) => v.Trim().Trim('"', '\'').ToLowerInvariant() is "true" or "yes" or "1";
 
     static (Dictionary<string, string> Fields, string Body) Split(string text)
@@ -146,6 +159,37 @@ public static partial class ReportStore
 
     [GeneratedRegex(@"^read\s*:.*$", RegexOptions.Multiline)]
     private static partial Regex ReadLineRx();
+}
+
+/// <summary>What the person found trying a card in QA (WOR-0079): a <c>## QA notes</c> section in the card file,
+/// below the rest, a dated <c>###</c> entry per send-back, so every round's notes stay with the card. The board
+/// reads only the Description section, so editing the card in Darg leaves these alone.</summary>
+public static class QaNotes
+{
+    public const string Heading = "## QA notes";
+
+    /// <summary>Add a dated entry to the card's QA notes, making the section at the end if it has none.</summary>
+    public static void Add(string file, string notes, DateTime when)
+    {
+        var raw = System.IO.File.ReadAllText(file);
+        var crlf = raw.Contains("\r\n");
+        var text = raw.Replace("\r\n", "\n").TrimEnd('\n');
+        var entry = $"### {when:yyyy-MM-dd HH:mm}\n\n{notes.Replace("\r\n", "\n").Trim()}";
+        var at = Section(text);
+        if (at < 0) text += $"\n\n{Heading}\n\n{entry}\n";
+        else
+        {
+            // the end of the QA notes section: the next ## heading, or the end of the file
+            var next = text.IndexOf("\n## ", at + Heading.Length, StringComparison.Ordinal);
+            var end = next >= 0 ? next : text.Length;
+            text = text[..end].TrimEnd('\n') + $"\n\n{entry}\n" + (next >= 0 ? "\n" + text[(next + 1)..] + "\n" : "");
+        }
+        System.IO.File.WriteAllText(file, crlf ? text.Replace("\n", "\r\n") : text, new UTF8Encoding(false));
+    }
+
+    static int Section(string text) =>
+        text.StartsWith(Heading + "\n", StringComparison.Ordinal) ? 0 : text.IndexOf("\n" + Heading + "\n", StringComparison.Ordinal) is var i and >= 0 ? i + 1 :
+        text.EndsWith("\n" + Heading, StringComparison.Ordinal) ? text.Length - Heading.Length : -1;
 }
 
 public static class BoardColumns

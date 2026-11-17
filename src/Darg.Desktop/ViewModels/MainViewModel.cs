@@ -483,9 +483,17 @@ public partial class ProjectViewModel : ObservableObject
             {
                 var id = AgentsViewModel.NewId();
                 // a card in QA: Work on gets the result running for me to try (WOR-0075), not more work
-                var inQa = BoardColumns.Qa(Board.Columns) is { } qa && BoardStore.PlaceOf(card.Status, Board.Columns) == BoardStore.PlaceOf(qa, Board.Columns);
+                var inQa = Board.InQa(card);
                 Watch(Agents.Start(inQa ? ReportStore.CheckPrompt(Name, card, file) : CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id));
                 if (show) Section = Section.Agents;
+            };
+            // sent back from QA with notes (WOR-0079): the usual card prompt, after the notes and how to build on the last round
+            Board.Rework = (card, file, notes) =>
+            {
+                var id = AgentsViewModel.NewId();
+                var prompt = ReportStore.ReworkPreface(notes) + Environment.NewLine + Environment.NewLine + CardPrompt(card, file, [], id);
+                Watch(Agents.Start(prompt, CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (sent back)", job: CardJob(card), id: id));
+                Section = Section.Agents;
             };
             // not tied to the card (no cardId): once the card is filled out, Work on is free straight away
             Board.Improve = (card, file) =>
