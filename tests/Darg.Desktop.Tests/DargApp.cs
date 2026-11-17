@@ -119,7 +119,7 @@ public sealed class DargApp : IDisposable
     }
 
     /// <summary>Wait until something is true, letting the app run meanwhile; fails the test with <paramref name="what"/> if it never is.</summary>
-    public static async Task Until(Func<bool> condition, string what, int seconds = 30)
+    public static async Task Wait(Func<bool> condition, string what, int seconds = 30)
     {
         var end = DateTime.UtcNow.AddSeconds(seconds);
         while (!condition())
@@ -127,6 +127,39 @@ public sealed class DargApp : IDisposable
             if (DateTime.UtcNow > end) throw new TimeoutException($"Waited {seconds} s for: {what}");
             await Settle(100);
         }
+    }
+
+    /// <summary>As Wait, but a timeout says what the app was doing: so a failure can be read, not rerun.</summary>
+    public async Task Until(Func<bool> condition, string what, int seconds = 30)
+    {
+        try { await Wait(condition, what, seconds); }
+        catch (TimeoutException e) { throw new TimeoutException(e.Message + Environment.NewLine + Diagnose(), e); }
+    }
+
+    /// <summary>The agents (state, what they're doing, their transcript's last lines), what the fake claude logged, and crash.log.</summary>
+    public string Diagnose()
+    {
+        var s = new System.Text.StringBuilder();
+        foreach (var a in _window is null ? [] : Agents.Agents)
+        {
+            s.AppendLine($"agent {a.Id} \"{a.Name}\" card {a.CardId} purpose {a.Purpose}: {a.State} ({a.StateText}) {a.Activity}");
+            foreach (var item in a.Items.TakeLast(5))
+                s.AppendLine("  " + Clip(item switch
+                {
+                    UserItem u => "you: " + u.Text, TextItem t => "agent: " + t.Text,
+                    _ => item.GetType().Name + ": " + item.GetType().GetProperty("Text")?.GetValue(item),
+                }, 200));
+        }
+        s.AppendLine("fake claude log:");
+        foreach (var c in ClaudeCalls()) s.AppendLine($"  {c["kind"]} pid {c["pid"]}: {Clip((string?)c["text"] ?? "", 120)}");
+        if (Crashes() is { Length: > 0 } crash) s.AppendLine("crash.log:" + Environment.NewLine + crash);
+        return s.ToString();
+    }
+
+    static string Clip(string text, int length)
+    {
+        text = text.ReplaceLineEndings(" ");
+        return text.Length <= length ? text : text[..length] + "…";
     }
 
     /// <summary>Save what the window shows as a PNG in this test's folder; returns its path. Agents doing QA
