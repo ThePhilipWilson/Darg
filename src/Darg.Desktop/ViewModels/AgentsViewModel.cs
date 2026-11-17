@@ -162,10 +162,11 @@ public partial class AgentsViewModel : ObservableObject
 
     /// <summary>The reports in the project's folder: every agent that wrote one is forgotten when it's finished, at once if it
     /// is already, else when its turn ends well (one that fails or asks something stays, for the person to see).
-    /// A report that doesn't name its agent stands for the agents on its card that were started before it was written.</summary>
+    /// A report that doesn't name its agent stands for the agents on its card that were started before it was written.
+    /// A QA report (WOR-0088) forgets nobody: its agent stays for the person to talk to about what they find.</summary>
     public void Reported(IEnumerable<AgentReport> reports)
     {
-        foreach (var r in reports)
+        foreach (var r in reports.Where(r => !r.Qa))
             foreach (var a in Agents.Where(a => Wrote(a, r)).ToList())
             {
                 _reported.Add(a.Id);
