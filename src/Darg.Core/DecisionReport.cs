@@ -62,6 +62,7 @@ public static partial class DecisionReport
         var description = Or(Section(cardText, "Description"), card.Description);
         var how = Section(cardText, "How to check");
         var qaNotes = Section(cardText, "QA notes");
+        var why = Section(cardText, "Why it needs attention");
         var agentBody = agentReport?.Body ?? "";
         var changed = Section(agentBody, "Changed") is { Length: > 0 } c ? c : Section(agentBody, "Done");
         var look = Section(agentBody, "Look at");
@@ -78,6 +79,7 @@ public static partial class DecisionReport
           .Append($"date: {now:yyyy-MM-dd HH:mm}\n")
           .Append("read: false\n---\n\n");
         sb.Append("## Asked\n\n").Append(Or(description, "The card has no description.")).Append("\n\n");
+        if (why.Length > 0) sb.Append("## Why it needs attention\n\n").Append(why).Append("\n\n");
         sb.Append("## Changed\n\n").Append(Or(changed, ids.Count > 0
             ? $"No agent report says. Commits naming {card.Id}: {string.Join(", ", ids)}."
             : "Nothing recorded: no agent report and no commit names this card.")).Append("\n\n");

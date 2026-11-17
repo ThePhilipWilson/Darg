@@ -215,6 +215,27 @@ public class ReportStoreTests
     }
 
     [Fact]
+    public void Attention_reason_goes_into_the_card_and_the_decision_report()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "darg-attn-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var file = Path.Combine(dir, "WOR-0001 - X.md");
+            File.WriteAllText(file, "# WOR-0001: X\n\n- **Status:** QA Ready\n\n## Description\n\nDo it.\n\n## How to check\n\nRun it.\n");
+            QaNotes.Add(file, "Needs a decision on the colour.", new DateTime(2026, 11, 17, 9, 5, 0), QaNotes.AttentionHeading);
+            var text = File.ReadAllText(file);
+            Assert.Contains("## Why it needs attention\n\n### 2026-11-17 09:05\n\nNeeds a decision on the colour.", text);
+            Assert.DoesNotContain("## QA notes", text);
+            var card = BoardStore.Parse(text, "WOR-0001 - X.md")!;
+            var report = DecisionReport.Build(card, text, [], "", null, new DateTime(2026, 11, 17, 9, 6, 0));
+            Assert.Contains("## Why it needs attention", report);
+            Assert.Contains("Needs a decision on the colour.", report);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void Rework_preface_carries_the_notes_and_points_at_how_to_check()
     {
         var p = ReportStore.ReworkPreface("  The button is grey.  ");
