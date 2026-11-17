@@ -164,12 +164,14 @@
                               ToolTip.Tip="Everything agents have notified you of this run" AutomationProperties.Name="Notifications"/>
               </StackPanel>
               <!-- earlier chats: pick one to carry on with it -->
-              <DockPanel IsVisible="{Binding Mascot.Chats.Count}">
-                <Button DockPanel.Dock="Right" Content="×" Command="{Binding Mascot.ForgetCommand}" IsVisible="{Binding Mascot.HasChat}"
-                        Padding="6,0" Background="Transparent" ToolTip.Tip="Forget this chat" AutomationProperties.Name="Forget chat"/>
-                <ComboBox ItemsSource="{Binding Mascot.Chats}" SelectedItem="{Binding Mascot.SelectedChat}" HorizontalAlignment="Stretch"
-                          PlaceholderText="Earlier chats…" FontSize="12" AutomationProperties.Name="Fettle chats"/>
-              </DockPanel>
+              <Border IsVisible="{Binding !ShowNotifications}">
+                <DockPanel IsVisible="{Binding Mascot.Chats.Count}">
+                  <Button DockPanel.Dock="Right" Content="×" Command="{Binding Mascot.ForgetCommand}" IsVisible="{Binding Mascot.HasChat}"
+                          Padding="6,0" Background="Transparent" ToolTip.Tip="Forget this chat" AutomationProperties.Name="Forget chat"/>
+                  <ComboBox ItemsSource="{Binding Mascot.Chats}" SelectedItem="{Binding Mascot.SelectedChat}" HorizontalAlignment="Stretch"
+                            PlaceholderText="Earlier chats…" FontSize="12" AutomationProperties.Name="Fettle chats"/>
+                </DockPanel>
+              </Border>
             </StackPanel>
           </Border>
           <DockPanel DockPanel.Dock="Bottom" IsVisible="{Binding !ShowNotifications}">
@@ -242,6 +244,13 @@
             <Border Classes="badge" Width="18" Height="18" CornerRadius="9" Background="{DynamicResource Bad}"
                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0">
               <TextBlock Text="!" Foreground="White" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <!-- how many notifications are waiting in the Notifications tab -->
+            <Border MinWidth="18" Height="18" CornerRadius="9" Background="{DynamicResource Accent}" Padding="4,0"
+                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-4,-4,0,0"
+                    IsVisible="{Binding Notifications.Count}" AutomationProperties.Name="Notification count">
+              <TextBlock Text="{Binding Notifications.Count}" Foreground="{DynamicResource OnAccent}" FontWeight="Bold" FontSize="11"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
           </Panel>
           <!-- a curl of wood shaving on its head: it lives on a workbench -->
