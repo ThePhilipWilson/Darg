@@ -36,6 +36,7 @@ public partial class MainViewModel : ObservableObject
             Log(MascotId, agent.Id, "Fettle", agent.Name, what, detail);
             if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, NotificationEntry.HeaderFor("Fettle", agent.Name, what), "Fettle", detail);
         };
+        Mascot.AsksSettled += agent => Settle(MascotId, agent.Id);
         Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
         Selected = LastProject.Pick(Projects, p => p.Config.Id); // the project that was open last time
         if (ArtifactHost.Server is { } artifacts)
@@ -120,6 +121,7 @@ public partial class MainViewModel : ObservableObject
         if (vm.Agents is { } agents)
         {
             agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
+            agents.AsksSettled += agent => Settle(vm.Config.Id, agent.Id);
             agents.Mascot = Mascot; // null while the app starts; set just after Bench is made
         }
         if (vm.Notes is { } notes) notes.Organise = (shown, text) => Mascot?.Ask(shown, text) ?? false;
@@ -305,6 +307,18 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand] void ClearNotifications() { Notifications.Clear(); ShowNotifications = false; }
     [RelayCommand] void OpenNotification(NotificationEntry? n) { if (n is not null) OpenAgent(n.ProjectId, n.AgentId); }
 
+    /// <summary>An agent's questions and permission asks are all answered: their entries leave the list (WOR-0094).</summary>
+    void Settle(string projectId, string agentId)
+    {
+        void Remove()
+        {
+            for (var i = Notifications.Count - 1; i >= 0; i--)
+                if (Notifications[i] is { } n && n.ProjectId == projectId && n.AgentId == agentId && n.IsAsk) Notifications.RemoveAt(i);
+            if (Notifications.Count == 0) ShowNotifications = false;
+        }
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) Remove(); else Avalonia.Threading.Dispatcher.UIThread.Post(Remove);
+    }
+
     void Log(string projectId, string agentId, string project, string agent, string what, string detail)
     {
         void Add()
@@ -362,6 +376,8 @@ public record NotificationEntry(string ProjectId, string AgentId, string Project
     /// <summary>The agent's name leads, so headers differ at a glance; the project (or Fettle) follows in Sub.</summary>
     public static string HeaderFor(string project, string agent, string what) =>
         string.IsNullOrWhiteSpace(agent) ? $"{project}: {what}" : $"{agent}: {what}";
+    /// <summary>A question or permission ask, which goes stale once answered.</summary>
+    public bool IsAsk => What == "has a question" || What.StartsWith("wants to use ");
     public string Title => HeaderFor(Project, Agent, What);
     public string Sub => $"{Project} · {At:HH:mm}";
 }

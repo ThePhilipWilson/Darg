@@ -214,6 +214,7 @@ public partial class AgentsViewModel : ObservableObject
             if (agent != Shown && agent.State is AgentState.NeedsYou or AgentState.Idle or AgentState.Exited) agent.Unseen = true;
         };
         agent.Notify += (what, detail) => Notify?.Invoke(agent, what, detail);
+        agent.AsksSettled += () => AsksSettled?.Invoke(agent);
         if (select) { Agents.Insert(0, agent); Selected = agent; }
         else Agents.Add(agent);
     }
@@ -241,6 +242,7 @@ public partial class AgentsViewModel : ObservableObject
     /// <summary>Something the person needs to hear about (a question, a permission ask, or the end of a long turn;
     /// see <see cref="Decisions"/>): (agent, what happened, detail).</summary>
     public event Action<AgentViewModel, string, string>? Notify;
+    public event Action<AgentViewModel>? AsksSettled;
     public AgentViewModel? Find(string id) => Agents.FirstOrDefault(a => a.Id == id);
     /// <summary>The newest agent started on a card that hasn't ended.</summary>
     public AgentViewModel? ForCard(string cardId) =>
@@ -464,6 +466,8 @@ public partial class AgentViewModel : ObservableObject
     public string? CardId { get; }
     /// <summary>A question, a permission ask, or the end of a long turn (<see cref="Decisions"/>, WOR-0078).</summary>
     public event Action<string, string>? Notify;
+    /// <summary>Every question and permission ask has been answered, so the notifications for them are stale (WOR-0094).</summary>
+    public event Action? AsksSettled;
     /// <summary>The flow this agent is a stage of, while this run of Darg lasts.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(InFlow))] public partial FlowRun? Flow { get; set; }
     public bool InFlow => Flow is not null;
@@ -1046,7 +1050,7 @@ public partial class AgentViewModel : ObservableObject
         if (_session is null) return;
         respond(_session);
         var waiting = Items.OfType<IPending>().Any(p => p.Pending);
-        if (!waiting) Activity = "Carrying on…";
+        if (!waiting) { Activity = "Carrying on…"; AsksSettled?.Invoke(); }
         State = waiting ? AgentState.NeedsYou : AgentState.Working;
     }
 

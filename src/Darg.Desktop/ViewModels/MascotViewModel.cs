@@ -28,6 +28,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     public ObservableCollection<TranscriptItem> Items => Agent?.Items ?? Nothing;
     public bool HasChat => Agent is not null;
     public event Action<AgentViewModel, string, string>? Notify;
+    public event Action<AgentViewModel>? AsksSettled;
 
     /// <summary>Saved chats, newest first, to switch between.</summary>
     public ObservableCollection<ChatEntry> Chats { get; } = [];
@@ -133,6 +134,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     AgentViewModel Wire(AgentViewModel a)
     {
         a.Notify += (what, detail) => Notify?.Invoke(a, what, detail);
+        a.AsksSettled += () => AsksSettled?.Invoke(a);
         // typed in the Agents view too, it still hears where Philip is, and an untagged chat joins the project it carries on in
         a.Wrap = text => { a.Project ??= ProjectId; return WithContext(text); };
         return a;
