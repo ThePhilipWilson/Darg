@@ -268,6 +268,22 @@ public class ReportStoreTests
         foreach (var c in "<>&|") Assert.DoesNotContain(c, p);
     }
 
+    [Fact] // WOR-0127: a week of QA passes called one failing test unrelated and passed every card anyway
+    public void Card_and_QA_agents_run_the_whole_suite_and_pass_over_no_failing_test()
+    {
+        var card = new Card("WOR-0127", "tests", "QA Ready", "", "Task", [], "x.md", "");
+        var qa = ReportStore.QaRunPrompt("Darg", card, "C:\\b\\x.md", "Done", "For Human Attention", "needs more work");
+        var work = ReportStore.Rules("r", card, "QA Ready", "a1");
+        foreach (var p in new[] { qa, work })
+        {
+            Assert.Contains("whole test suite", p);
+            Assert.Contains("never passed over as unrelated", p);
+        }
+        Assert.Contains("add one that fails without your change", work);
+        Assert.DoesNotContain("add one that fails", qa); // QA changes no code
+        foreach (var c in "\"<>&|") Assert.DoesNotContain(c, ReportStore.TestSuite + ReportStore.AddTest);
+    }
+
     [Fact]
     public void Check_prompt_points_at_the_card_and_goes_on_a_command_line()
     {

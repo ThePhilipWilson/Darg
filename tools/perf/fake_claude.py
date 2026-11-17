@@ -4,11 +4,21 @@ FAKE_RATE     tool calls per second per agent (default 5); each is a text, a too
 FAKE_SECONDS  how long a turn streams (default 60)
 FAKE_RESULT   characters in each tool result (default 4000)
 FAKE_TOUCH    1: rewrite the agent's card file every FAKE_TOUCH_EVERY seconds (default 10), as agents edit cards
+FAKE_LOG      a file: each start (its args and folder), each message it is sent and each one-shot question is
+              appended to it as a JSON line, for the integration tests (WOR-0127) to check what an agent was given
 """
 import json, os, re, sys, threading, time
 
 args = sys.argv[1:]
 lock = threading.Lock()
+log_file = os.environ.get("FAKE_LOG")
+
+def log(kind, **fields):
+    if not log_file:
+        return
+    with lock:
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(dict(kind=kind, pid=os.getpid(), **fields)) + "\n")
 
 def emit(o):
     with lock:
@@ -16,9 +26,12 @@ def emit(o):
         sys.stdout.flush()
 
 if "--output-format" in args and args[args.index("--output-format") + 1] == "text":
-    sys.stdin.read()  # a Haiku question (model pick, chat title)
+    question = sys.stdin.read()  # a Haiku question (model pick, chat title)
+    log("ask", args=args, text=question)
     print("Standard | ordinary work")
     sys.exit(0)
+
+log("start", args=args, cwd=os.getcwd())
 
 rate = float(os.environ.get("FAKE_RATE", "5"))
 seconds = float(os.environ.get("FAKE_SECONDS", "60"))
@@ -59,5 +72,7 @@ for line in sys.stdin:
     if m.get("type") == "control_request":
         emit({"type": "control_response", "response": {"subtype": "success", "request_id": m.get("request_id"), "response": {}}})
     elif m.get("type") == "user":
-        text = "".join(c.get("text", "") for c in m["message"]["content"] if isinstance(c, dict))
+        content = m["message"]["content"]
+        text = content if isinstance(content, str) else "".join(c.get("text", "") for c in content if isinstance(c, dict))
+        log("message", text=text)
         threading.Thread(target=work, args=(text,), daemon=True).start()
