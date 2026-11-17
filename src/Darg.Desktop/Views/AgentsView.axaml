@@ -30,8 +30,22 @@
           </DockPanel>
           <DockPanel>
             <Button DockPanel.Dock="Right" Content="✎" Command="{Binding EditFlowsCommand}" Margin="6,0,0,0" Padding="8,4"
-                    ToolTip.Tip="Open the flows folder to add or edit a flow (a markdown file each); the list reads them again"
+                    ToolTip.Tip="Open the picked flow's folder (this project's own or the shared one) to edit a flow, a markdown file each; the list reads them again"
                     AutomationProperties.Name="Edit flows"/>
+            <!-- the flow generator (WOR-0077): an agent writes a new flow from what's in the box above -->
+            <Button DockPanel.Dock="Right" Content="+" Margin="6,0,0,0" Padding="8,4" AutomationProperties.Name="New flow"
+                    ToolTip.Tip="New flow: an agent writes one from what you've typed above (or asks what it's for), for this project or for all">
+              <Button.Flyout>
+                <MenuFlyout Placement="TopEdgeAlignedRight">
+                  <MenuItem Header="New flow for this project" Command="{Binding NewFlowCommand}" CommandParameter="basic project"/>
+                  <MenuItem Header="New flow for all projects" Command="{Binding NewFlowCommand}" CommandParameter="basic shared"/>
+                  <Separator/>
+                  <MenuItem Header="New art flow for this project" Command="{Binding NewFlowCommand}" CommandParameter="art project"
+                            ToolTip.Tip="Stages that make pictures with Forge (following the project's art recipe if it has one) and end with an image review for you to pick from"/>
+                  <MenuItem Header="New art flow for all projects" Command="{Binding NewFlowCommand}" CommandParameter="art shared"/>
+                </MenuFlyout>
+              </Button.Flyout>
+            </Button>
             <Button DockPanel.Dock="Right" Content="▶ Run flow" Command="{Binding StartFlowCommand}" Margin="6,0,0,0"
                     ToolTip.Tip="Runs the task through the flow: an agent per role, each handing its last message on to the next"/>
             <ComboBox ItemsSource="{Binding Flows}" SelectedItem="{Binding SelectedFlow}" HorizontalAlignment="Stretch" PlaceholderText="Flow"/>

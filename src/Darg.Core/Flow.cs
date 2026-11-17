@@ -24,9 +24,11 @@ public sealed record FlowStage(string Role, string Brief, string? SendsBackTo = 
 /// Sends back to: Engineer
 /// The brief…
 /// </code></summary>
-public sealed record Flow(string Name, string Description, IReadOnlyList<FlowStage> Stages, int MaxRounds, string? File = null)
+/// <param name="Project">The project it belongs to, when it is one project's own (its flows folder); null for a flow shared by all.</param>
+public sealed record Flow(string Name, string Description, IReadOnlyList<FlowStage> Stages, int MaxRounds, string? File = null, string? Project = null)
 {
-    public override string ToString() => Name;
+    public bool Shared => Project is null;
+    public override string ToString() => Shared ? Name : Name + " · this project";
 }
 
 public enum Verdict { None, Pass, Fail }
@@ -34,6 +36,20 @@ public enum Verdict { None, Pass, Fail }
 public static partial class FlowStore
 {
     public static string Folder(string? instanceFolder = null) => Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "flows");
+
+    /// <summary>One project's own flows (WOR-0077), beside its artifacts and reports; not made until a flow is written there.</summary>
+    public static string ProjectFolder(string projectId, string? instanceFolder = null) =>
+        Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "projects",
+            string.Concat(projectId.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)), "flows");
+
+    /// <summary>The flows a project can run: the shared ones and its own, by name. A project's flow with the
+    /// same name as a shared one stands in for it there.</summary>
+    public static List<Flow> ForProject(string projectId, string? sharedFolder = null, string? projectFolder = null)
+    {
+        var own = Read(projectFolder ?? ProjectFolder(projectId)).Select(f => f with { Project = projectId }).ToList();
+        return List(sharedFolder).Where(s => !own.Any(o => Same(o.Name, s.Name))).Concat(own)
+            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
 
     /// <summary>The flows on file, by name. The first time (no folder yet) the starter flow is written there,
     /// so there is always one to run and one to copy.</summary>
@@ -45,11 +61,17 @@ public static partial class FlowStore
             Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, "designer-engineer-qa.md"), Starter);
         }
+        return Read(folder).OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    static List<Flow> Read(string folder)
+    {
         var flows = new List<Flow>();
+        if (!Directory.Exists(folder)) return flows;
         foreach (var f in Directory.GetFiles(folder, "*.md"))
             try { if (Parse(File.ReadAllText(f), f) is { } flow) flows.Add(flow); }
             catch (IOException) { }
-        return flows.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        return flows;
     }
 
     /// <summary>A flow from its file's text; null when it has no stages.</summary>
