@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Darg.Core;
 
@@ -210,12 +211,46 @@ public static class NoteStore
         File.Move(from, Path.Combine(bin, id + ".md"), overwrite: true);
     }
 
-    /// <summary>Turn a note into a card on a board's backlog (first line as the title, the rest as the
-    /// description, tags as labels) and mark the note with the card's ID.</summary>
+    /// <summary>The longest title a card made from a note gets; past it the title is the note's first sentence,
+    /// or its first words and an ellipsis.</summary>
+    public const int TitleMax = 70;
+    /// <summary>A first sentence this long still makes a whole title, rather than being cut.</summary>
+    const int SentenceMax = 90;
+    static readonly Regex SentenceEnd = new(@"(?<!\b(?:e\.g|i\.e|etc|vs|eg|ie))([.?!])\s+(?=\S)", RegexOptions.IgnoreCase);
+
+    /// <summary>A note's words split into a card's title and the start of its description, losing none of them
+    /// (WOR-0082: a long first line used to be cut at 70 characters and the rest thrown away). A short first
+    /// line is the title and the other lines the body. A long one gives its first sentence as the title when
+    /// that is short enough (of two words or more, not ending in an abbreviation) and the rest of the line
+    /// leads the body; with no such sentence the title is its first words and "…", and the body has the
+    /// whole line.</summary>
+    public static (string Title, string Body) TicketText(string text)
+    {
+        text = text.Replace("\r\n", "\n").Trim();
+        var cut = text.IndexOf('\n');
+        var first = (cut < 0 ? text : text[..cut]).Trim();
+        var rest = cut < 0 ? "" : text[(cut + 1)..].Trim();
+        if (first.Length <= TitleMax) return (first, rest);
+        static string Join(string a, string b) => b.Length == 0 ? a : a + "\n\n" + b;
+        foreach (Match m in SentenceEnd.Matches(first))
+        {
+            var sentence = first[..m.Index].Trim();
+            if (sentence.Length > SentenceMax) break;
+            if (sentence.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length < 2) continue;
+            var title = m.Groups[1].Value == "." ? sentence : sentence + m.Groups[1].Value;
+            return (title, Join(first[(m.Index + m.Length)..].Trim(), rest));
+        }
+        var space = first.LastIndexOf(' ', TitleMax);
+        var words = (space > TitleMax / 2 ? first[..space] : first[..TitleMax]).TrimEnd(' ', ',', ';', ':', '-');
+        return (words + "…", Join(first, rest));
+    }
+
+    /// <summary>Turn a note into a card on a board's backlog (title and description from
+    /// <see cref="TicketText"/>, tags as labels, type from <see cref="CardTypes.Guess"/>) and mark the note
+    /// with the card's ID.</summary>
     public static (Note Note, Card Card) MakeTicket(string folder, Note note, string boardFolder)
     {
-        var rest = note.Text.Contains('\n') ? note.Text[(note.Text.IndexOf('\n') + 1)..].Trim() : "";
-        var title = note.FirstLine.Length > 70 ? note.FirstLine[..70].TrimEnd() : note.FirstLine;
+        var (title, rest) = TicketText(note.Text);
         var desc = (rest.Length > 0 ? rest + "\n\n" : "") + $"From a note on the wall ({note.Id}).";
         if (note.Image.Length > 0 && Pictures.Resolve(folder, note.Image) is { } pic && File.Exists(pic))
             desc += $"\n\n![]({Pictures.Add(boardFolder, pic)})";
