@@ -666,6 +666,26 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>The shown board's columns (none before it loads).</summary>
     public IReadOnlyList<Column> Columns => _board?.Columns ?? [];
 
+    /// <summary>Every card in the done (last) column of each of the project's boards, with its card file (WOR-0112).</summary>
+    public List<(Card Card, string File)> DoneCards()
+    {
+        var found = new List<(Card, string)>();
+        foreach (var b in BoardStore.List(_project.Boards))
+        {
+            var folder = Path.Combine(_project.Boards!, b);
+            try
+            {
+                var board = BoardStore.Load(folder);
+                if (board.Columns.LastOrDefault()?.Name is not { } last) continue;
+                var place = BoardStore.PlaceOf(last, board.Columns);
+                foreach (var c in board.AllCards.Where(c => BoardStore.PlaceOf(c.Status, board.Columns) == place))
+                    found.Add((c, Path.GetFullPath(Path.Combine(folder, "items", c.File))));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+        return found;
+    }
+
     /// <summary>A card is done when it's in Completed or the board's last column (its done column).</summary>
     public bool IsDone(string cardId)
     {

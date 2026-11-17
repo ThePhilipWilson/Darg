@@ -505,6 +505,12 @@ public partial class ProjectViewModel : ObservableObject
             Board.ReportFor = id => Reports!.LatestFor(id);
             Board.OpenReport = file => { Reports!.Show(file); Section = Section.Reports; };
             Reports!.ApproveCard = Board.Approve;
+            Reports.CleanUpDone = () =>
+            {
+                var (archived, written) = DecisionReport.CleanUp(Reports.Folder, Board.DoneCards(), CardFolder, DateTime.Now);
+                return archived == 0 && written == 0 ? "Nothing to clean up: no done card has a QA report left in the list or a missing done report."
+                    : $"Cleaned up: {archived} QA {(archived == 1 ? "report" : "reports")} archived, {written} done {(written == 1 ? "report" : "reports")} written.";
+            };
             Board.Approved = Reports.ApprovedFromBoard;
             Reports.SendCardBack = Board.SendBackById;
             // a card looks up its agent only when the board rebuilds: forgetting the agent frees the card now
