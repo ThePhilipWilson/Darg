@@ -175,7 +175,7 @@ public partial class MainViewModel : ObservableObject
                 if (p.Code.Current is { } f) s.Append($", file {f.FullPath} open");
                 break;
             case Section.Agents when p.Agents?.Shown is { } a:
-                s.Append($", agent \"{a.Name}\" ({a.StateText}), its folder {a.Cwd}"); // "working in" read as its state
+                s.Append($", agent \"{a.Name}\" (id {a.Id}{(a.CardId is { } c ? $", on card {c}" : "")}, {a.StateText}), its folder {a.Cwd}"); // "working in" read as its state
                 break;
             case Section.Reports when p.Reports is not null:
                 s.Append($", reports folder {p.Reports.Folder}" + (p.Reports.Selected is { } r ? $", report \"{r.Heading}\" ({r.Report.File})" : ""));
