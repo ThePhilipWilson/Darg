@@ -84,6 +84,11 @@ public static partial class ReportStore
         System.IO.File.WriteAllText(file, updated, new UTF8Encoding(false));
     }
 
+    /// <summary>Told to agents writing a report: Reports draws pictures and makes links clickable. Free of double quotes, angle brackets, ampersands and pipes.</summary>
+    public const string ReportMedia =
+        "Reports shows markdown pictures and links, so where it helps put them in: a screenshot you took as a markdown image with its full path (an image on this machine, for example ![the board](C:/path/shot.png)), " +
+        "and a link for a commit, branch, pull request, issue or page the reader may want to open (a full https address). Leave them out when there is nothing to show.";
+
     /// <summary>What a card agent is told about finishing, in place of "move the card to done": QA with a short QA
     /// report (<c>status: qa</c>) when the person should look, and the agent stays; else done with a report, and the
     /// agent is forgotten. Free of double quotes, angle brackets, ampersands and pipes.</summary>
@@ -110,14 +115,14 @@ public static partial class ReportStore
             $"{FileFor("-qa")} so I can triage this from Reports; Darg lists it as unread and keeps this agent, for me to talk to about what I find. " +
             $"It starts with these properties between --- lines: status: qa, {props}. Below them, three short sections: " +
             "## Changed (what you changed, in a few lines), ## Look at (what to try and what to look for; the How to check section has the detail), " +
-            "## Checked (what you verified yourself and how, and what you could not check). " +
+            "## Checked (what you verified yourself and how, and what you could not check). " + ReportMedia + " " +
             "Otherwise, when you are confident it is done and verified, move the card to done yourself: " +
             "set its Status to the board's last column (Completed if the board has no done column), add a Done line with today's date, " +
             "and move its id into that column in board.json's order. Then, as the very last thing you do (after any merge, so the commit ids are final), " +
             $"write a short report to {FileFor("")} for me to read later; Darg lists it under Reports as unread " +
             "and forgets this agent once your turn ends, so the report is what I will see of this work. " +
             $"It starts with these properties between --- lines: {props}. Below them, three short sections: ## Asked (the problem, in a sentence or two), " +
-            "## Done (what you changed and how you checked it), ## Left (anything not done, or None). " +
+            "## Done (what you changed and how you checked it), ## Left (anything not done, or None). " + ReportMedia + " " +
             "If the card asked you to look into something, find something out or answer a question, and you changed no code, the report is the finding: " +
             $"write it to {FileFor("")} as above but with status: investigation as its first property (Asked is the question, Done is what you found and how, Left is what is still unknown, or None), then move the card to done. " +
             "Leave the card where it is, with no report, while work is left." + (attentionColumn is not null
