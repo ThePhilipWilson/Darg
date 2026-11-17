@@ -24,6 +24,22 @@ public sealed class UsageLimitTests
     public void Other_errors_are_not_a_limit(string text) => Assert.False(UsageLimit.IsLimit(text));
 
     [Fact]
+    public void A_normal_turn_quoting_the_limit_is_not_stopped_by_it()
+    {
+        const string said = "The usage limit resets when you've hit your 5-hour limit, so wait.";
+        Assert.False(UsageLimit.StoppedByLimit(false, said, false, said));
+        Assert.False(UsageLimit.StoppedByLimit(false, "done", false, said));
+    }
+
+    [Fact]
+    public void An_errored_turn_is_stopped_by_a_limit_event_or_its_text()
+    {
+        Assert.True(UsageLimit.StoppedByLimit(true, "", true, null));
+        Assert.True(UsageLimit.StoppedByLimit(true, "You've hit your 5-hour limit · resets 6:20pm (Europe/London)", false, null));
+        Assert.False(UsageLimit.StoppedByLimit(true, "API Error: 500", false, "ok"));
+    }
+
+    [Fact]
     public void A_time_later_today_is_today() =>
         Assert.Equal(new DateTimeOffset(2026, 11, 16, 18, 20, 0, TimeSpan.Zero),
             UsageLimit.ResetFrom("You've hit your 5-hour limit · resets 6:20pm (Europe/London)", Now));
