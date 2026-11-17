@@ -25,6 +25,12 @@ public partial class NotesView : UserControl
             click: (item, keys) => { if (DataContext is NotesViewModel wall && item is NoteViewModel n) wall.Click(n, keys); },
             ordered: false, // notes sit newest first in a column; only the column matters
             carried: item => DataContext is NotesViewModel wall && item is NoteViewModel n ? wall.Carried(n) : [item]);
+        // a column's header is picked up and carried along the wall; the line shows where it will land
+        _ = new DragLift(this, Overlay, "colhead", "wallstrip",
+            itemsOf: _ => (DataContext as NotesViewModel)?.Columns.Where(c => c.IsEditable).Cast<object>().ToList() ?? [],
+            drop: (items, _, before) => { if (DataContext is NotesViewModel wall && items.Count > 0 && items[0] is NoteColumn c) wall.DropColumn(c, before as NoteColumn); },
+            click: (_, _) => { },
+            horizontal: true);
         BoardView.ChipDoubleClicks(this);
         // a column's name: double-click to rename; in the box, Enter saves and Esc leaves it as it was
         AddHandler(DoubleTappedEvent, (_, e) =>

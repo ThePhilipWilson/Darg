@@ -215,6 +215,14 @@ public partial class NotesViewModel : ObservableObject
         NoteStore.ShiftColumn(Folder, c.Name, by);
     });
 
+    /// <summary>Drag a column's header: it lands before <paramref name="before"/>, or last of the wall's own columns.</summary>
+    internal void DropColumn(NoteColumn c, NoteColumn? before) => ChangeColumns(c, () =>
+    {
+        if (!ColumnNames.Contains(c.Name, StringComparer.OrdinalIgnoreCase)) NoteStore.AddColumn(Folder, c.Name);
+        if (before is not null && !ColumnNames.Contains(before.Name, StringComparer.OrdinalIgnoreCase)) NoteStore.AddColumn(Folder, before.Name);
+        NoteStore.MoveColumn(Folder, c.Name, before?.Name);
+    });
+
     /// <summary>A new column at the end of the wall's own columns, its name open to type over.</summary>
     [RelayCommand]
     void AddColumn()
