@@ -126,6 +126,16 @@ public class ReportStoreTests
     }
 
     [Fact]
+    public void Reports_divide_into_finished_investigation_and_qa()
+    {
+        Assert.Equal(ReportKind.Finished, ReportStore.Parse(Report, "x.md").Kind);
+        Assert.Equal(ReportKind.Investigation, ReportStore.Parse(Report.Replace("card: WOR-0061", "status: Investigation\ncard: WOR-0061"), "x.md").Kind);
+        Assert.Equal(ReportKind.Qa, ReportStore.Parse(Report.Replace("card: WOR-0061", "status: qa\ncard: WOR-0061"), "x.md").Kind);
+        var card = new Card("WOR-0091", "Split", "In Progress", "", "Task", [], "x.md", "");
+        Assert.Contains("status: investigation", ReportStore.Rules("r", card, "QA", "a1"));
+    }
+
+    [Fact]
     public void A_qa_handoff_writes_a_qa_report_of_its_own_and_the_agent_stays()
     {
         var card = new Card("WOR-0088", "QA reports", "In Progress", "", "Task", [], "x.md", "");

@@ -25,6 +25,12 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
         : "No reports yet. A card agent that is sure its work is done moves the card to done, writes a short report here (what was asked, what it did, its commits) and is forgotten; work that needs you to check it goes to the board's QA column with a short QA report here (marked to check), and its agent stays.";
     /// <summary>Only the unread ones in the list.</summary>
     [ObservableProperty] public partial bool UnreadOnly { get; set; }
+    /// <summary>The kind filter (WOR-0091): all, finished tasks, investigations or QA reports, each label with its count.</summary>
+    public ObservableCollection<string> Kinds { get; } = [AllLabel, FinishedLabel, InvestigationLabel, QaLabel];
+    const string AllLabel = "All reports", FinishedLabel = "Finished tasks", InvestigationLabel = "Investigations", QaLabel = "QA reports";
+    [ObservableProperty] public partial int KindIndex { get; set; }
+    partial void OnKindIndexChanged(int value) { if (value >= 0 && !_relabel) Apply(); }
+    ReportKind? KindShown => KindIndex switch { 1 => ReportKind.Finished, 2 => ReportKind.Investigation, 3 => ReportKind.Qa, _ => null };
     [ObservableProperty] public partial string Status { get; set; } = "";
 
     /// <summary>Raised with every report after each reload: the agents that wrote them can go.</summary>
@@ -63,7 +69,9 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     void Apply()
     {
         var keep = Selected?.Report.File;
-        var shown = _all.Where(r => !UnreadOnly || !r.Read || r.File == keep).ToList();
+        RelabelKinds();
+        var kind = KindShown;
+        var shown = _all.Where(r => (kind is null || r.Kind == kind) && (!UnreadOnly || !r.Read || r.File == keep)).ToList();
         Reports.Clear();
         foreach (var r in shown) Reports.Add(new ReportRow(r));
         Selected = Reports.FirstOrDefault(r => r.Report.File == keep);
@@ -72,6 +80,19 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
         Status = _all.Count == 0 ? $"No reports yet. Card agents file them in {Folder} when they finish."
             : $"{_all.Count} {(_all.Count == 1 ? "report" : "reports")}, {Unread} unread · {Folder}";
     }
+
+    /// <summary>Put each kind's count in its label, keeping the pick (replacing an item can clear the selection).</summary>
+    void RelabelKinds()
+    {
+        string[] labels = [$"{AllLabel} ({_all.Count})", $"{FinishedLabel} ({_all.Count(r => r.Kind == ReportKind.Finished)})",
+            $"{InvestigationLabel} ({_all.Count(r => r.Kind == ReportKind.Investigation)})", $"{QaLabel} ({_all.Count(r => r.Kind == ReportKind.Qa)})"];
+        var pick = KindIndex;
+        _relabel = true;
+        for (var i = 0; i < labels.Length; i++) if (Kinds[i] != labels[i]) Kinds[i] = labels[i];
+        _relabel = false;
+        if (KindIndex != pick) KindIndex = pick;
+    }
+    bool _relabel;
 
     void Count() => Unread = _all.Count(r => !r.Read);
 
@@ -148,7 +169,7 @@ public partial class ReportRow(AgentReport r) : ObservableObject
     public string Heading => Report.Heading;
     public string Meta => string.Join(" · ", new[]
     {
-        Report.Qa ? "to check" : "",
+        Report.Kind switch { ReportKind.Qa => "QA · to check", ReportKind.Investigation => "investigation", _ => "" },
         Report.Date,
         Report.Commits.Count switch { 0 => "", 1 => "1 commit", var n => $"{n} commits" },
     }.Where(s => s.Length > 0));
