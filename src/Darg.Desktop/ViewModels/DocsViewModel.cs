@@ -114,6 +114,7 @@ public partial class DocsViewModel : ObservableObject
     /// <summary>Files came or went, or one changed: list again, and show the open one again unless it's being edited.</summary>
     void Refresh()
     {
+        using var timing = Darg.Core.StallWatch.Shared.Section("Docs.Refresh");
         var keep = Selected?.Path;
         Scan();
         if (keep is not null && !Editing) Load(keep);

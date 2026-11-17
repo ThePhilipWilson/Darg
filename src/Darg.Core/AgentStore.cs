@@ -57,18 +57,27 @@ public static class AgentStore
     public static string Folder(string projectId, string? instanceFolder = null) =>
         Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "agents", projectId);
 
+    /// <summary>Save now (an older save of it still waiting in the background is dropped).</summary>
     public static void Save(string folder, AgentRecord r)
     {
-        Directory.CreateDirectory(folder);
         var path = Path.Combine(folder, r.Id + ".json");
+        Forget(path);
+        Write(path, r);
+    }
+
+    static void Write(string path, AgentRecord r)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var tmp = path + ".tmp";
         File.WriteAllText(tmp, JsonSerializer.Serialize(r, Json));
         File.Move(tmp, path, overwrite: true); // never a half-written file
     }
 
-    /// <summary>The saved agents, newest first; a file that won't read is skipped, not fatal.</summary>
+    /// <summary>The saved agents, newest first; a file that won't read is skipped, not fatal. Saves still
+    /// waiting to be written are written first, so the list has them.</summary>
     public static List<AgentRecord> List(string folder)
     {
+        Flush();
         if (!Directory.Exists(folder)) return [];
         var list = new List<AgentRecord>();
         foreach (var f in Directory.GetFiles(folder, "*.json"))
@@ -80,6 +89,69 @@ public static class AgentStore
     public static void Delete(string folder, string id)
     {
         var path = Path.Combine(folder, id + ".json");
+        Forget(path); // a save still waiting would write it back
         if (File.Exists(path)) File.Delete(path);
+    }
+
+    // ---- Saving in the background (WOR-0076). A long transcript takes a few hundred ms to write, and agents save
+    // after every turn: on the UI thread that was a freeze each time. The record is made where the agent lives
+    // (a snapshot), and written here; only the newest record of each agent waiting is written.
+
+    static readonly object Gate = new();
+    static readonly Dictionary<string, AgentRecord> Waiting = [];
+    static Task _writer = Task.CompletedTask;
+    static bool _writing;
+    static string? _inHand;
+
+    /// <summary>Save in the background: returns at once. <see cref="Flush"/> waits for every save to be written.</summary>
+    public static void SaveLater(string folder, AgentRecord r)
+    {
+        var path = Path.Combine(folder, r.Id + ".json");
+        lock (Gate)
+        {
+            Waiting[path] = r;
+            if (_writing) return;
+            _writing = true;
+            _writer = Task.Run(WriteWaiting);
+        }
+    }
+
+    static void WriteWaiting()
+    {
+        while (true)
+        {
+            AgentRecord r;
+            string path;
+            lock (Gate)
+            {
+                if (Waiting.Count == 0) { _writing = false; _inHand = null; return; }
+                (path, r) = Waiting.First();
+                Waiting.Remove(path);
+                _inHand = path;
+            }
+            try { Write(path, r); }
+            catch (Exception) { /* a failed save must never take the agent down */ }
+        }
+    }
+
+    /// <summary>Write every save still waiting, and wait for the one being written (on closing the app).</summary>
+    public static void Flush(TimeSpan? timeout = null)
+    {
+        Task writer;
+        lock (Gate) writer = _writer;
+        try { writer.Wait(timeout ?? TimeSpan.FromSeconds(10)); } catch (AggregateException) { }
+    }
+
+    /// <summary>Drop a waiting save of this file, and wait for it if it's being written now.</summary>
+    static void Forget(string path)
+    {
+        Task writer;
+        lock (Gate)
+        {
+            Waiting.Remove(path);
+            if (_inHand != path) return;
+            writer = _writer;
+        }
+        try { writer.Wait(TimeSpan.FromSeconds(10)); } catch (AggregateException) { }
     }
 }

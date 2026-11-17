@@ -304,6 +304,24 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         var cards = Shown().Where(c => c.IsPicked && !c.HasAgent).Select(c => c.Card).ToList();
         if (cards.Count == 0) return;
         _picked.Clear();
+        WorkOnAll(cards);
+    }
+
+    /// <summary>Start agents on cards of the shown board by id, together, as ▶ Work on N does (the API's work-on
+    /// with several cards). Cards that already have an agent are left out. Says what was started.</summary>
+    public string WorkOnCards(IReadOnlyList<string> ids)
+    {
+        if (_board is null) return "No board is showing.";
+        var cards = ids.Select(id => _board.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
+            .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null).DistinctBy(c => c.Id).ToList();
+        if (cards.Count == 0) return "None of those cards is on the board without an agent.";
+        WorkOnAll(cards);
+        return _notice ?? "";
+    }
+
+    void WorkOnAll(List<Card> cards)
+    {
+        using var timing = StallWatch.Shared.Section("Work on picked");
         var started = new List<string>();
         foreach (var card in cards)
         {
@@ -398,12 +416,15 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (_held is not null) { _held.IsRenaming = false; _held.ConfirmingRemove = false; _held = null; }
         _reloadWaiting = false;
         if (Folder is null) return;
-        try { _board = BoardStore.Load(Folder); }
+        using var timing = StallWatch.Shared.Section("Board.Reload");
+        try { using var loading = StallWatch.Shared.Section("BoardStore.Load"); _board = BoardStore.Load(Folder); }
         catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
+        var names = _board.AllCards.SelectMany(c => c.Labels).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        if (names.SequenceEqual(Labels.Select(l => l.Name))) { Apply(); Reloaded?.Invoke(); return; } // the same labels: the chips stay
         var was = Labels.ToDictionary(l => l.Name, l => l.Mode, StringComparer.OrdinalIgnoreCase);
         foreach (var chip in Labels) chip.Changed -= Apply;
         Labels.Clear();
-        foreach (var name in _board.AllCards.SelectMany(c => c.Labels).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase))
+        foreach (var name in names)
         {
             var chip = new LabelChip(name) { Mode = was.GetValueOrDefault(name) };
             chip.Changed += Apply;
@@ -437,11 +458,15 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         return lists.Any(list => list is not null && _board.Lists.TryGetValue(list, out var cards) && cards.Any(c => c.Id == cardId));
     }
 
-    /// <summary>Rebuild the lists from the board through the filter: text matches the ID, title or
+    /// <summary>What every card's menu was made from when the lists were last built (see <see cref="Apply"/>).</summary>
+    string? _shape;
+
+    /// <summary>Bring the lists up to date with the board through the filter: text matches the ID, title or
     /// description; labels: every must-have one (double-clicked) and, if any are clicked, one of those.</summary>
     void Apply()
     {
         if (_board is null) return;
+        using var timing = StallWatch.Shared.Section("Board.Apply");
         var words = Filter.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var (any, all) = LabelChip.Picked(Labels);
         bool Keep(Card c) =>
@@ -449,17 +474,41 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             words.All(w => c.Id.Contains(w, StringComparison.OrdinalIgnoreCase) || c.Title.Contains(w, StringComparison.OrdinalIgnoreCase)
                            || c.Description.Contains(w, StringComparison.OrdinalIgnoreCase));
         var targets = _board.ListOrder().Where(l => l.Id != Board.Unsorted).Select(l => (l.Id, l.Name)).ToList();
-        Lists.Clear();
+        // Cards and columns that haven't changed keep their view models, and so their controls: rebuilding every
+        // one on each change (an agent editing its card) froze the window for half a second (WOR-0076). A card's
+        // menu is made with it from the columns, the other boards and the flows: when those change, all are new.
+        var shape = string.Join("\n", targets.Select(t => $"{t.Id}={t.Name}")) + "\n" + string.Join(",", OtherBoards) + "\n"
+                    + string.Join(",", FlowList().Select(f => f.Name)) + "\n" + _board.Columns.LastOrDefault()?.Id;
+        var reuse = shape == _shape;
+        _shape = shape;
+        var oldCards = new Dictionary<string, CardViewModel>();
+        var oldLists = new Dictionary<string, ListViewModel>();
+        if (reuse)
+        {
+            foreach (var l in Lists) { oldLists.TryAdd(l.Id, l); foreach (var c in l.Cards) oldCards.TryAdd(c.Id, c); }
+        }
+        var used = new HashSet<CardViewModel>();
+        CardViewModel ViewOf(Card c)
+        {
+            var agent = AgentFor?.Invoke(c.Id);
+            var vm = oldCards.TryGetValue(c.Id, out var old) && old.Agent == agent && old.Card.SameAs(c) && used.Add(old)
+                ? old : new CardViewModel(c, targets, this, agent, OtherBoards);
+            vm.IsPicked = _picked.Contains(c.Id);
+            return vm;
+        }
+        var lists = new List<ListViewModel>();
         var total = 0;
         foreach (var (id, name) in _board.ListOrder())
         {
             if (id == Board.Completed && !ShowCompleted) continue;
-            var cards = _board.Lists[id].Where(Keep).ToList();
+            var cards = _board.Lists[id].Where(Keep).Select(ViewOf).ToList();
             total += cards.Count;
-            Lists.Add(new ListViewModel(this, id, name, cards.Select(c =>
-                new CardViewModel(c, targets, this, AgentFor?.Invoke(c.Id), OtherBoards) { IsPicked = _picked.Contains(c.Id) }), _board.Lists[id].Count,
-                _board.Minimized.Contains(id)));
+            var minimized = _board.Minimized.Contains(id);
+            if (oldLists.TryGetValue(id, out var list) && list.Name == name && list.IsMinimized == minimized) list.Show(cards, _board.Lists[id].Count);
+            else list = new ListViewModel(this, id, name, cards, _board.Lists[id].Count, minimized);
+            lists.Add(list);
         }
+        ListSync.Sync(Lists, lists);
         _picked.IntersectWith(Shown().Select(c => c.Id));
         PickedChanged();
         Status = _notice ?? $"{total} of {_board.AllCards.Count()} cards";
@@ -508,6 +557,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     void StartWork(Card card, IReadOnlyList<string> alongside, bool show, bool reload)
     {
         if (Folder is null || _board is null || WorkOn is null) return;
+        using var timing = StallWatch.Shared.Section("StartWork");
         var working = _board.Columns.FirstOrDefault(c => c.Name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) ?? _board.Columns.FirstOrDefault();
         var place = BoardStore.PlaceOf(card.Status, _board.Columns);
         WorkOn(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)), alongside, show);
@@ -565,7 +615,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     void Move(string id, string toList, string? beforeId = null, bool reload = true)
     {
         if (Folder is null) return;
-        try { BoardStore.Move(Folder, id, toList, beforeId); }
+        try { using var timing = StallWatch.Shared.Section("BoardStore.Move"); BoardStore.Move(Folder, id, toList, beforeId); }
         catch (Exception e) { Status = $"Couldn't move {id}: {e.Message}"; return; }
         if (reload) Reload();
     }
@@ -638,6 +688,21 @@ public sealed partial class ListViewModel(BoardViewModel board, string id, strin
     public string Id { get; } = id;
     public string Name { get; } = name;
     public ObservableCollection<CardViewModel> Cards { get; } = new(cards);
+    int all = all;
+
+    /// <summary>A reload kept this column: show these cards (changing only what differs) out of <paramref name="count"/> in it.</summary>
+    public void Show(IReadOnlyList<CardViewModel> cards, int count)
+    {
+        all = count;
+        ListSync.Sync(Cards, cards);
+        Error = "";
+        OnPropertyChanged(nameof(Count));
+        OnPropertyChanged(nameof(HasCards));
+        OnPropertyChanged(nameof(All));
+        OnPropertyChanged(nameof(RemoveQuestion));
+        PickedChanged();
+    }
+
     public string Count => Cards.Count == all ? $"{all}" : $"{Cards.Count} / {all}";
     public bool HasCards => Cards.Count > 0;
     /// <summary>Every card showing in this column is picked.</summary>

@@ -228,6 +228,7 @@ public partial class NotesViewModel : ObservableObject
     {
         if (_held is not null) { _held.IsRenaming = false; _held.ConfirmingRemove = false; _held = null; }
         _reloadWaiting = false;
+        using var timing = StallWatch.Shared.Section("Notes.Reload");
         try
         {
             _statuses = NoteStore.TicketStatuses(Boards);

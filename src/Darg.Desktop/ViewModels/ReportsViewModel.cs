@@ -52,6 +52,7 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
 
     public void Reload()
     {
+        using var timing = StallWatch.Shared.Section("Reports.Reload");
         _all = ReportStore.List(Folder);
         Apply();
         Loaded?.Invoke(_all);

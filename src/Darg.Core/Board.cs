@@ -15,6 +15,31 @@ public sealed record Card(string Id, string Title, string Status, string Priorit
     public bool IsBug => Kind.Equals(CardTypes.Bug, StringComparison.OrdinalIgnoreCase);
     /// <summary>A story: done cards wrapped up into one (<see cref="Stories"/>).</summary>
     public bool IsStory => Kind.Equals(CardTypes.Story, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The same card as read before: every field alike, labels by their contents (a record's own == compares the lists by reference).</summary>
+    public bool SameAs(Card other) => this with { Labels = other.Labels } == other && Labels.SequenceEqual(other.Labels);
+}
+
+/// <summary>Bring a shown list (an ObservableCollection a view is bound to) to a wanted one by removing, moving and
+/// inserting only what differs, so items that stay keep their controls (WOR-0076: rebuilding the whole board on
+/// every card change froze the window for half a second each time). Items are compared by reference.</summary>
+public static class ListSync
+{
+    public static void Sync<T>(IList<T> shown, IReadOnlyList<T> want) where T : class
+    {
+        var keep = new HashSet<T>(want, ReferenceEqualityComparer.Instance);
+        for (var i = shown.Count - 1; i >= 0; i--)
+            if (!keep.Contains(shown[i])) shown.RemoveAt(i);
+        for (var i = 0; i < want.Count; i++)
+        {
+            if (i < shown.Count && ReferenceEquals(shown[i], want[i])) continue;
+            var at = -1;
+            for (var j = i + 1; j < shown.Count; j++) if (ReferenceEquals(shown[j], want[i])) { at = j; break; }
+            if (at < 0) shown.Insert(i, want[i]);
+            else if (shown is System.Collections.ObjectModel.ObservableCollection<T> moving) moving.Move(at, i);
+            else { var item = shown[at]; shown.RemoveAt(at); shown.Insert(i, item); }
+        }
+    }
 }
 
 /// <summary>The types a card can have: Task, Bug, and Story (done cards wrapped up into one, WOR-0074). A card

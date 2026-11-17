@@ -98,7 +98,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     /// <summary>Give a chat a short title (Haiku, else a guess from the words) and save it.</summary>
     async Task Retitle(string id, string firstMessage)
     {
-        var title = await ChatTitle.Make(firstMessage);
+        var title = await Task.Run(() => ChatTitle.Make(firstMessage)); // Haiku's process starts off the UI thread (WOR-0076)
         if (Live().FirstOrDefault(a => a.Id == id) is { } live) { live.Name = title; live.Save(); }
         else if (AgentStore.List(Store).FirstOrDefault(r => r.Id == id) is { } r) { r.Name = title; AgentStore.Save(Store, r); }
         ListChats();
@@ -124,7 +124,11 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     }
 
     /// <summary>A new chat's model profile (WOR-0034): by a "kind: fettle" rule, else by what was asked.</summary>
-    Task<ProfilePick?> ProfileFor(string text) => ModelProfiles.Pick(ModelProfiles.Load(), new AgentJob(JobKinds.Fettle, text, Project: ProjectId));
+    Task<ProfilePick?> ProfileFor(string text)
+    {
+        var job = new AgentJob(JobKinds.Fettle, text, Project: ProjectId);
+        return Task.Run(() => ModelProfiles.Pick(ModelProfiles.Load(), job)); // off the UI thread, as in AgentsViewModel.Start
+    }
 
     AgentViewModel Wire(AgentViewModel a)
     {

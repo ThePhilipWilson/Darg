@@ -102,6 +102,7 @@ public partial class HomeViewModel : ObservableObject
     /// <summary>The live part: cards, agents, artifacts. Cheap, so it runs on the timer while Home shows.</summary>
     void Glance()
     {
+        using var timing = StallWatch.Shared.Section("Home.Glance");
         if (_project.Board is { } board)
         {
             var cards = board.InProgress();

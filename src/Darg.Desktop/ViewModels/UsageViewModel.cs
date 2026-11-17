@@ -77,6 +77,7 @@ public partial class UsageViewModel : ObservableObject
 
     void Refresh()
     {
+        using var timing = StallWatch.Shared.Section("Usage.Refresh");
         var now = DateTimeOffset.Now;
         var five = _meter.Window(UsageWindow.FiveHour);
         var week = _meter.Window(UsageWindow.Week);

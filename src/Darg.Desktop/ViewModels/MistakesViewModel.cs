@@ -44,6 +44,7 @@ public partial class MistakesViewModel : ObservableObject, IDisposable
 
     public void Reload()
     {
+        using var timing = StallWatch.Shared.Section("Mistakes.Reload");
         _all = MistakeLog.Read(File);
         var keep = SelectedCategory?.Name;
         Tally.Clear();
