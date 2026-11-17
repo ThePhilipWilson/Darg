@@ -244,24 +244,55 @@ public partial class AgentsViewModel : ObservableObject
     public AgentViewModel? ForCard(string cardId) =>
         Agents.FirstOrDefault(a => a.CardId == cardId && a.State != AgentState.Exited);
 
-    /// <summary>The flows on file (the instance's flows folder), read again on Reload.</summary>
+    /// <summary>The flows this project can run: the shared ones (the instance's flows folder) and its own, read again on Reload.</summary>
     public ObservableCollection<Flow> Flows { get; } = [];
     [ObservableProperty] public partial Flow? SelectedFlow { get; set; }
+
+    string FlowProject => project.Id.Length > 0 ? project.Id : "default";
 
     public void ReloadFlows()
     {
         var keep = SelectedFlow?.Name;
         Flows.Clear();
-        try { foreach (var f in FlowStore.List()) Flows.Add(f); } catch (Exception) { }
+        try { foreach (var f in FlowStore.ForProject(FlowProject)) Flows.Add(f); } catch (Exception) { }
         SelectedFlow = Flows.FirstOrDefault(f => f.Name == keep) ?? Flows.FirstOrDefault();
     }
 
-    /// <summary>Open the flows folder to add or edit one (each is a markdown file), and read them again.</summary>
+    /// <summary>The flow generator (WOR-0077): an agent writes a new flow from what's typed in the box (or asks what it's for).
+    /// <paramref name="which"/> is the kind and where it goes: "basic project", "art shared" and so on.</summary>
+    [RelayCommand]
+    void NewFlow(string? which)
+    {
+        var words = (which ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        GenerateFlow(words.Contains("art") ? FlowKind.Art : FlowKind.Basic, words.Contains("shared"), NewPrompt);
+        NewPrompt = "";
+    }
+
+    /// <summary>Start the agent that writes a new flow; the Flow list reads the folders again when its turn ends.</summary>
+    public AgentViewModel GenerateFlow(FlowKind kind, bool shared, string description)
+    {
+        var sharedFolder = FlowStore.Folder();
+        var own = FlowStore.ProjectFolder(FlowProject);
+        try { Directory.CreateDirectory(shared ? sharedFolder : own); } catch (Exception) { }
+        List<string> others = [sharedFolder, .. Directory.Exists(own) ? [own] : Array.Empty<string>()];
+        List<ToolConfig> tools = [];
+        try { tools = InstanceConfig.Load().ToolsOrDefaults(); } catch (Exception) { }
+        var prompt = FlowGenerator.Prompt(project.Name, kind, description, shared ? sharedFolder : own, shared, others, tools);
+        var what = (kind == FlowKind.Art ? "art flow" : "flow") + (shared ? " for all projects" : "");
+        var a = Start(prompt, Folder, name: description.Trim().Length > 0 ? $"New {what}: {ChatTitle.Guess(description)}" : $"New {what}",
+            dirs: others);
+        a.TurnEnded += _ => Dispatcher.UIThread.Post(ReloadFlows);
+        return a;
+    }
+
+    /// <summary>Open the flows folder to add or edit one (each is a markdown file), and read them again: the picked
+    /// flow's folder (this project's own, or the shared one).</summary>
     [RelayCommand]
     void EditFlows()
     {
         ReloadFlows();
-        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(FlowStore.Folder()) { UseShellExecute = true }); } catch (Exception) { }
+        var folder = SelectedFlow?.File is { } f ? Path.GetDirectoryName(f) ?? FlowStore.Folder() : FlowStore.Folder();
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true }); } catch (Exception) { }
     }
 
     /// <summary>Open profiles.md (written with the starter set if there isn't one) to change which model and

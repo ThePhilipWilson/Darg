@@ -30,7 +30,10 @@ public partial class MainViewModel
         Add("close-agents", "close agents' sessions: {ids} (a list, or ids separated by spaces). They stay listed and carry on when sent a message.", a => CloseAgents(a.List("ids")));
         Add("forget-agents", "forget agents, as the × in the Agents list does: {ids}. Each one's session ends, it leaves the list and its saved file goes " +
                              "(Claude Code keeps its history). Not one mid-turn. Only when Philip asks, or for agents whose card is done.", a => ForgetAgents(a.List("ids")));
-        Add("flows", "the flows on file: name, max rounds, and the roles in order.", _ => Json(FlowList()));
+        Add("flows", "the flows on file: name, max rounds, the roles in order, and shared or the project's own. {project?}: that project's as well as the shared ones.",
+            a => Json(FlowList(a.Get("project") is null ? null : FindProject(a))));
+        Add("new-flow", "start an agent that writes a new flow (the Agents view's + by Run flow): {project, description, kind?: basic|art, shared?: true for all projects, " +
+                        "else the project's own}. Returns its id. Only when Philip asks.", NewFlow);
         Add("run-flow", "run a flow: {project, flow, card} on a board card, or {project, flow, task} on a task in words. Only when Philip asks.", RunFlow);
         Add("theme", "the app's colours: {theme} switches to that theme (" + string.Join(", ", Themes.All.Select(t => t.Id)) + ") and saves it; " +
                      "{} says which is on. Only when Philip asks.", SetThemeApi);
@@ -206,16 +209,32 @@ public partial class MainViewModel
         return string.Join(Environment.NewLine, lines);
     }
 
-    JsonArray FlowList()
+    JsonArray FlowList(ProjectViewModel? p)
     {
         var list = new JsonArray();
-        foreach (var f in FlowStore.List())
+        foreach (var f in p is null ? FlowStore.List() : FlowStore.ForProject(p.Config.Id.Length > 0 ? p.Config.Id : "default"))
             list.Add(new JsonObject
             {
                 ["name"] = f.Name, ["maxRounds"] = f.MaxRounds,
                 ["roles"] = new JsonArray(f.Stages.Select(s => (JsonNode?)s.Role).ToArray()),
+                ["shared"] = f.Shared,
             });
         return list;
+    }
+
+    string NewFlow(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (p.Agents is null) throw new ApiError($"{p.Name} doesn't use agents.");
+        var kind = a.Get("kind") switch
+        {
+            null or "" => FlowKind.Basic,
+            var k when k.Equals("art", StringComparison.OrdinalIgnoreCase) => FlowKind.Art,
+            var k when k.Equals("basic", StringComparison.OrdinalIgnoreCase) => FlowKind.Basic,
+            var k => throw new ApiError($"kind is basic or art, not \"{k}\"."),
+        };
+        var shared = a.Get("shared") is { } sh && (sh.Equals("true", StringComparison.OrdinalIgnoreCase) || sh == "1" || sh.Equals("shared", StringComparison.OrdinalIgnoreCase));
+        return p.Agents.GenerateFlow(kind, shared, a.Get("description") ?? "").Id;
     }
 
     string RunFlow(ApiArgs a)

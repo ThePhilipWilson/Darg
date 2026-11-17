@@ -73,3 +73,76 @@ public class FlowTests
         finally { Directory.Delete(dir, true); }
     }
 }
+
+public class ProjectFlowTests
+{
+    [Fact]
+    public void A_project_lists_the_shared_flows_and_its_own_and_its_own_wins_a_name()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "darg-flows-" + Guid.NewGuid().ToString("N")[..8]);
+        var shared = Path.Combine(root, "flows");
+        var own = FlowStore.ProjectFolder("alpha", root);
+        try
+        {
+            Directory.CreateDirectory(shared);
+            File.WriteAllText(Path.Combine(shared, "review.md"), "# Review\n## Reviewer\nRead it");
+            File.WriteAllText(Path.Combine(shared, "build.md"), "# Build\n## Builder\nBuild it");
+            // no project folder yet: just the shared ones
+            Assert.Equal(["Build", "Review"], FlowStore.ForProject("alpha", shared, own).Select(f => f.Name));
+
+            Directory.CreateDirectory(own);
+            File.WriteAllText(Path.Combine(own, "card-art.md"), "# Card art\n## Artist\nMake it");
+            File.WriteAllText(Path.Combine(own, "review.md"), "# review\n## Art reviewer\nLook at it");
+            var flows = FlowStore.ForProject("alpha", shared, own);
+            Assert.Equal(["Build", "Card art", "review"], flows.Select(f => f.Name));
+            Assert.True(flows[0].Shared);
+            Assert.Equal("alpha", flows[1].Project);
+            Assert.Equal("Art reviewer", flows[2].Stages[0].Role); // the project's own stands in for the shared one
+            Assert.Equal("Card art · this project", flows[1].ToString());
+            Assert.Equal(Path.Combine(root, "projects", "alpha", "flows"), own);
+        }
+        finally { Directory.Delete(root, true); }
+    }
+}
+
+public class FlowGeneratorTests
+{
+    static readonly string[] Others = ["C:/i/flows", "C:/i/projects/alpha/flows"];
+
+    [Fact]
+    public void A_basic_project_flow_goes_in_the_projects_folder_with_the_format_and_no_art()
+    {
+        var p = FlowGenerator.Prompt("Alpha", FlowKind.Basic, "write card text, then check it", "C:/i/projects/alpha/flows", shared: false, Others);
+        Assert.Contains("for the Alpha project only", p);
+        Assert.Contains("> write card text, then check it", p);
+        Assert.Contains("one markdown file in C:/i/projects/alpha/flows", p);
+        Assert.Contains("Sends back to:", p);
+        Assert.Contains("Max rounds: 2", p); // the starter, as an example
+        Assert.Contains("AskUserQuestion", p);
+        Assert.Contains("C:/i/flows", p);
+        Assert.DoesNotContain("Forge", p);
+        Assert.Contains("can name its files", p);
+    }
+
+    [Fact]
+    public void An_art_flow_names_the_image_tools_the_projects_recipe_and_ends_with_a_review()
+    {
+        List<ToolConfig> tools = [new() { Name = "Forge", Kind = "forge", Url = "http://127.0.0.1:7860" }, new() { Name = "Ollama", Kind = "ollama", Url = "http://x" }];
+        var p = FlowGenerator.Prompt("Alpha", FlowKind.Art, "card art", "C:/i/flows", shared: true, Others, tools);
+        Assert.Contains("art flow", p);
+        Assert.Contains("shared by every project", p);
+        Assert.Contains("Forge (forge) at http://127.0.0.1:7860", p);
+        Assert.DoesNotContain("Ollama", p);
+        Assert.Contains("art skill", p);
+        Assert.Contains(".review.json", p);
+        Assert.Contains("name no repo", p);
+    }
+
+    [Fact]
+    public void With_no_words_it_asks_what_the_flow_is_for()
+    {
+        var p = FlowGenerator.Prompt("Darg", FlowKind.Basic, "  ", "C:/i/flows", shared: true, Others);
+        Assert.Contains("I haven't said what it's for", p);
+        Assert.DoesNotContain("in my words", p);
+    }
+}
