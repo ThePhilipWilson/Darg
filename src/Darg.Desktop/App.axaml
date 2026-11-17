@@ -202,6 +202,18 @@
     <Style Selector="Border.postit">
       <Setter Property="BorderBrush" Value="Transparent"/>
       <Setter Property="BorderThickness" Value="3"/>
+      <Setter Property="CornerRadius" Value="1"/>
+      <Setter Property="Padding" Value="12,14,12,10"/>
+      <Setter Property="MinHeight" Value="90"/>
+      <!-- stuck at the top, lifting at the bottom: a tight shadow all round, a deeper one only under the lower edge -->
+      <Setter Property="BoxShadow" Value="0 1 2 0 #40000000, 0 14 10 -8 #a0000000"/>
+    </Style>
+    <!-- a stiff card held by tape: it stands off the wall evenly; thin margins at the top and sides, a deep one at the bottom -->
+    <Style Selector="Border.postit.polaroid">
+      <Setter Property="CornerRadius" Value="2"/>
+      <Setter Property="Padding" Value="11,11,11,22"/>
+      <Setter Property="Margin" Value="0,10,0,0"/>
+      <Setter Property="BoxShadow" Value="0 1 2 0 #50000000, 0 6 12 -2 #80000000"/>
     </Style>
     <!-- white: it shows against the dark wall whatever colour the paper is -->
     <Style Selector="Border.postit.picked">

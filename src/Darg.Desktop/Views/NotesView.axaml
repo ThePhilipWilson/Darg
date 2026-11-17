@@ -103,27 +103,45 @@
                       <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="14"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:NoteViewModel">
-                          <Border Classes="postit" Classes.picked="{Binding IsPicked}" Tag="{Binding}" Background="{Binding Paper}" CornerRadius="2" Padding="12,12,12,9" MinHeight="90"
-                                  BoxShadow="0 6 14 0 #70000000" Cursor="Hand" Opacity="{Binding PaperOpacity}">
+                          <!-- paper shading, padding and shadow come from the postit / polaroid styles in App.axaml -->
+                          <Border Classes="postit" Classes.picked="{Binding IsPicked}" Classes.polaroid="{Binding HasPicture}" Tag="{Binding}"
+                                  Background="{Binding Paper}" Cursor="Hand" Opacity="{Binding PaperOpacity}">
                             <Border.RenderTransform>
                               <RotateTransform Angle="{Binding Angle}"/>
                             </Border.RenderTransform>
-                            <StackPanel Spacing="8">
-                              <!-- a polaroid: the picture in its frame, a strip of the note's colour under it -->
-                              <StackPanel Spacing="0" IsVisible="{Binding HasPicture}">
-                                <Border Background="#1b1b1b" Padding="1">
-                                  <Image Source="{Binding Picture}" Stretch="Uniform" MaxHeight="260"/>
+                            <Panel>
+                              <StackPanel Spacing="8">
+                                <!-- a polaroid: a square photo cropped to fill its window, the caption written in the deep margin under it -->
+                                <!-- painted as a brush rather than a clipped Image: a clip's edges step on a tilted note -->
+                                <Border IsVisible="{Binding HasPicture}" Margin="0,0,0,6" Height="{Binding $self.Bounds.Width}">
+                                  <Border.Background>
+                                    <ImageBrush Source="{Binding Picture}" Stretch="UniformToFill"/>
+                                  </Border.Background>
+                                  <!-- the print's gloss and the slight shadow where it meets the card -->
+                                  <Border BoxShadow="inset 0 0 4 0 #55000000">
+                                    <Border.Background>
+                                      <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                        <GradientStop Color="#22ffffff" Offset="0"/>
+                                        <GradientStop Color="#00ffffff" Offset="0.45"/>
+                                        <GradientStop Color="#0a000000" Offset="1"/>
+                                      </LinearGradientBrush>
+                                    </Border.Background>
+                                  </Border>
                                 </Border>
-                                <Border Height="5" Background="{Binding Brush}" Margin="0,6,0,0"/>
+                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="#2a2620" FontSize="15"
+                                           FontFamily="Segoe Print, Comic Sans MS, Chalkboard, cursive"/>
+                                <DockPanel Opacity="0.65">
+                                  <Button DockPanel.Dock="Right" Content="{Binding Ticket}" Command="{Binding GoToTicketCommand}" IsVisible="{Binding HasTicket}"
+                                          Classes="onpaper" ToolTip.Tip="Go to the ticket on the board"/>
+                                  <TextBlock Text="{Binding Meta}" Foreground="#2a2620" FontSize="10" TextWrapping="Wrap"/>
+                                </DockPanel>
                               </StackPanel>
-                              <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="#2a2620" FontSize="15"
-                                         FontFamily="Segoe Print, Comic Sans MS, Chalkboard, cursive"/>
-                              <DockPanel Opacity="0.65">
-                                <Button DockPanel.Dock="Right" Content="{Binding Ticket}" Command="{Binding GoToTicketCommand}" IsVisible="{Binding HasTicket}"
-                                        Classes="onpaper" ToolTip.Tip="Go to the ticket on the board"/>
-                                <TextBlock Text="{Binding Meta}" Foreground="#2a2620" FontSize="10" TextWrapping="Wrap"/>
-                              </DockPanel>
-                            </StackPanel>
+                              <!-- a polaroid hangs from a strip of tape in the note's colour, over its top edge -->
+                              <Border IsVisible="{Binding HasPicture}" Background="{Binding Tape}" Width="74" Height="22"
+                                      HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-24,0,0" BoxShadow="0 1 1 0 #22000000">
+                                <Border.RenderTransform><RotateTransform Angle="-2.5"/></Border.RenderTransform>
+                              </Border>
+                            </Panel>
                           </Border>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
