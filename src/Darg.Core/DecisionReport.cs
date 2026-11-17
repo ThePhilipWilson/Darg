@@ -114,9 +114,84 @@ public static partial class DecisionReport
         return file;
     }
 
+    /// <summary>Where a card's QA reports go once it is done (WOR-0102): beside the reports, not in the list.</summary>
+    public const string ArchiveFolder = "archive";
+
+    /// <summary>A card has reached the done column (WOR-0102): each of its QA reports (pending or not) goes to
+    /// <c>archive/</c> beside the reports, marked approved if nobody settled it, so history survives and the list
+    /// shows only what is open. Returns the reports as they were archived (their text carried into the done report).</summary>
+    public static List<AgentReport> Archive(string folder, string card)
+    {
+        var moved = new List<AgentReport>();
+        foreach (var r in ReportStore.List(folder).Where(r => r.Card == card && r.Qa))
+        {
+            try
+            {
+                if (r.Decision.Length == 0 || r.Decision == Pending) Settle(r.File, Approved, "");
+                var archive = Path.Combine(folder, ArchiveFolder);
+                Directory.CreateDirectory(archive);
+                var to = Path.Combine(archive, Path.GetFileName(r.File));
+                if (System.IO.File.Exists(to)) to = Path.Combine(archive, DateTime.Now.ToString("HHmmssfff") + "-" + Path.GetFileName(r.File));
+                System.IO.File.Move(r.File, to);
+                moved.Add(r with { File = to });
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // left in the list; the next look tries again
+        }
+        return moved;
+    }
+
+    /// <summary>The done report for a card that has reached the done column (WOR-0102), in the Asked / Done / Left shape
+    /// of an agent's own, from the QA reports just archived (their Changed and Checked carried over) or else the card
+    /// and the commits naming it. Returns its file, or null when the card already has one: a card agent writes its own as
+    /// its last step, so a finished report dated since the newest archived QA report (else within <paramref name="within"/>) stands.</summary>
+    public static string? WriteDone(string folder, Card card, string cardFile, string repo, DateTime now, IReadOnlyList<AgentReport> archived, TimeSpan within)
+    {
+        var since = archived.Select(r => DateTime.TryParse(r.Date, out var d) ? d : (DateTime?)null).Where(d => d is not null).DefaultIfEmpty(null).Max();
+        bool Counts(AgentReport r) => r.Card == card.Id && r.Kind == ReportKind.Finished
+            && DateTime.TryParse(r.Date, out var d) && (since is { } s ? d >= s - TimeSpan.FromMinutes(1) : now - d <= within && now >= d - TimeSpan.FromMinutes(1));
+        if (ReportStore.List(folder).Any(Counts)) return null;
+        string text;
+        try { text = System.IO.File.ReadAllText(cardFile); } catch (IOException) { text = ""; }
+        var qa = archived.OrderByDescending(r => r.Date, StringComparer.Ordinal).FirstOrDefault();
+        var commits = qa?.Commits is { Count: > 0 } c ? c : CommitsFor(repo, card.Id);
+        var file = Path.Combine(folder, $"{now:yyyyMMdd-HHmm}-{card.Id}.md");
+        if (System.IO.File.Exists(file)) return null;
+        Directory.CreateDirectory(folder);
+        System.IO.File.WriteAllText(file, BuildDone(card, text, commits, repo, qa, now), new UTF8Encoding(false));
+        return file;
+    }
+
+    public static string BuildDone(Card card, string cardText, IReadOnlyList<string> commits, string repo, AgentReport? qa, DateTime now)
+    {
+        static string Or(string s, string none) => s.Trim().Length > 0 ? s.Trim() : none;
+        var body = qa?.Body ?? "";
+        var asked = Or(Section(cardText, "Description"), card.Description);
+        var changed = Section(body, "Changed");
+        var checkedText = Section(body, "Checked");
+        var notes = Section(cardText, "QA notes");
+        var sb = new StringBuilder();
+        sb.Append("---\n")
+          .Append($"card: {card.Id}\n")
+          .Append($"title: {card.Title}\n")
+          .Append($"agent: {qa?.Agent}\n")
+          .Append($"commits: {string.Join(' ', commits)}\n")
+          .Append($"repo: {(repo.Length > 0 ? repo : qa?.Repo)}\n")
+          .Append($"date: {now:yyyy-MM-dd HH:mm}\n")
+          .Append("read: false\n---\n\n");
+        sb.Append("## Asked\n\n").Append(Or(asked, "The card has no description.")).Append("\n\n");
+        sb.Append("## Done\n\n").Append(Or(changed, commits.Count > 0 ? $"Commits naming {card.Id}: {string.Join(", ", commits)}." : "Nothing recorded: no QA report and no commit names this card."));
+        if (checkedText.Length > 0) sb.Append("\n\nChecked: ").Append(checkedText);
+        sb.Append("\n\nMoved to Done, so its QA report is in the reports archive folder.\n\n");
+        sb.Append("## Left\n\n").Append(notes.Length > 0 ? "None. QA notes along the way:\n\n" + notes : "None.").Append('\n');
+        return sb.ToString();
+    }
+
     /// <summary>Settle a report's decision: the property, the ticked box and the notes in the Decision section.</summary>
     public static void Settle(string file, string decision, string notes)
     {
+        // a card moved to done has its QA report archived before Approve gets to settle it: follow it there
+        if (!System.IO.File.Exists(file) && Path.GetDirectoryName(file) is { } dir && System.IO.File.Exists(Path.Combine(dir, ArchiveFolder, Path.GetFileName(file))))
+            file = Path.Combine(dir, ArchiveFolder, Path.GetFileName(file));
         var text = System.IO.File.ReadAllText(file).Replace("\r\n", "\n");
         text = DecisionLine().IsMatch(text) ? DecisionLine().Replace(text, $"decision: {decision}", 1)
             : Regex.Replace(text, "^(status:.*)$", "$1\ndecision: " + decision, RegexOptions.Multiline);

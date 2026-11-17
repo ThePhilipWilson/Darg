@@ -62,6 +62,12 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>Set by the project (WOR-0092): a card has landed in the needs-attention column (passed the card and
     /// its file); the project writes its decision report.</summary>
     public Action<Card, string>? NeedsAttention { get => _parent is null ? field : _parent.NeedsAttention; set; }
+    /// <summary>Set by the project (WOR-0102): a card that was elsewhere has entered the QA column / the done column
+    /// (passed the card and its file); the project writes or archives its reports.</summary>
+    public Action<Card, string>? EnteredQa { get => _parent is null ? field : _parent.EnteredQa; set; }
+    public Action<Card, string>? EnteredDone { get => _parent is null ? field : _parent.EnteredDone; set; }
+    HashSet<string>? _seenCards, _inQa, _inDone;
+    string? _seenFolder;
     /// <summary>Set by the project: the newest report written for a card (its file), or null.</summary>
     public Func<string, string?>? ReportFor { get => _parent is null ? field : _parent.ReportFor; set; }
     /// <summary>Set by the project: show a report in Reports.</summary>
@@ -694,6 +700,30 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _attention = now.Select(c => c.Id).ToHashSet();
         _attentionFolder = Folder;
         foreach (var card in fresh) NeedsAttention?.Invoke(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)));
+        NoticeQaAndDone();
+    }
+
+    /// <summary>WOR-0102: a card already on this board that is now in the QA column gets a QA report, and one now in the
+    /// last (done) column has its QA report archived and a done report written, whoever moved it.</summary>
+    void NoticeQaAndDone()
+    {
+        if (_board is null || Folder is null) return;
+        var cards = _board.AllCards.ToList();
+        HashSet<string> In(string? column) => column is null ? [] : cards.Where(c => BoardStore.PlaceOf(c.Status, _board.Columns) == BoardStore.PlaceOf(column, _board.Columns)).Select(c => c.Id).ToHashSet();
+        var qa = In(BoardColumns.Qa(_board.Columns));
+        var done = In(_board.Columns.LastOrDefault()?.Name);
+        var known = _seenCards is not null && _seenFolder == Folder;
+        _seenFolder = Folder;
+        var before = (_seenCards, _inQa, _inDone);
+        _seenCards = cards.Select(c => c.Id).ToHashSet(); _inQa = qa; _inDone = done;
+        if (!known || before.Item2 is null || before.Item3 is null) return;
+        string File(Card c) => Path.GetFullPath(Path.Combine(Folder, "items", c.File));
+        foreach (var c in cards)
+        {
+            if (!before.Item1!.Contains(c.Id)) continue; // new to the board, not moved
+            if (qa.Contains(c.Id) && !before.Item2.Contains(c.Id)) EnteredQa?.Invoke(c, File(c));
+            if (done.Contains(c.Id) && !before.Item3.Contains(c.Id)) EnteredDone?.Invoke(c, File(c));
+        }
     }
 
     /// <summary>Whether a card sits in the board's needs-attention column.</summary>

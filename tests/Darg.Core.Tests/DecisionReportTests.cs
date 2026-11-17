@@ -81,6 +81,71 @@ public class DecisionReportTests
     }
 
     [Fact]
+    public void Reaching_done_archives_the_qa_report_and_writes_a_done_report_carrying_it_over()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "darg-done-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var card = Path.Combine(dir, "card.md");
+            File.WriteAllText(card, CardText);
+            var reports = Path.Combine(dir, "reports");
+            var enteredQa = new DateTime(2026, 11, 17, 11, 0, 0);
+            // into QA: a QA report; again straight away: none
+            Assert.NotNull(DecisionReport.Write(reports, C, card, "", enteredQa, TimeSpan.FromMinutes(2)));
+            var qa = ReportStore.List(reports).Single();
+            File.WriteAllText(qa.File, File.ReadAllText(qa.File).Replace("## Changed\n\n", "## Changed\n\nEdited X.\n\n").Replace("\r\n", "\n"));
+
+            var done = enteredQa.AddMinutes(30);
+            var archived = DecisionReport.Archive(reports, C.Id);
+            Assert.Single(archived);
+            Assert.Empty(ReportStore.List(reports));                         // gone from the list...
+            Assert.True(File.Exists(Path.Combine(reports, "archive", "20261117-1100-WOR-0200-qa.md"))); // ...but kept
+            Assert.Equal("approved", ReportStore.Parse(File.ReadAllText(archived[0].File), archived[0].File).Decision);
+
+            var file = DecisionReport.WriteDone(reports, C, card, "", done, archived, TimeSpan.FromMinutes(10));
+            Assert.NotNull(file);
+            var r = ReportStore.List(reports).Single();
+            Assert.Equal(ReportKind.Finished, r.Kind);
+            Assert.False(r.Qa);
+            Assert.False(r.Read);
+            Assert.Contains("Edited X.", DecisionReport.Section(File.ReadAllText(file!), "Done"));
+            Assert.Contains("Make it do the thing.", DecisionReport.Section(File.ReadAllText(file!), "Asked"));
+            // an agent's (or an earlier) done report since the QA one means no second
+            Assert.Null(DecisionReport.WriteDone(reports, C, card, "", done.AddMinutes(5), archived, TimeSpan.FromMinutes(10)));
+            Assert.Single(ReportStore.List(reports));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void An_agents_done_report_stops_darg_writing_one_and_approving_still_settles_the_archived_report()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "darg-done2-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var card = Path.Combine(dir, "card.md");
+            File.WriteAllText(card, CardText);
+            var reports = Path.Combine(dir, "reports");
+            var now = new DateTime(2026, 11, 17, 12, 0, 0);
+            File.Delete(card); File.WriteAllText(card, CardText);
+            Directory.CreateDirectory(reports);
+            File.WriteAllText(Path.Combine(reports, "20261117-1159-WOR-0200.md"),
+                "---\ncard: WOR-0200\ntitle: t\ndate: 2026-11-17 11:59\nread: false\n---\n\n## Asked\n\nx\n\n## Done\n\ny\n\n## Left\n\nNone\n");
+            Assert.Null(DecisionReport.WriteDone(reports, C, card, "", now, [], TimeSpan.FromMinutes(10)));
+            Assert.Single(ReportStore.List(reports));
+
+            // Approve in Reports settles by the old path after the card's move already archived it
+            var qa = DecisionReport.Write(reports, C, card, "", now.AddHours(1), TimeSpan.FromMinutes(2))!;
+            DecisionReport.Archive(reports, C.Id);
+            DecisionReport.Settle(qa, DecisionReport.Approved, "ok");
+            Assert.Contains("Notes: ok", File.ReadAllText(Path.Combine(reports, "archive", Path.GetFileName(qa))));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void Rules_tell_an_agent_the_report_for_that_column_is_darg_s()
     {
         var rules = ReportStore.Rules("r", C, "QA Ready", null, "Needs Phil Attention");
