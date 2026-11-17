@@ -19,6 +19,16 @@
             </Style>
           </TabStrip.Styles>
         </TabStrip>
+        <!-- WOR-0113: a story is the board a report's card is on; finished stories' reports can be archived together -->
+        <DockPanel DockPanel.Dock="Top" Margin="8,6,8,0">
+          <Button DockPanel.Dock="Right" Content="{Binding ArchiveToggleText}" Command="{Binding ToggleArchivedCommand}" Margin="6,0,0,0"
+                  ToolTip.Tip="Reports of finished stories, pulled out of the main list"/>
+          <Button DockPanel.Dock="Right" Content="Archive story" Command="{Binding ArchiveStoryCommand}" IsVisible="{Binding CanArchive}" Margin="6,0,0,0"
+                  ToolTip.Tip="Move this story's finished reports into the archive (QA reports and undecided ones stay)"/>
+          <Button DockPanel.Dock="Right" Content="Restore" Command="{Binding RestoreStoryCommand}" IsVisible="{Binding CanRestore}" Margin="6,0,0,0"
+                  ToolTip.Tip="Bring this story's archived reports back (all of them when no story is picked)"/>
+          <ComboBox ItemsSource="{Binding Stories}" SelectedIndex="{Binding StoryIndex}" HorizontalAlignment="Stretch" AutomationProperties.Name="Story"/>
+        </DockPanel>
         <DockPanel DockPanel.Dock="Top" Margin="12,8,8,4">
           <Button DockPanel.Dock="Right" Content="Clean up" Command="{Binding CleanUpCommand}" Margin="0,0,6,0"
                   ToolTip.Tip="Move the QA reports of done cards to the archive, and write the done report where one is missing"/>
