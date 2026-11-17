@@ -66,6 +66,17 @@
             </StackPanel>
           </DockPanel>
         </Border>
+        <!-- a decision report not yet settled (WOR-0092): Approve moves the card to done, Send back uses the send-back path with these notes -->
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,8"
+                IsVisible="{Binding Selected.Pending, FallbackValue=False}">
+          <StackPanel Spacing="6">
+            <TextBox Text="{Binding DecisionNotes}" PlaceholderText="Notes (needed to send back: what's wrong, what you expected)" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" MaxHeight="140"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="primary" Content="✓ Approve" Command="{Binding ApproveCommand}" ToolTip.Tip="Move the card to Done"/>
+              <Button Content="↩ Send back" Command="{Binding SendBackCommand}" ToolTip.Tip="Your notes go into the card under QA notes, the card goes back to In Progress, and an agent starts on them"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
         <ScrollViewer>
           <views:MarkdownView Markdown="{Binding Selected.Body, FallbackValue=''}" Margin="18,14" MaxWidth="980" HorizontalAlignment="Left"/>
         </ScrollViewer>

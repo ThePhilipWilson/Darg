@@ -9,10 +9,11 @@ namespace Darg.Core;
 /// <param name="Body">The markdown below the properties.</param>
 /// <param name="Qa">A QA handoff (<c>status: qa</c>, WOR-0088): the work went to the QA column for the person to check,
 /// and the agent that wrote it stays.</param>
+/// <param name="Decision">A decision report's state (WOR-0092): pending, approved or sent back; empty for any other report.</param>
 /// <param name="Investigation">An investigation (<c>status: investigation</c>, WOR-0091): the agent looked into something
 /// and changed nothing, so the report is the finding.</param>
 public sealed record AgentReport(string File, string Card, string Title, string Agent, IReadOnlyList<string> Commits,
-    string Repo, string Date, bool Read, string Body, bool Qa = false, bool Investigation = false)
+    string Repo, string Date, bool Read, string Body, bool Qa = false, bool Investigation = false, string Decision = "")
 {
     /// <summary>Which of the three lists it belongs to (WOR-0091): QA wins, then investigation, else a finished task.</summary>
     public ReportKind Kind => Qa ? ReportKind.Qa : Investigation ? ReportKind.Investigation : ReportKind.Finished;
@@ -62,7 +63,8 @@ public static partial class ReportStore
         if (title.Length == 0 && Regex.Match(body, @"^#\s+(.+)$", RegexOptions.Multiline) is { Success: true } h) title = h.Groups[1].Value.Trim();
         return new AgentReport(file, fields.GetValueOrDefault("card", ""), title, fields.GetValueOrDefault("agent", ""), commits,
             fields.GetValueOrDefault("repo", ""), date, IsTrue(fields.GetValueOrDefault("read", "")), body.TrimEnd(),
-            Status(fields) == "qa", Status(fields) == "investigation");
+            Status(fields) == "qa", Status(fields) == "investigation",
+            fields.GetValueOrDefault("decision", "").Trim().Trim('"', '\'').ToLowerInvariant());
     }
 
     /// <summary>Mark a report read or unread by rewriting its read property (added if missing); everything else stays as written.</summary>
@@ -87,7 +89,7 @@ public static partial class ReportStore
     /// agent is forgotten. Free of double quotes, angle brackets, ampersands and pipes.</summary>
     /// <param name="qaColumn">The board's QA column, if it has one.</param>
     /// <param name="agentId">The agent's own id, written into the report so Darg forgets (or keeps) the right agent.</param>
-    public static string Rules(string folder, Card card, string? qaColumn, string? agentId)
+    public static string Rules(string folder, Card card, string? qaColumn, string? agentId, string? attentionColumn = null)
     {
         var stamp = $"{DateTime.Now:yyyyMMdd-HHmm}-{card.Id}";
         string FileFor(string suffix) => Path.Combine(folder, stamp + suffix + ".md").Replace('\\', '/');
@@ -118,7 +120,9 @@ public static partial class ReportStore
             "## Done (what you changed and how you checked it), ## Left (anything not done, or None). " +
             "If the card asked you to look into something, find something out or answer a question, and you changed no code, the report is the finding: " +
             $"write it to {FileFor("")} as above but with status: investigation as its first property (Asked is the question, Done is what you found and how, Left is what is still unknown, or None), then move the card to done. " +
-            "Leave the card where it is, with no report, while work is left.";
+            "Leave the card where it is, with no report, while work is left." + (attentionColumn is not null
+                ? $" If you move the card to {attentionColumn}, don't write its decision report: Darg writes one when a card lands there, from the card file, so keep How to check in the card up to date."
+                : "");
     }
 
     /// <summary>The prompt for Work on a card already in the QA column: not more work, but getting the result
@@ -140,7 +144,7 @@ public static partial class ReportStore
         "Read the card's How to check section before anything else: it says what was done and in which commits. " +
         "Build on that work rather than starting again, fix what my notes say, and leave what already works alone. " +
         "If a note could mean several things, ask me with AskUserQuestion before changing anything. " +
-        "Going back to QA, replace the How to check section with one for this round (what changed since, the new commits, what to look for) " +
+        "Going back to QA or to the attention column (Darg writes that report itself), replace the How to check section with one for this round (what changed since, the new commits, what to look for) " +
         $"rather than adding a second one, leave the {QaNotes.Heading} section as it is, and write a fresh QA report for this round " +
         "(a new file, as the rules below say) rather than editing the last one.";
 

@@ -59,6 +59,16 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// and the person's notes, already written into the card).</summary>
     public Action<Card, string, string>? Rework { get => _parent is null ? field : _parent.Rework; set; }
     FileSystemWatcher? _watchBoards;
+    /// <summary>Set by the project (WOR-0092): a card has landed in the needs-attention column (passed the card and
+    /// its file); the project writes its decision report.</summary>
+    public Action<Card, string>? NeedsAttention { get => _parent is null ? field : _parent.NeedsAttention; set; }
+    /// <summary>Set by the project: the newest report written for a card (its file), or null.</summary>
+    public Func<string, string?>? ReportFor { get => _parent is null ? field : _parent.ReportFor; set; }
+    /// <summary>Set by the project: show a report in Reports.</summary>
+    public Action<string>? OpenReport { get => _parent is null ? field : _parent.OpenReport; set; }
+    /// <summary>The ids in the needs-attention column at the last read of this board's folder; null before the first.</summary>
+    HashSet<string>? _attention;
+    string? _attentionFolder;
 
     public ObservableCollection<string> Boards { get; } = [];
     public ObservableCollection<ListViewModel> Lists { get; } = [];
@@ -564,6 +574,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         using var timing = StallWatch.Shared.Section("Board.Reload");
         try { using var loading = StallWatch.Shared.Section("BoardStore.Load"); _board = BoardStore.Load(Folder); }
         catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
+        NoticeAttention();
         if (Root.SyncLabels()) ApplyAll(); else Apply();
         Root.Reloaded?.Invoke();
     }
@@ -670,6 +681,45 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>Start an agent on a card: it goes to the board's working column ("In Progress", else
     /// the first column) if it was waiting in the backlog or the first column, and the agent opens.</summary>
     public void StartWork(CardViewModel card) => StartWork(card.Card, [], show: true, reload: true);
+
+    /// <summary>A card that wasn't in the needs-attention column at the last read but is now has just landed there,
+    /// whoever moved it (an agent editing board.json, a QA check, a drag): its decision report is written (WOR-0092).
+    /// The first read of a board only learns who is there already.</summary>
+    void NoticeAttention()
+    {
+        if (_board is null || Folder is null) return;
+        var column = AttentionColumn.Find(_board.Columns);
+        var now = column is null ? [] : _board.AllCards.Where(c => BoardStore.PlaceOf(c.Status, _board.Columns) == BoardStore.PlaceOf(column, _board.Columns)).ToList();
+        var fresh = _attention is not null && _attentionFolder == Folder ? now.Where(c => !_attention.Contains(c.Id)).ToList() : [];
+        _attention = now.Select(c => c.Id).ToHashSet();
+        _attentionFolder = Folder;
+        foreach (var card in fresh) NeedsAttention?.Invoke(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)));
+    }
+
+    /// <summary>Whether a card sits in the board's needs-attention column.</summary>
+    public bool InAttention(Card card) =>
+        _board is not null && AttentionColumn.Find(_board.Columns) is { } a && BoardStore.PlaceOf(card.Status, _board.Columns) == BoardStore.PlaceOf(a, _board.Columns);
+
+    /// <summary>Approve a card from its decision report: it goes to the done column. Returns what went wrong, or null.</summary>
+    public string? Approve(string cardId)
+    {
+        foreach (var row in Root.Rows)
+            if (row._board?.AllCards.FirstOrDefault(c => c.Id == cardId) is { } card && row._board.Columns.LastOrDefault() is { } done)
+            {
+                row.Move(card.Id, done.Id);
+                return null;
+            }
+        return $"No card {cardId} on this project's boards.";
+    }
+
+    /// <summary>Send a card back from its decision report (the same path as from QA), by id.</summary>
+    public string? SendBackById(string cardId, string notes)
+    {
+        foreach (var row in Root.Rows)
+            if (row._board?.AllCards.Any(c => c.Id == cardId) == true && row.Lists.SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == cardId) is { } vm)
+                return row.SendBack(vm, notes);
+        return $"{cardId} isn't on a board that's showing; open its board first.";
+    }
 
     /// <summary>Whether a card sits in the board's QA column: Work on then gets the work running to try (WOR-0075),
     /// and it can be sent back with notes (WOR-0079).</summary>
@@ -1052,7 +1102,12 @@ public partial class CardEditor : ObservableObject
     public bool CanWorkOn => _card is not null && !HasAgent;
     /// <summary>The card is in the board's QA column: Work on gets it running to try, and it can be sent back.</summary>
     public bool InQa => _card is not null && _board.InQa(_card.Card);
-    public bool CanSendBack => InQa && CanWorkOn;
+    public bool InAttention => _card is not null && _board.InAttention(_card.Card);
+    public bool CanSendBack => (InQa || InAttention) && CanWorkOn;
+    /// <summary>A report for this card exists (its decision report, once it has landed in needs attention).</summary>
+    public bool HasReport => _card is not null && _board.ReportFor?.Invoke(_card.Id) is not null;
+    [RelayCommand]
+    void OpenReport() { if (_card is not null && _board.ReportFor?.Invoke(_card.Id) is { } f) { _board.Root.Editor = null; _board.OpenReport?.Invoke(f); } }
     public string WorkOnText => InQa ? "▶ Get it running to try" : "▶ Work on this";
     /// <summary>What's wrong, typed while trying a card in QA: it goes into the card and to the agent that reworks it.</summary>
     [ObservableProperty] public partial string SendBackNotes { get; set; } = "";
@@ -1083,7 +1138,7 @@ public partial class CardEditor : ObservableObject
         FlowTargets = MakeFlowTargets();
         OnPropertyChanged(nameof(FlowTargets));
         OnPropertyChanged(nameof(CanWorkOn));
-        OnPropertyChanged(nameof(CanSendBack));
+        OnPropertyChanged(nameof(CanSendBack)); OnPropertyChanged(nameof(HasReport)); OnPropertyChanged(nameof(InAttention));
     }
 
     IEnumerable<string> LabelList() => LabelsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);

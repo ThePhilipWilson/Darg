@@ -38,6 +38,49 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     /// <summary>Show a card on the board (set by the project); false: no such card there.</summary>
     public Func<string, bool>? OpenCard { get; set; }
 
+    /// <summary>Set by the project (WOR-0092): move a card to done; send one back with notes. Each returns what went wrong, or null.</summary>
+    public Func<string, string?>? ApproveCard { get; set; }
+    public Func<string, string, string?>? SendCardBack { get; set; }
+    /// <summary>What's typed beside Approve and Send back: the notes for the report's Decision section (and the agent, when sent back).</summary>
+    [ObservableProperty] public partial string DecisionNotes { get; set; } = "";
+
+    /// <summary>The newest report for a card (its file), from the last load.</summary>
+    public string? LatestFor(string card) => _all.FirstOrDefault(r => r.Card == card)?.File;
+
+    /// <summary>Select a report by file, showing the list unfiltered if it was hidden.</summary>
+    public void Show(string file)
+    {
+        Reload();
+        UnreadOnly = false;
+        Selected = Reports.FirstOrDefault(r => r.Report.File == file);
+    }
+
+    [RelayCommand]
+    void Approve()
+    {
+        if (Selected is not { Pending: true } s) return;
+        if (ApproveCard?.Invoke(s.Report.Card) is { } error) { Status = error; return; }
+        Settle(s, DecisionReport.Approved);
+    }
+
+    [RelayCommand]
+    void SendBack()
+    {
+        if (Selected is not { Pending: true } s) return;
+        if (DecisionNotes.Trim().Length == 0) { Status = "Say what's wrong first: the agent works from your notes."; return; }
+        if (SendCardBack?.Invoke(s.Report.Card, DecisionNotes) is { } error) { Status = error; return; }
+        Settle(s, DecisionReport.SentBack);
+    }
+
+    void Settle(ReportRow row, string decision)
+    {
+        try { DecisionReport.Settle(row.Report.File, decision, DecisionNotes); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Can't write the decision into {row.Report.Id}: {e.Message}"; return; }
+        DecisionNotes = "";
+        Status = decision == DecisionReport.Approved ? $"{row.Report.Card} approved and moved to done." : $"{row.Report.Card} sent back.";
+        Reload();
+    }
+
     public ReportsViewModel(string folder)
     {
         Folder = folder;
@@ -169,7 +212,7 @@ public partial class ReportRow(AgentReport r) : ObservableObject
     public string Heading => Report.Heading;
     public string Meta => string.Join(" · ", new[]
     {
-        Report.Kind switch { ReportKind.Qa => "QA · to check", ReportKind.Investigation => "investigation", _ => "" },
+        Report.Decision.Length > 0 ? "decision " + Report.Decision : Report.Kind switch { ReportKind.Qa => "QA · to check", ReportKind.Investigation => "investigation", _ => "" },
         Report.Date,
         Report.Commits.Count switch { 0 => "", 1 => "1 commit", var n => $"{n} commits" },
     }.Where(s => s.Length > 0));
@@ -177,6 +220,8 @@ public partial class ReportRow(AgentReport r) : ObservableObject
     public IReadOnlyList<string> Commits => Report.Commits;
     public bool HasCommits => Report.Commits.Count > 0;
     public bool HasCard => Report.Card.Length > 0;
+    /// <summary>A decision report nobody has settled yet (WOR-0092): Approve and Send back show.</summary>
+    public bool Pending => Report.Decision == DecisionReport.Pending;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(ReadLabel))] public partial bool Read { get; set; } = r.Read;
     public string ReadLabel => Read ? "Mark unread" : "Mark read";
 }
