@@ -532,8 +532,16 @@ public partial class AgentViewModel : ObservableObject
     public bool FinishedTurn => Items.LastOrDefault() is NoteItem { Bad: false } n && n.Text.StartsWith("Turn done", StringComparison.Ordinal);
 
     /// <summary>A turn starts: progress counts from nothing again.</summary>
+    /// <summary>A turn that ends sooner than this isn't worth a notification: the person only asked for a quick thing (WOR-0081).</summary>
+    public static readonly TimeSpan LongTurn = TimeSpan.FromMinutes(2);
+    DateTime _turnStart = DateTime.MinValue;
+
+    /// <summary>Whether a turn that took <paramref name="took"/> is worth a "finished" notification. Errors, questions and permission asks always notify.</summary>
+    public static bool WorthTellingFinished(TimeSpan took, bool isError) => isError || took >= LongTurn;
+
     void TurnBegins(string what)
     {
+        _turnStart = DateTime.UtcNow;
         Steps = 0;
         TurnFailed = false;
         Activity = what;
@@ -836,8 +844,10 @@ public partial class AgentViewModel : ObservableObject
                 State = AgentState.Idle;
                 Save();
                 TurnEnded?.Invoke(f.IsError);
-                Notify?.Invoke(f.IsError ? "stopped with an error" : "finished",
-                    Items.OfType<TextItem>().LastOrDefault()?.Text ?? f.Text);
+                // only long turns (or a failed one) interrupt: a quick answer is already in the transcript (WOR-0081)
+                if (_turnStart == DateTime.MinValue || WorthTellingFinished(DateTime.UtcNow - _turnStart, f.IsError))
+                    Notify?.Invoke(f.IsError ? "stopped with an error" : "finished",
+                        Items.OfType<TextItem>().LastOrDefault()?.Text ?? f.Text);
                 break;
             case SessionExited x:
                 // a session we closed ourselves (resume later) isn't news; one that died is
