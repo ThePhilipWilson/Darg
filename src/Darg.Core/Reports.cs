@@ -12,8 +12,10 @@ namespace Darg.Core;
 /// <param name="Decision">A decision report's state (WOR-0092): pending, approved or sent back; empty for any other report.</param>
 /// <param name="Investigation">An investigation (<c>status: investigation</c>, WOR-0091): the agent looked into something
 /// and changed nothing, so the report is the finding.</param>
+/// <param name="Cnr">Could not reproduce (<c>status: cnr</c>, WOR-0109): a bug card found already fixed or not
+/// reproducible; listed with the investigations, since nothing was changed.</param>
 public sealed record AgentReport(string File, string Card, string Title, string Agent, IReadOnlyList<string> Commits,
-    string Repo, string Date, bool Read, string Body, bool Qa = false, bool Investigation = false, string Decision = "")
+    string Repo, string Date, bool Read, string Body, bool Qa = false, bool Investigation = false, string Decision = "", bool Cnr = false)
 {
     /// <summary>Which of the three lists it belongs to (WOR-0091): QA wins, then investigation, else a finished task.</summary>
     public ReportKind Kind => Qa ? ReportKind.Qa : Investigation ? ReportKind.Investigation : ReportKind.Finished;
@@ -63,8 +65,8 @@ public static partial class ReportStore
         if (title.Length == 0 && Regex.Match(body, @"^#\s+(.+)$", RegexOptions.Multiline) is { Success: true } h) title = h.Groups[1].Value.Trim();
         return new AgentReport(file, fields.GetValueOrDefault("card", ""), title, fields.GetValueOrDefault("agent", ""), commits,
             fields.GetValueOrDefault("repo", ""), date, IsTrue(fields.GetValueOrDefault("read", "")), body.TrimEnd(),
-            Status(fields) == "qa", Status(fields) == "investigation",
-            fields.GetValueOrDefault("decision", "").Trim().Trim('"', '\'').ToLowerInvariant());
+            Status(fields) == "qa", Status(fields) is "investigation" or "cnr",
+            fields.GetValueOrDefault("decision", "").Trim().Trim('"', '\'').ToLowerInvariant(), Status(fields) == "cnr");
     }
 
     /// <summary>Mark a report read or unread by rewriting its read property (added if missing); everything else stays as written.</summary>
@@ -83,6 +85,13 @@ public static partial class ReportStore
         else updated = $"---\nread: {value}\n---\n\n" + text;
         System.IO.File.WriteAllText(file, updated, new UTF8Encoding(false));
     }
+
+    /// <summary>The label a bug card gets when its agent found it already fixed or couldn't reproduce it (WOR-0109):
+    /// it goes to done with this label, so the board shows it wasn't worked on.</summary>
+    public const string CnrLabel = "cnr";
+
+    /// <summary>The card file's section saying what was tried and what fixed it, if anything did.</summary>
+    public const string CnrHeading = "## Could not reproduce";
 
     /// <summary>Told to agents writing a report: Reports draws pictures and makes links clickable. Free of double quotes, angle brackets, ampersands and pipes.</summary>
     public const string ReportMedia =
@@ -125,10 +134,25 @@ public static partial class ReportStore
             "## Done (what you changed and how you checked it), ## Left (anything not done, or None). " + ReportMedia + " " +
             "If the card asked you to look into something, find something out or answer a question, and you changed no code, the report is the finding: " +
             $"write it to {FileFor("")} as above but with status: investigation as its first property (Asked is the question, Done is what you found and how, Left is what is still unknown, or None), then move the card to done. " +
+            Cnr(FileFor("")) + " " +
             "Leave the card where it is, with no report, while work is left." + (attentionColumn is not null
                 ? $" If you move the card to {attentionColumn}, don't write its decision report: Darg writes one when a card lands there, from the card file, so keep How to check in the card up to date."
                 : "");
     }
+
+    /// <summary>What a card agent does with a bug that is already fixed or won't reproduce (WOR-0109): no work for the sake
+    /// of it, a section in the card saying what was tried and which commit fixed it, the <see cref="CnrLabel"/> label, done,
+    /// and a <c>status: cnr</c> report. Only after really trying it: not having been able to run it is not CNR.
+    /// Free of double quotes, angle brackets, ampersands and pipes.</summary>
+    public static string Cnr(string reportFile) =>
+        "If the card reports a bug (whatever its Type says) and you find it already fixed or cannot reproduce it, that is CNR (could not reproduce): " +
+        "change no code just to have made a change. Call it CNR only after trying it the way the card describes (the steps, a test, the app) and seeing it behave; " +
+        "reading the code is not enough unless you find the commit that fixed it, and if you could not exercise it at all, that is not CNR: say so and ask me. " +
+        $"For a CNR, add a section headed {CnrHeading} to the card file, below the description, with what you tried, what you saw, " +
+        "and the commit that fixed it if you can find one (git log -S on the code involved, or --grep on the symptom or card id); " +
+        $"add {CnrLabel} to its Labels line; move it to done as above, with a Done line; and, as the very last thing you do, write the report to {reportFile} as above " +
+        "but with status: cnr as its first property and commits: the commit that fixed it, if found (Asked is the bug, Done is what you tried and found, Left is anything you could not try, or None). " +
+        "Say plainly in your last message that it did not reproduce.";
 
     /// <summary>The prompt for Work on a card already in the QA column: not more work, but getting the result
     /// in front of the person. Free of double quotes, angle brackets, ampersands and pipes.</summary>

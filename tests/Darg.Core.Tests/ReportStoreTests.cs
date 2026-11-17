@@ -136,6 +136,30 @@ public class ReportStoreTests
     }
 
     [Fact]
+    public void A_bug_that_does_not_reproduce_goes_to_done_labelled_cnr_with_a_cnr_report()
+    {
+        var card = new Card("WOR-0109", "Gone already", "In Progress", "", "Bug", [], "x.md", "");
+        var rules = ReportStore.Rules("C:\\inst\\reports", card, "QA Ready", "abc1234567");
+        Assert.Contains(ReportStore.Cnr("C:/inst/reports/x.md").Split(':')[0], rules); // every card agent is told
+        Assert.Contains(ReportStore.CnrHeading, rules);
+        Assert.Contains($"add {ReportStore.CnrLabel} to its Labels line", rules);
+        Assert.Contains("status: cnr", rules);
+        Assert.Matches(@"write the report to C:/inst/reports/\d{8}-\d{4}-WOR-0109\.md as above\s+but with status: cnr", rules);
+        // not being able to run it is not a CNR
+        Assert.Contains("if you could not exercise it at all, that is not CNR", rules);
+        // before the no-report rule, so the agent reads CNR as finished, not as work left
+        Assert.True(rules.IndexOf("status: cnr") < rules.IndexOf("Leave the card where it is, with no report"));
+        Assert.DoesNotContain("\"", rules);
+        foreach (var c in "<>&|") Assert.DoesNotContain(c, rules);
+
+        var r = ReportStore.Parse(Report.Replace("card: WOR-0061", "status: CNR\ncard: WOR-0061"), "x.md");
+        Assert.True(r.Cnr);
+        Assert.Equal(ReportKind.Investigation, r.Kind); // nothing changed: it's a finding
+        Assert.False(ReportStore.Parse(Report, "x.md").Cnr);
+        Assert.False(ReportStore.Parse(Report.Replace("card: WOR-0061", "status: investigation\ncard: WOR-0061"), "x.md").Cnr);
+    }
+
+    [Fact]
     public void A_qa_handoff_writes_a_qa_report_of_its_own_and_the_agent_stays()
     {
         var card = new Card("WOR-0088", "QA reports", "In Progress", "", "Task", [], "x.md", "");

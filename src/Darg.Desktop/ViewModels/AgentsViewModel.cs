@@ -434,7 +434,7 @@ public partial class AgentsViewModel : ObservableObject
         string? finish = null)
     {
         var lines = new List<string> { $"Work on this card from the {projectName} board.", "", $"{card.Id}: {card.Title}" };
-        if (card.IsBug) lines.Add("Type: Bug. Find the cause before changing anything, and add a test that fails without the fix where one can be written.");
+        if (card.IsBug) lines.Add("Type: Bug. First check it still happens (if it doesn't, see CNR below). Find the cause before changing anything, and add a test that fails without the fix where one can be written.");
         else if (!card.Kind.Equals(CardTypes.Task, StringComparison.OrdinalIgnoreCase)) lines.Add($"Type: {card.Kind}");
         if (card.Labels.Count > 0) lines.Add($"Labels: {string.Join(", ", card.Labels)}");
         if (card.Priority.Length > 0) lines.Add($"Priority: {card.Priority}");

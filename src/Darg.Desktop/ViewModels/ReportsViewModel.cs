@@ -223,7 +223,7 @@ public partial class ReportRow(AgentReport r) : ObservableObject
     public string Heading => Report.Heading;
     public string Meta => string.Join(" · ", new[]
     {
-        Report.Decision.Length > 0 ? "decision " + Report.Decision : Report.Kind switch { ReportKind.Qa => "QA · to check", ReportKind.Investigation => "investigation", _ => "" },
+        Report.Decision.Length > 0 ? "decision " + Report.Decision : Report.Cnr ? "could not reproduce" : Report.Kind switch { ReportKind.Qa => "QA · to check", ReportKind.Investigation => "investigation", _ => "" },
         Report.Date,
         Report.Commits.Count switch { 0 => "", 1 => "1 commit", var n => $"{n} commits" },
     }.Where(s => s.Length > 0));
