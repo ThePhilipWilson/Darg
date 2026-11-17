@@ -710,6 +710,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         return null;
     }
 
+    /// <summary>Set by the project (WOR-0105): a card approved from its panel, so its report can be marked approved too.</summary>
+    public Action<string>? Approved { get; set; }
+
     /// <summary>Approve a card from its decision report: it goes to the done column. Returns what went wrong, or null.</summary>
     public string? Approve(string cardId)
     {
@@ -1223,8 +1226,10 @@ public partial class CardEditor : ObservableObject
     void QaDone()
     {
         if (_card is null) return;
-        if (_board.Approve(_card.Id) is { } error) { Error = error; return; }
+        var id = _card.Id;
+        if (_board.Approve(id) is { } error) { Error = error; return; }
         _board.Root.Editor = null;
+        _board.Root.Approved?.Invoke(id);
     }
 
     /// <summary>Send a card in QA back (WOR-0079): the notes go into the card and an agent reworks it from them.

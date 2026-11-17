@@ -488,6 +488,7 @@ public partial class ProjectViewModel : ObservableObject
             Board.ReportFor = id => Reports!.LatestFor(id);
             Board.OpenReport = file => { Reports!.Show(file); Section = Section.Reports; };
             Reports!.ApproveCard = Board.Approve;
+            Board.Approved = Reports.ApprovedFromBoard;
             Reports.SendCardBack = Board.SendBackById;
             // a card looks up its agent only when the board rebuilds: forgetting the agent frees the card now
             Agents.Forgotten += a => { if (a.CardId is { } card) Board.AgentGone(card); };
