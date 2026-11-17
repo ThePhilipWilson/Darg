@@ -229,6 +229,10 @@ public partial class AgentsViewModel : ObservableObject
     public void RefreshCards() { using var timing = StallWatch.Shared.Section("Agents.RefreshCards"); foreach (var a in Agents) if (a.CardId is not null) a.CardDone = IsCardDone(a.CardId); }
     [ObservableProperty] public partial AgentViewModel? Selected { get; set; }
     [ObservableProperty] public partial string NewPrompt { get; set; } = "";
+    /// <summary>What the Flows tab's box holds: the task to run a flow on, or what a new flow is for (WOR-0097).</summary>
+    [ObservableProperty] public partial string FlowTask { get; set; } = "";
+    /// <summary>Asked to show the Agents section, so a started flow can be watched there.</summary>
+    public Action? ShowAgents { get; set; }
     /// <summary>Where a new agent from the box starts: the project's first repo unless another is picked.</summary>
     public string Folder => SelectedRepo?.Path ?? project.WorkingFolder();
     /// <summary>The project's repos, for the box's folder picker (shown when there's more than one).</summary>
@@ -268,8 +272,9 @@ public partial class AgentsViewModel : ObservableObject
     void NewFlow(string? which)
     {
         var words = (which ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        GenerateFlow(words.Contains("art") ? FlowKind.Art : FlowKind.Basic, words.Contains("shared"), NewPrompt);
-        NewPrompt = "";
+        GenerateFlow(words.Contains("art") ? FlowKind.Art : FlowKind.Basic, words.Contains("shared"), FlowTask);
+        FlowTask = "";
+        ShowAgents?.Invoke();
     }
 
     /// <summary>Start the agent that writes a new flow; the Flow list reads the folders again when its turn ends.</summary>
@@ -324,10 +329,11 @@ public partial class AgentsViewModel : ObservableObject
     [RelayCommand]
     void StartFlow()
     {
-        var task = NewPrompt.Trim();
+        var task = FlowTask.Trim();
         if (task.Length == 0 || SelectedFlow is null) return;
         RunFlow(SelectedFlow, task, name: ChatTitle.Guess(task), cwd: Folder);
-        NewPrompt = "";
+        FlowTask = "";
+        ShowAgents?.Invoke();
     }
 
     /// <summary>Run a flow on a task: each stage an agent named for the task and its role ("WOR-0023 … · QA"), started when the one
