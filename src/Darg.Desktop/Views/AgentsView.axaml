@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:views="using:Darg.Desktop.Views"
              x:Class="Darg.Desktop.Views.AgentsView"
              x:DataType="vm:AgentsViewModel">
   <Grid ColumnDefinitions="280,*">
@@ -162,6 +163,8 @@
                   ToolTip.Tip="The agent's last reply was a mistake: it writes an entry in the project's mistake log (Mistakes in the rail). What you've typed says what was wrong; leave it empty and the agent works it out or asks."/>
           <Button DockPanel.Dock="Right" Content="✎ Draw" Command="{Binding DrawCommand}" Margin="8,0,0,0" VerticalAlignment="Bottom"
                   ToolTip.Tip="Ask this agent for a canvas (claude-draw). What you've typed says what it's about; the drawing comes back here."/>
+          <Button DockPanel.Dock="Right" Content="🎙" views:Dictation.Target="{Binding #ComposeBox}" Margin="8,0,0,0" VerticalAlignment="Bottom"
+                  AutomationProperties.Name="Dictate"/>
           <TextBox x:Name="ComposeBox" Text="{Binding Compose}" PlaceholderText="Message this agent… (Enter sends, Shift+Enter for a new line)"
                    AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160"/>
         </DockPanel>

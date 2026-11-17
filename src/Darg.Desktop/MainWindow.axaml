@@ -179,6 +179,8 @@
           <DockPanel DockPanel.Dock="Bottom" IsVisible="{Binding !ShowNotifications}">
             <Button DockPanel.Dock="Right" Content="➤" Command="{Binding Mascot.SendCommand}" Background="Transparent"
                     AutomationProperties.Name="Send to Fettle" VerticalAlignment="Bottom" Margin="0,0,6,6"/>
+            <Button DockPanel.Dock="Right" Content="🎙" views:Dictation.Target="{Binding #MascotBox}" Background="Transparent"
+                    AutomationProperties.Name="Dictate to Fettle" VerticalAlignment="Bottom" Margin="0,0,0,6"/>
             <TextBox x:Name="MascotBox" Text="{Binding Mascot.Compose}" BorderThickness="0,1,0,0" CornerRadius="0,0,0,14"
                      PlaceholderText="What needs fettling?" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" Padding="12,9"/>
           </DockPanel>
