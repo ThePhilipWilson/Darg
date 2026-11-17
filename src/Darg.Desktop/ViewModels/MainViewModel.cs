@@ -300,7 +300,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial bool ShowNotifications { get; set; }
     [RelayCommand] void ShowChatTab() => ShowNotifications = false;
     [RelayCommand] void ShowNotificationsTab() => ShowNotifications = true;
-    [RelayCommand] void ClearNotifications() => Notifications.Clear();
+    /// <summary>Empty the list and go back to the chat: an empty Notifications tab has nothing to show (WOR-0090).</summary>
+    [RelayCommand] void ClearNotifications() { Notifications.Clear(); ShowNotifications = false; }
     [RelayCommand] void OpenNotification(NotificationEntry? n) { if (n is not null) OpenAgent(n.ProjectId, n.AgentId); }
 
     void Log(string projectId, string agentId, string project, string agent, string what, string detail)
