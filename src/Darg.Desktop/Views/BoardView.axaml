@@ -243,6 +243,11 @@
     <!-- a card: new, or open to read and edit -->
     <Border Grid.Column="1" Width="400" IsVisible="{Binding IsEditing}" Background="{DynamicResource Panel}"
             BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
+      <DockPanel>
+        <!-- WOR-0117: stays at the top left while a long ticket scrolls below -->
+        <Button DockPanel.Dock="Top" Content="✕" Command="{Binding Editor.CancelCommand}" HorizontalAlignment="Left"
+                Background="Transparent" Padding="8,2" Margin="8,6,0,0" MinHeight="0"
+                ToolTip.Tip="Close this card" AutomationProperties.Name="Close card"/>
       <ScrollViewer>
         <StackPanel DataContext="{Binding Editor}" x:DataType="vm:CardEditor" Margin="14" Spacing="10">
           <DockPanel>
@@ -310,6 +315,7 @@
           </StackPanel>
         </StackPanel>
       </ScrollViewer>
+      </DockPanel>
     </Border>
 
     <!-- making boards: one by hand, or an agent sorting the cards into several -->
