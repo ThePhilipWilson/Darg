@@ -70,15 +70,11 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// (passed the card and its file); the project writes or archives its reports.</summary>
     public Action<Card, string>? EnteredQa { get => _parent is null ? field : _parent.EnteredQa; set; }
     public Action<Card, string>? EnteredDone { get => _parent is null ? field : _parent.EnteredDone; set; }
-    HashSet<string>? _seenCards, _inQa, _inDone;
-    string? _seenFolder;
+    readonly ColumnWatch _moves = new();
     /// <summary>Set by the project: the newest report written for a card (its file), or null.</summary>
     public Func<string, string?>? ReportFor { get => _parent is null ? field : _parent.ReportFor; set; }
     /// <summary>Set by the project: show a report in Reports.</summary>
     public Action<string>? OpenReport { get => _parent is null ? field : _parent.OpenReport; set; }
-    /// <summary>The ids in the needs-attention column at the last read of this board's folder; null before the first.</summary>
-    HashSet<string>? _attention;
-    string? _attentionFolder;
 
     public ObservableCollection<string> Boards { get; } = [];
     public ObservableCollection<ListViewModel> Lists { get; } = [];
@@ -770,42 +766,17 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// the first column) if it was waiting in the backlog or the first column, and the agent opens.</summary>
     public void StartWork(CardViewModel card) => StartWork(card.Card, [], show: false, reload: true);
 
-    /// <summary>A card that wasn't in the needs-attention column at the last read but is now has just landed there,
-    /// whoever moved it (an agent editing board.json, a QA check, a drag): its decision report is written (WOR-0092).
-    /// The first read of a board only learns who is there already.</summary>
+    /// <summary>Cards that entered the attention, QA or done column since the last read of this board's folder, whoever
+    /// moved them (an agent editing board.json, a QA check, a drag), are handed to the project, which writes or archives
+    /// their reports (WOR-0092, WOR-0102; <see cref="ColumnWatch"/>). The first read of a board only learns who is there.</summary>
     void NoticeAttention()
     {
         if (_board is null || Folder is null) return;
-        var column = AttentionColumn.Find(_board.Columns);
-        var now = column is null ? [] : _board.AllCards.Where(c => BoardStore.PlaceOf(c.Status, _board.Columns) == BoardStore.PlaceOf(column, _board.Columns)).ToList();
-        var fresh = _attention is not null && _attentionFolder == Folder ? now.Where(c => !_attention.Contains(c.Id)).ToList() : [];
-        _attention = now.Select(c => c.Id).ToHashSet();
-        _attentionFolder = Folder;
-        foreach (var card in fresh) NeedsAttention?.Invoke(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)));
-        NoticeQaAndDone();
-    }
-
-    /// <summary>WOR-0102: a card already on this board that is now in the QA column gets a QA report, and one now in the
-    /// last (done) column has its QA report archived and a done report written, whoever moved it.</summary>
-    void NoticeQaAndDone()
-    {
-        if (_board is null || Folder is null) return;
-        var cards = _board.AllCards.ToList();
-        HashSet<string> In(string? column) => column is null ? [] : cards.Where(c => BoardStore.PlaceOf(c.Status, _board.Columns) == BoardStore.PlaceOf(column, _board.Columns)).Select(c => c.Id).ToHashSet();
-        var qa = In(BoardColumns.Qa(_board.Columns));
-        var done = In(_board.Columns.LastOrDefault()?.Name);
-        var known = _seenCards is not null && _seenFolder == Folder;
-        _seenFolder = Folder;
-        var before = (_seenCards, _inQa, _inDone);
-        _seenCards = cards.Select(c => c.Id).ToHashSet(); _inQa = qa; _inDone = done;
-        if (!known || before.Item2 is null || before.Item3 is null) return;
+        var moves = _moves.Read(Folder, _board);
         string File(Card c) => Path.GetFullPath(Path.Combine(Folder, "items", c.File));
-        foreach (var c in cards)
-        {
-            if (!before.Item1!.Contains(c.Id)) continue; // new to the board, not moved
-            if (qa.Contains(c.Id) && !before.Item2.Contains(c.Id)) EnteredQa?.Invoke(c, File(c));
-            if (done.Contains(c.Id) && !before.Item3.Contains(c.Id)) EnteredDone?.Invoke(c, File(c));
-        }
+        foreach (var c in moves.Attention) NeedsAttention?.Invoke(c, File(c));
+        foreach (var c in moves.Qa) EnteredQa?.Invoke(c, File(c));
+        foreach (var c in moves.Done) EnteredDone?.Invoke(c, File(c));
     }
 
     /// <summary>Whether a card sits in the board's needs-attention column.</summary>
