@@ -4,10 +4,13 @@ namespace Darg.Core.Tests;
 
 public sealed class BoardTests : IDisposable
 {
-    readonly string _dir = Directory.CreateTempSubdirectory("wb-board-").FullName;
+    // The board gets a folder of its own: %TEMP% holds other tests' boards, and Create numbers past them all.
+    readonly string _root = Directory.CreateTempSubdirectory("wb-board-").FullName;
+    readonly string _dir;
 
     public BoardTests()
     {
+        _dir = Directory.CreateDirectory(Path.Combine(_root, "board")).FullName;
         File.WriteAllText(Path.Combine(_dir, "board.json"), """
             {"columns":[{"id":"c1","name":"To Do"},{"id":"c2","name":"In Progress"},{"id":"c3","name":"Done"}],
              "prefix":"T","nextId":5,"order":{"backlog":["T-0002","T-0001"],"c1":["T-0003"]}}
@@ -137,5 +140,5 @@ public sealed class BoardTests : IDisposable
         Assert.DoesNotContain("minimized", File.ReadAllText(Path.Combine(_dir, "board.json")));
     }
 
-    public void Dispose() => Directory.Delete(_dir, true);
+    public void Dispose() => Directory.Delete(_root, true);
 }
