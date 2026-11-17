@@ -485,6 +485,22 @@ public partial class ProjectViewModel : ObservableObject
                 var folder = Reports!.Folder; var repo = CardFolder(card);
                 _ = Task.Run(() => { try { DecisionReport.Write(folder, card, file, repo, DateTime.Now, TimeSpan.FromMinutes(2)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
             };
+            // WOR-0102: a card entering QA gets a QA report, one reaching done has it archived and a done report written.
+            // A card agent still at work writes its own report as its last step, so Darg leaves the writing to it.
+            Board.EnteredQa = (card, file) =>
+            {
+                if (Agents.ForCard(card.Id) is { State: AgentState.Starting or AgentState.Working }) return;
+                var folder = Reports!.Folder; var repo = CardFolder(card);
+                _ = Task.Run(() => { try { DecisionReport.Write(folder, card, file, repo, DateTime.Now, TimeSpan.FromMinutes(2)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
+            };
+            Board.EnteredDone = (card, file) =>
+            {
+                var folder = Reports!.Folder; var repo = CardFolder(card);
+                var live = Agents.ForCard(card.Id) is { State: AgentState.Starting or AgentState.Working };
+                var archived = DecisionReport.Archive(folder, card.Id);
+                if (live) return;
+                _ = Task.Run(() => { try { DecisionReport.WriteDone(folder, card, file, repo, DateTime.Now, archived, TimeSpan.FromMinutes(10)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
+            };
             Board.ReportFor = id => Reports!.LatestFor(id);
             Board.OpenReport = file => { Reports!.Show(file); Section = Section.Reports; };
             Reports!.ApproveCard = Board.Approve;
