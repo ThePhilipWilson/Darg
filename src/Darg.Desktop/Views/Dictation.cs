@@ -34,6 +34,18 @@ public static class Dictation
     }
 
     static Button? active;
+    static string? savedHint;
+    static DateTime lastSound;
+
+    /// <summary>The status goes where it can be seen: the box's own placeholder (a tooltip needs hovering, and was missed).
+    /// Also appended to dictation.log in the instance folder so a failure can be read afterwards.</summary>
+    static void Say(Button b, string text)
+    {
+        if (active != b) return;
+        if (GetTarget(b) is { } box) box.PlaceholderText = text;
+        ToolTip.SetTip(b, text);
+        try { File.AppendAllText(Path.Combine(Darg.Core.InstanceConfig.Folder(), "dictation.log"), $"{DateTime.Now:HH:mm:ss} {text}\n"); } catch { }
+    }
 #if WINDOWS
     static SpeechRecognitionEngine? engine;
 #endif
@@ -73,26 +85,40 @@ public static class Dictation
             {
                 var text = r.Result.Text;
                 if (string.IsNullOrWhiteSpace(text)) return;
-                Dispatcher.UIThread.Post(() => Insert(box, text));
+                Dispatcher.UIThread.Post(() => { Say(b, "Typed: " + text); Insert(box, text); });
             };
             // Feedback, so a silent failure is visible: the button shows the input level, the tooltip what's being heard.
             engine.AudioLevelUpdated += (_, a) =>
             {
                 var lvl = a.AudioLevel;
-                Dispatcher.UIThread.Post(() => { if (active == b) b.Content = lvl switch { < 2 => "⏺", < 15 => "🔉", _ => "🔊" }; });
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (active != b) return;
+                    b.Content = lvl switch { < 2 => "⏺", < 15 => "🔉", _ => "🔊" };
+                    if (lvl >= 2) lastSound = DateTime.UtcNow;
+                    else if ((DateTime.UtcNow - lastSound).TotalSeconds > 6)
+                    {
+                        lastSound = DateTime.UtcNow;
+                        Say(b, "No sound from the microphone. In Windows Settings > Sound > Input pick your mic and watch its level bar while you talk.");
+                    }
+                });
             };
             engine.SpeechHypothesized += (_, h) =>
-                Dispatcher.UIThread.Post(() => { if (active == b) ToolTip.SetTip(b, "Hearing: " + h.Result.Text); });
+                Dispatcher.UIThread.Post(() => Say(b, "Hearing: " + h.Result.Text));
             engine.SpeechRecognitionRejected += (_, _) =>
-                Dispatcher.UIThread.Post(() => { if (active == b) ToolTip.SetTip(b, "Heard something but couldn't make it out; speak closer or clearer."); });
+                Dispatcher.UIThread.Post(() => Say(b, "Heard something but couldn't make it out; speak closer or clearer."));
             engine.RecognizeAsync(RecognizeMode.Multiple);
             active = b;
+            lastSound = DateTime.UtcNow;
+            savedHint = box.PlaceholderText;
             Show(b, true);
+            Say(b, $"Listening ({info.Culture.Name}): speak now. What it hears shows here.");
         }
         catch (Exception ex)
         {
             Stop();
             ToolTip.SetTip(b, "Couldn't start the microphone: " + ex.Message);
+            box.PlaceholderText = "Couldn't start the microphone: " + ex.Message;
         }
 #endif
     }
@@ -103,7 +129,7 @@ public static class Dictation
         try { engine?.RecognizeAsyncCancel(); engine?.Dispose(); } catch { }
         engine = null;
 #endif
-        if (active is { } b) Show(b, false);
+        if (active is { } b) { Show(b, false); if (GetTarget(b) is { } bx) bx.PlaceholderText = savedHint; }
         active = null;
     }
 
