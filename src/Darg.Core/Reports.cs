@@ -159,6 +159,17 @@ public static partial class ReportStore
         "Reports shows markdown pictures and links, so where it helps put them in: a screenshot you took as a markdown image with its full path (an image on this machine, for example ![the board](C:/path/shot.png)), " +
         "and a link for a commit, branch, pull request, issue or page the reader may want to open (a full https address). Leave them out when there is nothing to show.";
 
+    /// <summary>What card and QA agents are told about tests (WOR-0127): the whole suite, and no failing test passed
+    /// over as unrelated (one was, by every QA pass for a week, while it hid a real flaw in the tests). Free of double
+    /// quotes, angle brackets, ampersands and pipes.</summary>
+    public const string TestSuite =
+        "Run the project's whole test suite, the command its CLAUDE.md gives if it gives one, not only the tests for this card. " +
+        "A failing test is never passed over as unrelated: name it in what you say and in any report, and say whether it fails without this card's work too.";
+
+    /// <summary>Card agents only (a QA agent changes no code): pin the change down with a test.</summary>
+    public const string AddTest =
+        "Where what you changed can be pinned down by a test (the project's CLAUDE.md says where its unit and integration tests are), add one that fails without your change.";
+
     /// <summary>What a card agent is told about finishing, in place of "move the card to done": QA with a short QA
     /// report (<c>status: qa</c>) when the person should look, and the agent stays; else done with a report, and the
     /// agent is forgotten. Free of double quotes, angle brackets, ampersands and pipes.</summary>
@@ -178,6 +189,7 @@ public static partial class ReportStore
             ? $"first add {howToCheck}; then set its Status to {qaColumn} and move its id into that column in board.json's order"
             : $"first add {howToCheck}, and leave the card where it is (this board has no QA column)";
         return
+            AddTest + " " + TestSuite + " " +
             "When the work is finished and pushed, decide whether I need to check it. " +
             "It needs checking when part of it is something you couldn't see or verify yourself (how it looks, behaviour you didn't exercise live, " +
             $"a choice you made on my behalf, tests you couldn't run): then {qa}, and say in your last message exactly what to check. " +
@@ -233,6 +245,7 @@ public static partial class ReportStore
         "(in a git worktree of its own if that is not what the main folder is on), run the tests and the commands the section gives, and exercise what it says to look for. " +
         "Check by automation, not by handing steps to me: drive the app the way the project's CLAUDE.md says (its environment variables, its API, " +
         "a throwaway instance, fake agents, moving a card by editing its file and board.json, UI Automation) and write a script or test where none exists. " +
+        TestSuite + " " +
         "Say in one message what you checked and how, what passed, what failed or looks wrong, and what you could not check and why. Change no code. " +
         "Then, as the last thing you do, move the card on the board by your verdict: " +
         (doneColumn is not null ? $"everything passed and nothing needs my eyes: set its Status to {doneColumn}, add a Done line with today's date, and move its id into that column in board.json's order; " : "everything passed: leave it where it is; ") +

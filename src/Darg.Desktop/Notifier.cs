@@ -9,6 +9,13 @@ public static class Notifier
     /// <summary>(project id, agent id) of a notification the person clicked. Raised off the UI thread.</summary>
     public static event Action<string, string>? Opened;
 
+    /// <summary>A notification as shown.</summary>
+    public sealed record Notification(string ProjectId, string AgentId, string Title, string AgentName, string Detail);
+
+    /// <summary>When set (the integration tests set it), notifications go here instead of to the OS, and
+    /// the app's own are never cleared from Action Center.</summary>
+    public static Action<Notification>? Capture { get; set; }
+
     public static void Init()
     {
 #if WINDOWS
@@ -23,6 +30,7 @@ public static class Notifier
     /// <summary>A toast: "Alpha: has a question" over the agent's name, then the detail.</summary>
     public static void Show(string projectId, string agentId, string title, string agentName, string detail)
     {
+        if (Capture is { } capture) { capture(new Notification(projectId, agentId, title, agentName, detail)); return; }
 #if WINDOWS
         // off the UI thread: a toast takes about 100 ms to show, and five agents finishing together froze the window (WOR-0076)
         Task.Run(() =>
@@ -45,6 +53,7 @@ public static class Notifier
     /// <summary>Clear this app's notifications from Action Center (on exit, so stale ones don't linger).</summary>
     public static void Clear()
     {
+        if (Capture is not null) return;
 #if WINDOWS
         try { Microsoft.Toolkit.Uwp.Notifications.ToastNotificationManagerCompat.History.Clear(); } catch (Exception) { }
 #endif
