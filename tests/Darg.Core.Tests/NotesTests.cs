@@ -362,6 +362,19 @@ public sealed class WallColumnTests : IDisposable
         Assert.Equal(["Loose", "Parked", "Thinking about"], NoteStore.Columns(_dir));
     }
 
+    [Fact]
+    public void Moving_a_column_puts_it_before_another_or_last()
+    {
+        var start = NoteStore.Columns(_dir).ToList();
+        Assert.Equal(3, start.Count);
+        NoteStore.MoveColumn(_dir, start[2], start[0]);
+        Assert.Equal([start[2], start[0], start[1]], NoteStore.Columns(_dir));
+        NoteStore.MoveColumn(_dir, start[2], null);
+        Assert.Equal([start[0], start[1], start[2]], NoteStore.Columns(_dir));
+        NoteStore.MoveColumn(_dir, "no such column", start[0]);
+        Assert.Equal(start, NoteStore.Columns(_dir));
+    }
+
     public void Dispose() => Directory.Delete(_dir, true);
 }
 

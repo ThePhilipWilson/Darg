@@ -134,6 +134,19 @@ public static class NoteStore
         SetColumns(folder, cols);
     }
 
+    /// <summary>Put column <paramref name="name"/> just before <paramref name="before"/>, or last when that is null or unknown.</summary>
+    public static void MoveColumn(string folder, string name, string? before)
+    {
+        var cols = Columns(folder).ToList();
+        var i = cols.FindIndex(c => c.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (i < 0) return;
+        var col = cols[i];
+        cols.RemoveAt(i);
+        var j = before is null ? -1 : cols.FindIndex(c => c.Equals(before, StringComparison.OrdinalIgnoreCase));
+        if (j < 0) cols.Add(col); else cols.Insert(j, col);
+        SetColumns(folder, cols);
+    }
+
     static int MoveNotes(string folder, string from, string to)
     {
         var moved = 0;

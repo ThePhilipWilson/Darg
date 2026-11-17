@@ -30,7 +30,7 @@ public sealed class DragLift
     readonly Action<IReadOnlyList<object>, string, object?> _drop;
     readonly Func<object, IReadOnlyList<object>>? _carried;
     readonly Action<object, KeyModifiers> _click;
-    readonly bool _ordered;
+    readonly bool _ordered, _horizontal;
 
     Border? _pressed;
     Point _pressAt, _grab;
@@ -48,8 +48,9 @@ public sealed class DragLift
     /// <param name="ordered">Whether the drop place within a list matters (a line is shown and "before" passed).</param>
     public DragLift(Control host, Canvas overlay, string itemClass, string listClass, Func<object?, IReadOnlyList<object>> itemsOf,
         Action<IReadOnlyList<object>, string, object?> drop, Action<object, KeyModifiers> click, bool ordered = true,
-        Func<object, IReadOnlyList<object>>? carried = null)
+        Func<object, IReadOnlyList<object>>? carried = null, bool horizontal = false)
     {
+        _horizontal = horizontal;
         _host = host; _overlay = overlay; _itemClass = itemClass; _listClass = listClass;
         _itemsOf = itemsOf; _drop = drop; _click = click; _ordered = ordered; _carried = carried;
         host.AddHandler(InputElement.PointerPressedEvent, Pressed, RoutingStrategies.Tunnel);
@@ -170,7 +171,7 @@ public sealed class DragLift
         foreach (var b in borders)
         {
             var top = b.TranslatePoint(new Point(0, 0), _host) ?? default;
-            if (at.Y < top.Y + b.Bounds.Height / 2) { _before = b.Tag; lineAt = b; break; }
+            if (_horizontal ? at.X < top.X + b.Bounds.Width / 2 : at.Y < top.Y + b.Bounds.Height / 2) { _before = b.Tag; lineAt = b; break; }
             lineAt = b; above = false;
         }
         if (lineAt is null)
@@ -178,9 +179,20 @@ public sealed class DragLift
             _line!.IsVisible = false; // an empty list: it lights up, that's enough
             return;
         }
+        if (_horizontal)
+        {
+            var q = lineAt.TranslatePoint(new Point(above ? -10 : lineAt.Bounds.Width + 7, 0), _host) ?? default;
+            Canvas.SetLeft(_line!, q.X);
+            Canvas.SetTop(_line!, q.Y);
+            _line!.Width = 3;
+            _line.Height = Math.Max(lineAt.Bounds.Height, list.Bounds.Height);
+            _line.IsVisible = true;
+            return;
+        }
         var p = lineAt.TranslatePoint(new Point(0, above ? -5 : lineAt.Bounds.Height + 3), _host) ?? default;
         Canvas.SetLeft(_line!, p.X);
         Canvas.SetTop(_line!, p.Y);
+        _line!.Height = 3;
         _line!.Width = lineAt.Bounds.Width;
         _line.IsVisible = true;
     }

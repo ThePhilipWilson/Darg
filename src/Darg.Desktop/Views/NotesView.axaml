@@ -64,14 +64,17 @@
 
       <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Background="{DynamicResource Wall}">
         <StackPanel Orientation="Horizontal">
-        <ItemsControl ItemsSource="{Binding Columns}" Margin="16">
+        <Border Classes="wallstrip" Tag="strip" Background="Transparent" Margin="16">
+        <ItemsControl ItemsSource="{Binding Columns}">
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="18"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:NoteColumn">
               <Border Width="{Binding $parent[UserControl].((vm:NotesViewModel)DataContext).ColumnWidth}" Classes="wallcol" Tag="{Binding Name}" Background="Transparent">
                 <DockPanel>
                   <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="2,0,0,10">
-                    <DockPanel IsVisible="{Binding IsHeaderPlain}">
+                    <Border Classes.colhead="{Binding IsEditable}" Tag="{Binding}" Background="Transparent" Cursor="SizeAll"
+                            IsVisible="{Binding IsHeaderPlain}" ToolTip.Tip="Drag to reorder columns">
+                    <DockPanel>
                       <Button DockPanel.Dock="Right" Classes="head" Content="⋯" IsVisible="{Binding IsEditable}" ToolTip.Tip="Rename, move or remove this column"
                               AutomationProperties.Name="{Binding Name, StringFormat='{}{0} menu'}">
                         <Button.Flyout>
@@ -86,6 +89,7 @@
                       <TextBlock Classes="dim wallname" Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"
                                  Background="Transparent" Tag="{Binding}"/>
                     </DockPanel>
+                    </Border>
                     <TextBox Classes="rename" Text="{Binding EditName}" IsVisible="{Binding IsRenaming}" FontSize="12" Tag="{Binding}"
                              ToolTip.Tip="Enter to save, Esc to leave it as it was. Its notes move with it."/>
                     <StackPanel Spacing="6" IsVisible="{Binding ConfirmingRemove}">
@@ -152,6 +156,7 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        </Border>
         <Button VerticalAlignment="Top" Content="+ Column" Command="{Binding AddColumnCommand}" Margin="0,12,16,16"
                 ToolTip.Tip="Add a column to the wall, and name it"/>
         </StackPanel>
