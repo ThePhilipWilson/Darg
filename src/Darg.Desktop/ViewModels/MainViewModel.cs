@@ -531,14 +531,15 @@ public partial class ProjectViewModel : ObservableObject
                 Watch(Agents.Start(prompt, CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (sent back)", job: CardJob(card), id: id));
                 Section = Section.Agents;
             };
-            // not tied to the card (no cardId): once the card is filled out, Work on is free straight away
+            // not tied to the card (no cardId): once the card is filled out, Work on is free straight away.
+            // The board stays on screen (WOR-0103): improving is a background chore, and a question it asks
+            // reaches me as a notification like any agent's.
             Board.Improve = (card, file) =>
             {
                 var folder = Path.GetDirectoryName(file)!;
                 var commits = Core.Commits.For(Config, folder) is { } rule ? Core.Commits.Describe(rule, folder) : null;
                 var prompt = CardImprover.Prompt(Name, card, file, CardImprover.NoteFile(Config.NotesFolder(), card.Description), commits);
                 Agents.Start(prompt, CardFolder(card), name: $"Improve {card.Id} {card.Title}", job: CardJob(card));
-                Section = Section.Agents;
             };
             Board.Flows = () => Agents.Flows;
             Board.RunFlow = (card, file, flow) =>
