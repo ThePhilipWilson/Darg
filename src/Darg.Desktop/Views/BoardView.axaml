@@ -275,6 +275,7 @@
           <!-- WOR-0095: start the QA verdict on a card in QA whose agent is done -->
           <StackPanel Spacing="6" IsVisible="{Binding CanQaVerdict}">
             <TextBlock Classes="dim small" TextWrapping="Wrap" Text="Where does this card go?"/>
+            <TextBox Text="{Binding AttentionWhy}" IsVisible="{Binding CanToAttention}" PlaceholderText="Why it needs your attention (optional)" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48"/>
             <WrapPanel>
               <Button Content="🔔 Needs my attention" Command="{Binding QaToAttentionCommand}" IsVisible="{Binding CanToAttention}" Margin="0,0,8,4"
                       ToolTip.Tip="Move it to Needs Phil Attention; Darg writes a decision report there"/>

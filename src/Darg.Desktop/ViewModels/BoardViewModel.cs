@@ -810,9 +810,15 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public bool HasAttentionColumn => _board is not null && AttentionColumn.Find(_board.Columns) is not null;
 
     /// <summary>Move a card to the board's needs-attention column. Returns what went wrong, or null.</summary>
-    public string? MoveToAttention(string cardId)
+    public string? MoveToAttention(string cardId, string why = "")
     {
         if (_board is null || AttentionColumn.Find(_board.Columns) is not { } name || _board.Columns.FirstOrDefault(c => c.Name == name) is not { } col) return "This board has no Needs Attention column.";
+        // the reason goes into the card first, so the decision report written on landing can quote it (WOR-0111)
+        if (why.Trim().Length > 0 && Folder is not null && _board.AllCards.FirstOrDefault(c => c.Id == cardId) is { } card)
+        {
+            try { QaNotes.Add(Path.GetFullPath(Path.Combine(Folder, "items", card.File)), why, DateTime.Now, QaNotes.AttentionHeading); }
+            catch (Exception e) { return $"Couldn't write the reason into the card: {e.Message}"; }
+        }
         Move(cardId, col.Id);
         return null;
     }
@@ -1265,6 +1271,8 @@ public partial class CardEditor : ObservableObject
     public string WorkOnText => InQa ? "▶ Get it running to try" : "▶ Work on this";
     /// <summary>What's wrong, typed while trying a card in QA: it goes into the card and to the agent that reworks it.</summary>
     [ObservableProperty] public partial string SendBackNotes { get; set; } = "";
+    /// <summary>Optional: why the card needs the person's attention (WOR-0111); goes into the card and its decision report.</summary>
+    [ObservableProperty] public partial string AttentionWhy { get; set; } = "";
     /// <summary>A button per flow, to run it on this card.</summary>
     public IReadOnlyList<MoveTarget> FlowTargets { get; private set; } = [];
 
@@ -1361,7 +1369,7 @@ public partial class CardEditor : ObservableObject
     void QaToAttention()
     {
         if (_card is null) return;
-        if (_board.MoveToAttention(_card.Id) is { } error) { Error = error; return; }
+        if (_board.MoveToAttention(_card.Id, AttentionWhy) is { } error) { Error = error; return; }
         _board.Root.Editor = null;
     }
     [RelayCommand]

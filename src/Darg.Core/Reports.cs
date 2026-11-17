@@ -301,27 +301,33 @@ public static class QaNotes
     public const string Heading = "## QA notes";
 
     /// <summary>Add a dated entry to the card's QA notes, making the section at the end if it has none.</summary>
-    public static void Add(string file, string notes, DateTime when)
+    public static void Add(string file, string notes, DateTime when) => Add(file, notes, when, Heading);
+
+    /// <summary>Why a card was sent to Needs Phil Attention (WOR-0111): the same dated entries, under their own heading.</summary>
+    public const string AttentionHeading = "## Why it needs attention";
+
+    /// <summary>Add a dated entry under <paramref name="heading"/>, making the section at the end if it has none.</summary>
+    public static void Add(string file, string notes, DateTime when, string heading)
     {
         var raw = System.IO.File.ReadAllText(file);
         var crlf = raw.Contains("\r\n");
         var text = raw.Replace("\r\n", "\n").TrimEnd('\n');
         var entry = $"### {when:yyyy-MM-dd HH:mm}\n\n{notes.Replace("\r\n", "\n").Trim()}";
-        var at = Section(text);
-        if (at < 0) text += $"\n\n{Heading}\n\n{entry}\n";
+        var at = Section(text, heading);
+        if (at < 0) text += $"\n\n{heading}\n\n{entry}\n";
         else
         {
             // the end of the QA notes section: the next ## heading, or the end of the file
-            var next = text.IndexOf("\n## ", at + Heading.Length, StringComparison.Ordinal);
+            var next = text.IndexOf("\n## ", at + heading.Length, StringComparison.Ordinal);
             var end = next >= 0 ? next : text.Length;
             text = text[..end].TrimEnd('\n') + $"\n\n{entry}\n" + (next >= 0 ? "\n" + text[(next + 1)..] + "\n" : "");
         }
         System.IO.File.WriteAllText(file, crlf ? text.Replace("\n", "\r\n") : text, new UTF8Encoding(false));
     }
 
-    static int Section(string text) =>
-        text.StartsWith(Heading + "\n", StringComparison.Ordinal) ? 0 : text.IndexOf("\n" + Heading + "\n", StringComparison.Ordinal) is var i and >= 0 ? i + 1 :
-        text.EndsWith("\n" + Heading, StringComparison.Ordinal) ? text.Length - Heading.Length : -1;
+    static int Section(string text, string heading) =>
+        text.StartsWith(heading + "\n", StringComparison.Ordinal) ? 0 : text.IndexOf("\n" + heading + "\n", StringComparison.Ordinal) is var i and >= 0 ? i + 1 :
+        text.EndsWith("\n" + heading, StringComparison.Ordinal) ? text.Length - heading.Length : -1;
 }
 
 public static class BoardColumns
