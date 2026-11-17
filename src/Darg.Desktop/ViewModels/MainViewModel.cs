@@ -382,7 +382,7 @@ public record NotificationEntry(string ProjectId, string AgentId, string Project
     public string Sub => $"{Project} · {At:HH:mm}";
 }
 
-public enum Section { Home, Board, Notes, Docs, Agents, Reports, Artifacts, Mistakes, Code, GitHub, Preview, Terminal }
+public enum Section { Home, Board, Notes, Docs, Agents, Flows, Reports, Artifacts, Mistakes, Code, GitHub, Preview, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -411,7 +411,7 @@ public partial class ProjectViewModel : ObservableObject
     public ReportsViewModel? Reports { get; }
     public bool UsesTerminal => Consoles is not null;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnReports), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnFlows), nameof(OnReports), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -426,6 +426,7 @@ public partial class ProjectViewModel : ObservableObject
     public bool OnHub => Section == Section.GitHub;
     public bool OnPreview => Section == Section.Preview;
     public bool OnAgents => Section == Section.Agents;
+    public bool OnFlows => Section == Section.Flows;
     public bool OnArtifacts => Section == Section.Artifacts;
     public bool OnMistakes => Section == Section.Mistakes;
     public bool OnReports => Section == Section.Reports;
@@ -446,6 +447,7 @@ public partial class ProjectViewModel : ObservableObject
         if (config.Uses(Features.Agents))
         {
             Agents = new AgentsViewModel(config);
+            Agents.ShowAgents = () => Section = Section.Agents;
             Artifacts = new ArtifactsViewModel(config.Id, id => Agents.Find(id)?.Name);
             Mistakes = new MistakesViewModel(MistakeLog.PathFor(config.Id), config.Name);
             Reports = new ReportsViewModel(ReportStore.FolderFor(config.Id));
@@ -585,7 +587,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>Whether this project has a section (its feature ticked and what it needs set up).</summary>
     public bool Has(Section s) => s switch
     {
-        Section.Home => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null, Section.Reports => Reports is not null,
+        Section.Home => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Flows => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null, Section.Reports => Reports is not null,
         Section.Code => Code is not null, Section.GitHub => Hub is not null, Section.Preview => Preview is not null, _ => Consoles is not null,
     };
 

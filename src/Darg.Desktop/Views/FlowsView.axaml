@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:core="using:Darg.Core"
+             x:Class="Darg.Desktop.Views.FlowsView"
+             x:DataType="vm:AgentsViewModel">
+  <!-- the Flows tab (WOR-0097): flows used to share the Agents section's left column. The agents a run starts are in Agents. -->
+  <Grid ColumnDefinitions="320,*">
+    <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,10,0,0">
+          <TextBox Text="{Binding FlowTask}" PlaceholderText="The task to run through the flow (or, for + New, what the new flow is for)"
+                   AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" AutomationProperties.Name="Flow task"/>
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Content="✎ Edit" Command="{Binding EditFlowsCommand}" Margin="6,0,0,0" Padding="8,4"
+                    ToolTip.Tip="Open the picked flow's folder (this project's own or the shared one) to edit a flow, a markdown file each; the list reads them again"
+                    AutomationProperties.Name="Edit flows"/>
+            <!-- the flow generator (WOR-0077): an agent writes a new flow from what's in the box above -->
+            <Button DockPanel.Dock="Right" Content="+ New" Margin="6,0,0,0" Padding="8,4" AutomationProperties.Name="New flow"
+                    ToolTip.Tip="New flow: an agent writes one from what you've typed above (or asks what it's for), for this project or for all">
+              <Button.Flyout>
+                <MenuFlyout Placement="TopEdgeAlignedRight">
+                  <MenuItem Header="New flow for this project" Command="{Binding NewFlowCommand}" CommandParameter="basic project"/>
+                  <MenuItem Header="New flow for all projects" Command="{Binding NewFlowCommand}" CommandParameter="basic shared"/>
+                  <Separator/>
+                  <MenuItem Header="New art flow for this project" Command="{Binding NewFlowCommand}" CommandParameter="art project"
+                            ToolTip.Tip="Stages that make pictures with Forge (following the project's art recipe if it has one) and end with an image review for you to pick from"/>
+                  <MenuItem Header="New art flow for all projects" Command="{Binding NewFlowCommand}" CommandParameter="art shared"/>
+                </MenuFlyout>
+              </Button.Flyout>
+            </Button>
+            <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="▶ Run flow" Command="{Binding StartFlowCommand}"
+                    ToolTip.Tip="Runs the task through the flow: an agent per role, each handing its last message on to the next. They show in Agents."/>
+          </DockPanel>
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Flows" Classes="dim small" Margin="0,0,0,4"/>
+        <ListBox ItemsSource="{Binding Flows}" SelectedItem="{Binding SelectedFlow}" Background="Transparent" AutomationProperties.Name="Flows"/>
+      </DockPanel>
+    </Border>
+
+    <!-- the picked flow: what it's for and its stages -->
+    <ScrollViewer Grid.Column="1" DataContext="{Binding SelectedFlow}" x:DataType="core:Flow">
+      <StackPanel Margin="20,16" Spacing="10" MaxWidth="900" HorizontalAlignment="Left">
+        <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap"/>
+        <TextBlock Classes="dim" Text="{Binding Description}" TextWrapping="Wrap"/>
+        <TextBlock Classes="dim small" Text="{Binding MaxRounds, StringFormat='Max rounds: {0}'}"/>
+        <ItemsControl ItemsSource="{Binding Stages}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="core:FlowStage">
+              <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6" Padding="12,8">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="{Binding Role}" FontWeight="SemiBold"/>
+                  <TextBlock Classes="dim small" Text="{Binding SendsBackTo, StringFormat='Checker: sends back to {0}'}" IsVisible="{Binding Checks}"/>
+                  <TextBlock Text="{Binding Brief}" TextWrapping="Wrap" Classes="small"/>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>
