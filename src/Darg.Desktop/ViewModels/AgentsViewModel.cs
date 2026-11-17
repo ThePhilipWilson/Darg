@@ -226,7 +226,13 @@ public partial class AgentsViewModel : ObservableObject
     bool IsCardDone(string? cardId) => cardId is not null && CardIsDone?.Invoke(cardId) == true;
 
     /// <summary>Re-read every card agent's card after the boards change (a card moved to Done shows on its agent).</summary>
-    public void RefreshCards() { using var timing = StallWatch.Shared.Section("Agents.RefreshCards"); foreach (var a in Agents) if (a.CardId is not null) a.CardDone = IsCardDone(a.CardId); }
+    public void RefreshCards()
+    {
+        using var timing = StallWatch.Shared.Section("Agents.RefreshCards");
+        foreach (var a in Agents) if (a.CardId is not null) a.CardDone = IsCardDone(a.CardId);
+        // a QA agent that has ended its turn has given its verdict: close it so it doesn't linger on the card
+        foreach (var a in Agents.Where(a => a.IsDone && !a.LimitHit && a.ContinueAt is null && a.CardId is not null && a.Purpose == AgentPurposes.Qa).ToList()) a.CloseSession("Darg");
+    }
     [ObservableProperty] public partial AgentViewModel? Selected { get; set; }
     [ObservableProperty] public partial string NewPrompt { get; set; } = "";
     /// <summary>What the Flows tab's box holds: the task to run a flow on, or what a new flow is for (WOR-0097).</summary>
@@ -250,7 +256,7 @@ public partial class AgentsViewModel : ObservableObject
     public AgentViewModel? Find(string id) => Agents.FirstOrDefault(a => a.Id == id);
     /// <summary>The newest agent started on a card that hasn't ended.</summary>
     public AgentViewModel? ForCard(string cardId) =>
-        Agents.FirstOrDefault(a => a.CardId == cardId && a.State != AgentState.Exited);
+        Agents.FirstOrDefault(a => a.CardId == cardId && a.State != AgentState.Exited && !(a.IsDone && !a.LimitHit && a.ContinueAt is null));
     /// <summary>A QA agent (Run QA) is at work on the card, or waiting on the person: one that has finished its turn
     /// doesn't count, so Run QA is offered again (WOR-0110).</summary>
     public bool QaRunningFor(string cardId) =>
