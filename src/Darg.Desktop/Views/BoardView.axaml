@@ -183,7 +183,7 @@
                           <StackPanel Spacing="4">
                             <DockPanel>
                               <Button DockPanel.Dock="Right" Classes="workon" Content="▶ Work on" Command="{Binding WorkOnCommand}"
-                                      IsVisible="{Binding !HasAgent}" ToolTip.Tip="Start an agent on this card"/>
+                                      IsVisible="{Binding CanStart}" ToolTip.Tip="Start an agent on this card"/>
                               <Button DockPanel.Dock="Right" Classes="workon" Content="🧪 Run QA" Command="{Binding RunQaCommand}" Margin="0,0,6,0"
                                       IsVisible="{Binding ShowRunQa}" ToolTip.Tip="An agent checks this card from its How to check section; the card stays in QA"/>
                               <Border DockPanel.Dock="Right" IsVisible="{Binding HasPriority}" Background="{DynamicResource AccentSoft}" CornerRadius="8" Padding="6,0" Margin="0,0,6,0">

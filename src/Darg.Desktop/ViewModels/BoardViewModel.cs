@@ -396,7 +396,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public bool HasPicked => PickedCount > 0;
     public string PickedText => PickedCount == 1 ? "1 picked" : $"{PickedCount} picked";
     IEnumerable<CardViewModel> Shown() => Lists.SelectMany(l => l.Cards);
-    int ToStart => Root.Rows.Sum(r => r.Shown().Count(c => c.IsPicked && !c.HasAgent));
+    int ToStart => Root.Rows.Sum(r => r.Shown().Count(c => c.IsPicked && c.CanStart));
     /// <summary>"▶ Work on 3", counting only picked cards with no agent on them yet.</summary>
     public string WorkOnPickedText => $"▶ Work on {ToStart}";
     public bool CanWorkOnPicked => ToStart > 0;
@@ -472,7 +472,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     [RelayCommand]
     void WorkOnPicked()
     {
-        var picked = Root.Rows.Select(r => (Row: r, Cards: r.Shown().Where(c => c.IsPicked && !c.HasAgent).Select(c => c.Card).ToList()))
+        var picked = Root.Rows.Select(r => (Row: r, Cards: r.Shown().Where(c => c.IsPicked && c.CanStart).Select(c => c.Card).ToList()))
             .Where(p => p.Cards.Count > 0).ToList();
         if (picked.Count == 0) return;
         var all = picked.SelectMany(p => p.Cards).Select(c => c.Id).ToList();
@@ -490,7 +490,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     [RelayCommand]
     void ImprovePicked()
     {
-        var picked = Root.Rows.Select(r => (Row: r, Cards: r.Shown().Where(c => c.IsPicked && !c.HasAgent).Select(c => c.Card).ToList()))
+        var picked = Root.Rows.Select(r => (Row: r, Cards: r.Shown().Where(c => c.IsPicked && c.CanStart).Select(c => c.Card).ToList()))
             .Where(p => p.Cards.Count > 0).ToList();
         if (picked.Count == 0) return;
         var started = new List<string>();
@@ -516,7 +516,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     {
         if (_board is null) return "No board is showing.";
         var cards = ids.Select(id => _board.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
-            .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null).DistinctBy(c => c.Id).ToList();
+            .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null && !IsDone(c.Id)).DistinctBy(c => c.Id).ToList();
         if (cards.Count == 0) return "None of those cards is on the board without an agent.";
         WorkOnAll(cards);
         return _notice ?? "";
@@ -528,7 +528,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     {
         if (_board is null) return "No board is showing.";
         var cards = ids.Select(id => _board.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
-            .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null).DistinctBy(c => c.Id).ToList();
+            .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null && !IsDone(c.Id)).DistinctBy(c => c.Id).ToList();
         if (cards.Count == 0) return "None of those cards is on the board without an agent.";
         foreach (var card in cards) StartImprove(card);
         _notice = cards.Count == 1 ? $"Improving {cards[0].Id}: its agent is in Agents" : $"Improving {cards.Count} cards, an agent each in Agents: {string.Join(", ", cards.Select(c => c.Id))}";
@@ -1127,6 +1127,10 @@ public sealed partial class CardViewModel : ObservableObject
     /// <summary>The agent working on this card (its state shows on the card, live), if any.</summary>
     public AgentViewModel? Agent { get; }
     public bool HasAgent => Agent is not null;
+    /// <summary>The card is in Done (WOR-0116): nothing starts on it; move it out first to redo it.</summary>
+    public bool InDone { get; }
+    /// <summary>Work on and Improve are offered: no agent on it, and it isn't in Done.</summary>
+    public bool CanStart => !HasAgent && !InDone;
     public IRelayCommand WorkOnCommand { get; }
     public IRelayCommand OpenAgentCommand { get; }
     public IRelayCommand ImproveCommand { get; }
@@ -1147,17 +1151,18 @@ public sealed partial class CardViewModel : ObservableObject
         OpenAgentCommand = new RelayCommand(() => { if (Agent is not null) board.OpenAgent?.Invoke(Agent); });
         ImproveCommand = new RelayCommand(() => board.StartImprove(this));
         RunQaCommand = new RelayCommand(() => board.StartQa(this));
+        InDone = board.IsDone(card.Id);
         var inQa = board.InQa(card);
-        ShowRunQa = inQa && !QaWasRunning;
+        ShowRunQa = inQa && !QaWasRunning && !InDone;
         MoveTargets = [
-            new MoveTarget(agent is not null ? "Open its agent" : inQa ? "▶ Get it running for me to try" : "Work on this with an agent", agent is null ? WorkOnCommand : OpenAgentCommand),
-            .. inQa && !QaWasRunning ? [new MoveTarget("🧪 Run QA (an agent checks it)", RunQaCommand)] : Array.Empty<MoveTarget>(),
+            .. InDone && agent is null ? Array.Empty<MoveTarget>() : [new MoveTarget(agent is not null ? "Open its agent" : inQa ? "▶ Get it running for me to try" : "Work on this with an agent", agent is null ? WorkOnCommand : OpenAgentCommand)],
+            .. inQa && !InDone && !QaWasRunning ? [new MoveTarget("🧪 Run QA (an agent checks it)", RunQaCommand)] : Array.Empty<MoveTarget>(),
             // sending back takes notes, typed in the card's panel
             .. agent is null && (inQa || board.InAttention(card)) ? [
                 new MoveTarget("✓ Approve: move to done", new RelayCommand(() => { if (board.Approve(card.Id) is null) board.Root.Approved?.Invoke(card.Id); })),
                 new MoveTarget("↩ Send back with notes…", new RelayCommand(() => board.Open(this)))] : Array.Empty<MoveTarget>(),
-            .. agent is null ? [new MoveTarget("✦ Improve this card (an agent fills it out)", ImproveCommand)] : Array.Empty<MoveTarget>(),
-            .. (agent is null ? board.FlowList() : []).Select(f => new MoveTarget("Run flow: " + f.Name, new RelayCommand(() => board.StartFlow(this, f)))),
+            .. agent is null && !InDone ? [new MoveTarget("✦ Improve this card (an agent fills it out)", ImproveCommand)] : Array.Empty<MoveTarget>(),
+            .. (agent is null && !InDone ? board.FlowList() : []).Select(f => new MoveTarget("Run flow: " + f.Name, new RelayCommand(() => board.StartFlow(this, f)))),
             .. lists.Select(l => new MoveTarget("Move to " + l.Name, new RelayCommand(() => board.Move(this, l.Id)))),
             // a card with a live agent stays put: the agent holds its file's path
             .. agent is null ? (otherBoards ?? []).Select(b => new MoveTarget("Move to board " + b, new RelayCommand(() => board.MoveToBoard(this, b)))) : [],
@@ -1240,11 +1245,11 @@ public partial class CardEditor : ObservableObject
     public string? CardId => _card?.Id;
     /// <summary>The card's live agent, looked up now: the panel can outlast the agent (forgotten while it's open).</summary>
     bool HasAgent => _card is not null && (_board.AgentFor?.Invoke(_card.Id) is not null);
-    public bool CanWorkOn => _card is not null && !HasAgent;
+    public bool CanWorkOn => _card is not null && !HasAgent && !_card.InDone;
     /// <summary>The card is in the board's QA column: Work on gets it running to try, and it can be sent back.</summary>
     public bool InQa => _card is not null && _board.InQa(_card.Card);
     public bool InAttention => _card is not null && _board.InAttention(_card.Card);
-    public bool CanRunQa => InQa && _card is not null && _board.QaRunning?.Invoke(_card.Id) != true;
+    public bool CanRunQa => InQa && _card is not null && !_card.InDone && _board.QaRunning?.Invoke(_card.Id) != true;
     [RelayCommand]
     void RunQa()
     {
@@ -1275,7 +1280,7 @@ public partial class CardEditor : ObservableObject
         FlowTargets = MakeFlowTargets();
     }
 
-    List<MoveTarget> MakeFlowTargets() => _card is not { } card || HasAgent ? [] : _board.FlowList().Select(f => new MoveTarget("▶ " + f.Name, new RelayCommand(() =>
+    List<MoveTarget> MakeFlowTargets() => _card is not { } card || HasAgent || card.InDone ? [] : _board.FlowList().Select(f => new MoveTarget("▶ " + f.Name, new RelayCommand(() =>
     {
         _board.Root.Editor = null;
         _board.StartFlow(card, f);
