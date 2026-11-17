@@ -700,6 +700,16 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public bool InAttention(Card card) =>
         _board is not null && AttentionColumn.Find(_board.Columns) is { } a && BoardStore.PlaceOf(card.Status, _board.Columns) == BoardStore.PlaceOf(a, _board.Columns);
 
+    public bool HasAttentionColumn => _board is not null && AttentionColumn.Find(_board.Columns) is not null;
+
+    /// <summary>Move a card to the board's needs-attention column. Returns what went wrong, or null.</summary>
+    public string? MoveToAttention(string cardId)
+    {
+        if (_board is null || AttentionColumn.Find(_board.Columns) is not { } name || _board.Columns.FirstOrDefault(c => c.Name == name) is not { } col) return "This board has no Needs Attention column.";
+        Move(cardId, col.Id);
+        return null;
+    }
+
     /// <summary>Approve a card from its decision report: it goes to the done column. Returns what went wrong, or null.</summary>
     public string? Approve(string cardId)
     {
@@ -1138,7 +1148,7 @@ public partial class CardEditor : ObservableObject
         FlowTargets = MakeFlowTargets();
         OnPropertyChanged(nameof(FlowTargets));
         OnPropertyChanged(nameof(CanWorkOn));
-        OnPropertyChanged(nameof(CanSendBack)); OnPropertyChanged(nameof(HasReport)); OnPropertyChanged(nameof(InAttention));
+        OnPropertyChanged(nameof(CanSendBack)); OnPropertyChanged(nameof(CanQaVerdict)); OnPropertyChanged(nameof(HasReport)); OnPropertyChanged(nameof(InAttention));
     }
 
     IEnumerable<string> LabelList() => LabelsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -1196,6 +1206,25 @@ public partial class CardEditor : ObservableObject
         if (_card is null) return;
         _board.Root.Editor = null;
         _board.StartWork(_card);
+    }
+
+    /// <summary>The QA verdict buttons (WOR-0095): a card in QA with no agent running can be sent to Needs Phil Attention
+    /// (its decision report is written by the board's reload), approved to done, or sent back with notes below.</summary>
+    public bool CanQaVerdict => InQa && CanWorkOn;
+    public bool HasAttentionColumn => _board.HasAttentionColumn;
+    [RelayCommand]
+    void QaToAttention()
+    {
+        if (_card is null) return;
+        if (_board.MoveToAttention(_card.Id) is { } error) { Error = error; return; }
+        _board.Root.Editor = null;
+    }
+    [RelayCommand]
+    void QaDone()
+    {
+        if (_card is null) return;
+        if (_board.Approve(_card.Id) is { } error) { Error = error; return; }
+        _board.Root.Editor = null;
     }
 
     /// <summary>Send a card in QA back (WOR-0079): the notes go into the card and an agent reworks it from them.
