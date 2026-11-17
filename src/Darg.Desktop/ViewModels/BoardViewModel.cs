@@ -680,7 +680,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     /// <summary>Start an agent on a card: it goes to the board's working column ("In Progress", else
     /// the first column) if it was waiting in the backlog or the first column, and the agent opens.</summary>
-    public void StartWork(CardViewModel card) => StartWork(card.Card, [], show: true, reload: true);
+    public void StartWork(CardViewModel card) => StartWork(card.Card, [], show: false, reload: true);
 
     /// <summary>A card that wasn't in the needs-attention column at the last read but is now has just landed there,
     /// whoever moved it (an agent editing board.json, a QA check, a drag): its decision report is written (WOR-0092).
