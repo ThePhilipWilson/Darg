@@ -336,4 +336,10 @@ public static class BoardColumns
     public static string? Qa(IReadOnlyList<Column> columns) =>
         columns.Take(Math.Max(0, columns.Count - 1))
             .FirstOrDefault(c => Regex.IsMatch(c.Name, @"\bQA\b|review|to check|testing", RegexOptions.IgnoreCase))?.Name;
+
+    /// <summary>The board's needs-more-work column, where Run QA puts a card that failed (WOR-0108): one named for more work,
+    /// rework or sending back, not the last. A card agent started there is reworking it (WOR-0115).</summary>
+    public static string? Rework(IReadOnlyList<Column> columns) =>
+        columns.Take(Math.Max(0, columns.Count - 1))
+            .FirstOrDefault(c => Regex.IsMatch(c.Name, @"more work|rework|send back", RegexOptions.IgnoreCase))?.Name;
 }
