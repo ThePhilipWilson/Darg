@@ -256,7 +256,7 @@ public partial class AgentsViewModel : ObservableObject
     public AgentViewModel? Find(string id) => Agents.FirstOrDefault(a => a.Id == id);
     /// <summary>The newest agent started on a card that hasn't ended.</summary>
     public AgentViewModel? ForCard(string cardId) =>
-        Agents.FirstOrDefault(a => a.CardId == cardId && a.State != AgentState.Exited && !(a.IsDone && !a.LimitHit && a.ContinueAt is null));
+        Agents.FirstOrDefault(a => a.CardId == cardId && a.IsLiveOnCard);
     /// <summary>A QA agent (Run QA) is at work on the card, or waiting on the person: one that has finished its turn
     /// doesn't count, so Run QA is offered again (WOR-0110).</summary>
     public bool QaRunningFor(string cardId) =>
@@ -570,6 +570,10 @@ public partial class AgentViewModel : ObservableObject
     public bool Open => _session is not null;
     /// <summary>Its turn ended well and it waits for the next message.</summary>
     public bool IsDone => State == AgentState.Idle && !TurnFailed;
+    /// <summary>Whether the agent still has a claim on its card: at work, waiting on the person, or waiting out a usage limit.
+    /// One that has finished its turn, failed, or is only a saved session (closed, resumable) doesn't, so the card
+    /// can be worked on, sent back or sent to QA again.</summary>
+    public bool IsLiveOnCard => State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou || ((LimitHit || ContinueAt is not null) && State is AgentState.Idle or AgentState.Saved);
     /// <summary>Its turn ended in an error, or its session died or never started.</summary>
     public bool IsFailed => (State == AgentState.Idle && TurnFailed) || State == AgentState.Exited;
     public string StateText => State switch
