@@ -221,7 +221,8 @@ public partial class ReportRow(AgentReport r) : ObservableObject
     public bool HasCommits => Report.Commits.Count > 0;
     public bool HasCard => Report.Card.Length > 0;
     /// <summary>A decision report nobody has settled yet (WOR-0092): Approve and Send back show.</summary>
-    public bool Pending => Report.Decision == DecisionReport.Pending;
+    // an agent's own QA report has no decision property yet, so any undecided QA report for a card can be settled here
+    public bool Pending => Report.Decision == DecisionReport.Pending || (Report.Qa && Report.Card.Length > 0 && Report.Decision.Length == 0);
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(ReadLabel))] public partial bool Read { get; set; } = r.Read;
     public string ReadLabel => Read ? "Mark unread" : "Mark read";
 }
