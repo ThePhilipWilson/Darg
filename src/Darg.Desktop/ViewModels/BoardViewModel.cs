@@ -517,7 +517,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (_board is null) return "No board is showing.";
         var cards = ids.Select(id => _board.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
             .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null && !IsDone(c.Id)).DistinctBy(c => c.Id).ToList();
-        if (cards.Count == 0) return "None of those cards is on the board without an agent.";
+        if (cards.Count == 0) return "None of those cards is on the board without an agent and outside Done (a card in Done must be moved out first).";
         WorkOnAll(cards);
         return _notice ?? "";
     }
@@ -529,7 +529,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (_board is null) return "No board is showing.";
         var cards = ids.Select(id => _board.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
             .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null && !IsDone(c.Id)).DistinctBy(c => c.Id).ToList();
-        if (cards.Count == 0) return "None of those cards is on the board without an agent.";
+        if (cards.Count == 0) return "None of those cards is on the board without an agent and outside Done (a card in Done must be moved out first).";
         foreach (var card in cards) StartImprove(card);
         _notice = cards.Count == 1 ? $"Improving {cards[0].Id}: its agent is in Agents" : $"Improving {cards.Count} cards, an agent each in Agents: {string.Join(", ", cards.Select(c => c.Id))}";
         Apply();
