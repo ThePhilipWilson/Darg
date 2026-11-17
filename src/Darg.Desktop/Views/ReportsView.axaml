@@ -4,12 +4,21 @@
              xmlns:views="using:Darg.Desktop.Views"
              x:Class="Darg.Desktop.Views.ReportsView"
              x:DataType="vm:ReportsViewModel">
-  <Grid ColumnDefinitions="340,*" RowDefinitions="*,Auto">
+  <Grid ColumnDefinitions="480,*" RowDefinitions="*,Auto">
     <!-- the reports, newest first; an unread one is bold with a dot -->
     <Border Grid.RowSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
-        <ComboBox DockPanel.Dock="Top" Margin="12,8,8,0" HorizontalAlignment="Stretch" ItemsSource="{Binding Kinds}" SelectedIndex="{Binding KindIndex}"
-                  AutomationProperties.Name="Kind of report"/>
+        <TabStrip DockPanel.Dock="Top" Margin="8,6,8,0" ItemsSource="{Binding Kinds}" SelectedIndex="{Binding KindIndex}"
+                  AutomationProperties.Name="Kind of report">
+          <TabStrip.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></TabStrip.ItemsPanel>
+          <TabStrip.Styles>
+            <Style Selector="TabStripItem">
+              <Setter Property="FontSize" Value="12"/>
+              <Setter Property="MinHeight" Value="28"/>
+              <Setter Property="Padding" Value="6,2"/>
+            </Style>
+          </TabStrip.Styles>
+        </TabStrip>
         <DockPanel DockPanel.Dock="Top" Margin="12,8,8,4">
           <Button DockPanel.Dock="Right" Content="Mark all read" Command="{Binding MarkAllReadCommand}" IsEnabled="{Binding HasUnread}"/>
           <CheckBox Content="Unread only" IsChecked="{Binding UnreadOnly}" VerticalAlignment="Center"/>
