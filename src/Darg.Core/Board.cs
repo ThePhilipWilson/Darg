@@ -362,7 +362,38 @@ public static class BoardStore
         return high;
     }
 
-    public static readonly IReadOnlyList<string> DefaultColumns = ["To Do", "In Progress", "Done"];
+    /// <summary>The column for cards that need a person to look (WOR-0120): in every board's defaults.</summary>
+    public const string AttentionName = "For Human Attention";
+
+    public static readonly IReadOnlyList<string> DefaultColumns = ["To Do", "In Progress", AttentionName, "Done"];
+
+    /// <summary>Bring an existing board up to the defaults (WOR-0120): a column still called Needs Phil Attention is
+    /// renamed (its cards' Status lines too), and a board with no attention column gains one before its last column.
+    /// Done once: board.json then carries <c>attentionColumn: true</c>, so a column removed on purpose stays removed.
+    /// Returns whether it changed anything.</summary>
+    public static bool EnsureAttentionColumn(string folder)
+    {
+        var json = ReadJson(folder);
+        var cols = ColumnsOf(json);
+        var legacy = cols.OfType<JsonObject>().FirstOrDefault(c => Regex.Replace(((string?)c["name"] ?? "").Trim(), @"\s+", " ").Equals("Needs Phil Attention", StringComparison.OrdinalIgnoreCase));
+        var changed = false;
+        if (legacy is not null && !cols.Any(c => ((string?)c?["name"] ?? "").Equals(AttentionName, StringComparison.OrdinalIgnoreCase)))
+        {
+            RenameColumn(folder, (string)legacy["id"]!, AttentionName);
+            changed = true;
+            json = ReadJson(folder);
+        }
+        if (json["attentionColumn"] is not null) return changed;
+        var columns = Load(folder).Columns;
+        if (columns.Count > 0 && AttentionColumn.Find(columns) is null)
+        {
+            AddColumn(folder, AttentionName, columns.Count >= 2 ? columns.Count - 1 : null);
+            json = ReadJson(folder);
+        }
+        json["attentionColumn"] = true;
+        WriteJson(folder, json);
+        return true;
+    }
 
     /// <summary>Make a new, empty board in a project's boards folder, in Tatty's format. It takes the prefix
     /// of the boards already there (so IDs stay unique across them; "T" if there are none) unless given one,

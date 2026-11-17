@@ -6,13 +6,13 @@ namespace Darg.Core.Tests;
 /// <summary>WOR-0092: a card landing in Needs Attention gets a decision report.</summary>
 public class DecisionReportTests
 {
-    static readonly Card C = new("WOR-0200", "Do the thing", "Needs Phil Attention", "", "Task", [], "WOR-0200 - Do the thing.md", "Make it do the thing.");
-    const string CardText = "# WOR-0200: Do the thing\n\n- **Status:** Needs Phil Attention\n\n## Description\n\nMake it do the thing.\n\n## How to check\n\nRun it and look.\n";
+    static readonly Card C = new("WOR-0200", "Do the thing", "For Human Attention", "", "Task", [], "WOR-0200 - Do the thing.md", "Make it do the thing.");
+    const string CardText = "# WOR-0200: Do the thing\n\n- **Status:** For Human Attention\n\n## Description\n\nMake it do the thing.\n\n## How to check\n\nRun it and look.\n";
 
     [Fact]
     public void The_column_is_found_by_its_name_and_never_the_last()
     {
-        Assert.Equal("Needs Phil Attention", AttentionColumn.Find([new("a", "In Progress"), new("b", "Needs Phil Attention"), new("c", "Done")]));
+        Assert.Equal("For Human Attention", AttentionColumn.Find([new("a", "In Progress"), new("b", "For Human Attention"), new("c", "Done")]));
         Assert.Equal("Attention", AttentionColumn.Find([new("a", "Attention"), new("c", "Done")]));
         Assert.Null(AttentionColumn.Find([new("a", "In Progress"), new("c", "Needs Attention")]));
         Assert.Null(AttentionColumn.Find([new("a", "In Progress"), new("c", "Done")]));
@@ -171,8 +171,8 @@ public class DecisionReportTests
     [Fact]
     public void Rules_tell_an_agent_the_report_for_that_column_is_darg_s()
     {
-        var rules = ReportStore.Rules("r", C, "QA Ready", null, "Needs Phil Attention");
-        Assert.Contains("move the card to Needs Phil Attention, don't write its decision report", rules);
+        var rules = ReportStore.Rules("r", C, "QA Ready", null, "For Human Attention");
+        Assert.Contains("move the card to For Human Attention, don't write its decision report", rules);
         Assert.DoesNotContain("decision report", ReportStore.Rules("r", C, "QA Ready", null));
         foreach (var c in "<>&|\"") Assert.DoesNotContain(c, rules);
     }
