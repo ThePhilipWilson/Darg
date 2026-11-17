@@ -532,20 +532,72 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         return _notice;
     }
 
-    void WorkOnAll(List<Card> cards, IReadOnlyList<string>? alongside = null)
+    /// <summary>Start an agent on each card, all together; a card that fails to start is named in the status line and the
+    /// rest still start (WOR-0125: one bad card shouldn't stop a Work All).</summary>
+    void WorkOnAll(List<Card> cards, IReadOnlyList<string>? alongside = null, bool bulk = false)
     {
         using var timing = StallWatch.Shared.Section("Work on picked");
         var started = new List<string>();
+        var failed = new List<(string Id, string Why)>();
         var together = alongside ?? cards.Select(c => c.Id).ToList();
         foreach (var card in cards)
         {
             try { StartWork(card, together.Where(id => id != card.Id).ToList(), show: false, reload: false); }
-            catch (Exception e) { _notice = $"Started {Ids(started)}; stopped at {card.Id}: {e.Message}"; Reload(); return; }
-            started.Add(card.Id);
+            catch (Exception e) { failed.Add((card.Id, e.Message)); continue; }
+            if (AgentFor?.Invoke(card.Id) is null) failed.Add((card.Id, "no agent started"));
+            else started.Add(card.Id);
         }
-        _notice = started.Count == 1 ? $"Started an agent on {started[0]}" : $"Started {started.Count} agents: {Ids(started)}";
+        _notice = bulk || failed.Count > 0 ? BulkStart.Summary(BulkStart.Kind.Work, started, failed)
+            : started.Count == 1 ? $"Started an agent on {started[0]}" : $"Started {started.Count} agents: {string.Join(", ", started)}";
         Reload();
-        static string Ids(List<string> ids) => ids.Count == 0 ? "none" : string.Join(", ", ids);
+    }
+
+    /// <summary>The cards a column's bulk button would start (WOR-0125), among those showing on this row: for Work All,
+    /// every card in the backlog and the working column that its own ▶ Work on is offered on (no live agent, not done);
+    /// for QA Run All, every card in the QA column its own 🧪 Run QA is offered on (no QA agent running).</summary>
+    List<CardViewModel> BulkCards(BulkStart.Kind kind)
+    {
+        if (_board is null) return [];
+        IReadOnlyList<string> lists = kind switch
+        {
+            BulkStart.Kind.Work => BulkStart.WorkLists(_board.Columns),
+            BulkStart.Kind.Qa when BulkStart.QaList(_board.Columns) is { } qa => [qa],
+            _ => [],
+        };
+        return Lists.Where(l => lists.Contains(l.Id)).SelectMany(l => l.Cards)
+            .Where(c => kind == BulkStart.Kind.Qa ? c.ShowRunQa : c.CanStart).DistinctBy(c => c.Id).ToList();
+    }
+
+    public BulkStart.Kind BulkKindOf(string listId) => _board is null ? BulkStart.Kind.None : BulkStart.For(listId, _board.Columns);
+    public int BulkCount(BulkStart.Kind kind) => kind == BulkStart.Kind.None ? 0 : BulkCards(kind).Count;
+
+    /// <summary>Work All / QA Run All (WOR-0125): start every card the button counts, at once, the board staying on
+    /// screen. Work All moves backlog cards to In Progress as Work on does, and tells each agent the others beside it.
+    /// What started and what didn't goes in the status line, with no dialog per card. Returns that line.</summary>
+    public string StartBulk(BulkStart.Kind kind)
+    {
+        var cards = BulkCards(kind).Select(c => c.Card).ToList();
+        if (cards.Count == 0)
+        {
+            _notice = kind == BulkStart.Kind.Qa ? "Nothing to QA: every card in QA has a QA agent on it" : "Nothing to start: every card here has an agent on it";
+            Apply();
+            return _notice;
+        }
+        Root.Editor = null; // its panel, left open, could save over what an agent writes into the card
+        if (kind == BulkStart.Kind.Work) { WorkOnAll(cards, bulk: true); return _notice ?? ""; }
+        using var timing = StallWatch.Shared.Section("QA run all");
+        var started = new List<string>();
+        var failed = new List<(string Id, string Why)>();
+        foreach (var card in cards)
+        {
+            try { StartQa(card); }
+            catch (Exception e) { failed.Add((card.Id, e.Message)); continue; }
+            if (QaRunning?.Invoke(card.Id) == true) started.Add(card.Id);
+            else failed.Add((card.Id, "no QA agent started"));
+        }
+        _notice = BulkStart.Summary(kind, started, failed);
+        ReloadAll();
+        return _notice;
     }
 
     public string? Folder => SelectedBoard is null || _project.Boards is null ? null : Path.Combine(_project.Boards, SelectedBoard);
@@ -759,6 +811,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         ListSync.Sync(Lists, lists);
         _picked.IntersectWith(Shown().Select(c => c.Id));
         PickedChanged();
+        foreach (var l in Lists) l.BulkChanged(); // Work All counts across two columns, so every count is read again
         Status = _notice ?? $"{total} of {_board.AllCards.Count()} cards";
     }
 
@@ -880,11 +933,13 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Run QA on a card in QA: an agent checks it from the How to check section. The card stays where it is.</summary>
-    public void StartQa(CardViewModel card)
+    public void StartQa(CardViewModel card) => StartQa(card.Card);
+
+    void StartQa(Card card)
     {
         if (Folder is null || RunQa is null) return;
         if (Root.Editor?.CardId == card.Id) Root.Editor = null;
-        RunQa(card.Card, Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File)));
+        RunQa(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)));
     }
 
     /// <summary>Improve a card (WOR-0073): an agent fills its description out, asking first if the words are
@@ -1071,6 +1126,34 @@ public sealed partial class ListViewModel(BoardViewModel board, string id, strin
     public string PickText => AllPicked ? "Unpick" : "Pick all";
     [RelayCommand] void Pick() => Board.PickList(this);
     public void PickedChanged() { OnPropertyChanged(nameof(AllPicked)); OnPropertyChanged(nameof(PickText)); }
+
+    // WOR-0125: ▶ Work All at the top of the backlog and the working column, 🧪 QA Run All at the top of the QA column
+    BulkStart.Kind BulkKind => Board.BulkKindOf(Id);
+    int BulkCount => Board.BulkCount(BulkKind);
+    public bool HasBulk => BulkKind != BulkStart.Kind.None;
+    public string BulkText => BulkStart.Label(BulkKind, BulkCount);
+    public string BulkTip => BulkKind == BulkStart.Kind.Qa
+        ? "Run QA on every card showing in this column with no QA agent on it, an agent each. More than " + BulkStart.AskAbove + " asks first."
+        : "Start an agent on every card showing in the backlog and In Progress with none on it, all at once; each is told which others run beside it, " +
+          "and backlog cards move to In Progress. More than " + BulkStart.AskAbove + " asks first.";
+    bool CanBulk() => BulkCount > 0;
+    /// <summary>More than a few: the column asks "Start 7 agents?" before any start.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowBulk))] public partial bool ConfirmingBulk { get; set; }
+    public bool ShowBulk => HasBulk && !ConfirmingBulk;
+    public string BulkQuestion => BulkStart.Question(BulkKind, BulkCount);
+    [RelayCommand(CanExecute = nameof(CanBulk))]
+    void Bulk()
+    {
+        if (BulkStart.NeedsAsking(BulkCount)) ConfirmingBulk = true;
+        else Board.StartBulk(BulkKind);
+    }
+    [RelayCommand] void ConfirmBulk() { ConfirmingBulk = false; Board.StartBulk(BulkKind); }
+    [RelayCommand] void CancelBulk() => ConfirmingBulk = false;
+    public void BulkChanged()
+    {
+        OnPropertyChanged(nameof(HasBulk)); OnPropertyChanged(nameof(ShowBulk)); OnPropertyChanged(nameof(BulkText)); OnPropertyChanged(nameof(BulkQuestion));
+        BulkCommand.NotifyCanExecuteChanged();
+    }
 
     public int All => all;
     public bool IsColumn => Id is not (Core.Board.Backlog or Core.Board.Completed or Core.Board.Unsorted);

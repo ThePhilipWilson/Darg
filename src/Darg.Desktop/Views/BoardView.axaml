@@ -17,6 +17,13 @@
       <Setter Property="Opacity" Value="0.5"/>
     </Style>
     <Style Selector="Border.list:pointerover Button.head"><Setter Property="Opacity" Value="1"/></Style>
+    <Style Selector="Button.bulk">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="6,2"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
     <Style Selector="Button.strip">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="HorizontalAlignment" Value="Stretch"/>
@@ -151,6 +158,23 @@
                       <TextBlock Classes="listname" Text="{Binding Name}" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource Dim}"
                                  VerticalAlignment="Center" Background="Transparent" Tag="{Binding}"/>
                     </DockPanel>
+                    <!-- WOR-0125: Work All (backlog, In Progress) / QA Run All (QA column), asking first above a few -->
+                    <Button Classes="bulk" Content="{Binding BulkText}" Command="{Binding BulkCommand}" ToolTip.Tip="{Binding BulkTip}"
+                            AutomationProperties.Name="{Binding BulkText}">
+                      <Button.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                          <Binding Path="ShowBulk"/>
+                          <Binding Path="IsHeaderPlain"/>
+                        </MultiBinding>
+                      </Button.IsVisible>
+                    </Button>
+                    <StackPanel Spacing="6" IsVisible="{Binding ConfirmingBulk}">
+                      <TextBlock Text="{Binding BulkQuestion}" TextWrapping="Wrap" FontSize="12"/>
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="primary" Content="Start them" Command="{Binding ConfirmBulkCommand}"/>
+                        <Button Content="Cancel" Command="{Binding CancelBulkCommand}"/>
+                      </StackPanel>
+                    </StackPanel>
                     <TextBox Classes="rename" Text="{Binding EditName}" IsVisible="{Binding IsRenaming}" FontSize="12" Tag="{Binding}"
                              ToolTip.Tip="Enter to save, Esc to leave it as it was. Its cards are renamed with it."/>
                     <StackPanel Spacing="6" IsVisible="{Binding ConfirmingRemove}">
