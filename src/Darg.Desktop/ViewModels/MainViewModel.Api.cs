@@ -25,6 +25,8 @@ public partial class MainViewModel
         Add("agent", "one agent: {id, last?}. Its details and transcript, the last n entries (default 20).", OneAgent);
         Add("start-agent", "start an agent in a project with a prompt: {project, prompt, cwd?, name?}. Returns its id. It costs a session: only when Philip asks.", StartAgent);
         Add("work-on", "start an agent on a board card, as the card's Work on button does (moves it to In Progress): {project, card}, or on several at once as ▶ Work on N does: {project, cards} (a list, or ids separated by spaces). Only when Philip asks.", WorkOn);
+        Add("work-all", "start an agent on every card in the shown board's backlog and In Progress with none on it, as that column's ▶ Work All does (backlog cards move to In Progress; no asking first): {project}. Only when Philip asks.", a => BulkApi(a, BulkStart.Kind.Work));
+        Add("qa-all", "run QA on every card in the shown board's QA column with no QA agent on it, as its 🧪 QA Run All does (no asking first): {project}. Only when Philip asks.", a => BulkApi(a, BulkStart.Kind.Qa));
         Add("improve-card", "start an agent that fills a thin card out (what's wanted, where in the code, done when), asking Philip first if its words are unclear; the card's Improve button: {project, card}, or an agent each on several at once as ✦ Improve N does: {project, cards} (a list, or ids separated by spaces). Only when Philip asks.", ImproveCard);
         Add("send-back", "send a card in the QA column back with what's wrong, as its panel's Send back does: {project, card, notes}. The notes go into the card " +
                          "under QA notes, it returns to In Progress and an agent reworks it from them. Only when Philip asks, with his words as the notes.", SendBack);
@@ -176,6 +178,13 @@ public partial class MainViewModel
         if (p.Agents.ForCard(id) is { } busy) throw new ApiError($"{id} already has an agent: \"{busy.Name}\" (id {busy.Id}, {busy.StateText}).");
         p.Board.StartWork(card);
         return p.Agents.ForCard(id) is { } started ? $"Started \"{started.Name}\" (id {started.Id}) on {id}." : $"Couldn't start an agent on {id}.";
+    }
+
+    string BulkApi(ApiArgs a, BulkStart.Kind kind)
+    {
+        var p = FindProject(a);
+        if (p.Board is null || p.Agents is null) throw new ApiError($"{p.Name} needs a board and agents for that.");
+        return p.Board.StartBulk(kind);
     }
 
     string ImproveCard(ApiArgs a)
