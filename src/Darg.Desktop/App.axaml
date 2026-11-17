@@ -359,8 +359,9 @@
          glances about and purses its mouth; when it needs you it says "oh" and shows a badge -->
     <Style Selector="Button.critter">
       <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="Padding" Value="0"/>
-      <Setter Property="CornerRadius" Value="29"/>
+      <!-- room round the body for the badges that overhang its circle: the button clips what sticks out of it, and a rounded clip cut them off -->
+      <Setter Property="Padding" Value="6,6,6,0"/>
+      <Setter Property="CornerRadius" Value="0"/>
       <Setter Property="RenderTransform" Value="translate(0px, 0px)"/>
       <Style.Animations>
         <Animation Duration="0:0:2.6" IterationCount="Infinite" Easing="SineEaseInOut">
