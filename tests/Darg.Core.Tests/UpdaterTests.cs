@@ -46,6 +46,27 @@ public sealed class UpdaterTests : IDisposable
     }
 
     [Fact]
+    public void A_built_update_goes_stale_when_the_repo_changes_after_it() // WOR-0104
+    {
+        var install = Directory.CreateDirectory(Path.Combine(_dir, "install3")).FullName;
+        var staging = Directory.CreateDirectory(Updater.StagingFolder(install)).FullName;
+        var repo = Path.Combine(_dir, "repo3");
+        var src = Directory.CreateDirectory(Path.Combine(repo, "src", "App")).FullName;
+        var cs = Path.Combine(src, "A.cs");
+        File.WriteAllText(cs, "class A {}");
+        File.SetLastWriteTimeUtc(cs, DateTime.UtcNow.AddMinutes(-10));
+        Updater.WriteStamp(install, Updater.SourceStamp(repo) - 1); // the install is behind: an update was wanted
+
+        Assert.False(Updater.StagedBuildIsStale(repo, install)); // nothing built yet: no stamp in staging, can't be stale
+        Updater.WriteStamp(staging, Updater.SourceStamp(repo)); // the update built from the repo as it is
+        Assert.False(Updater.StagedBuildIsStale(repo, install));
+
+        File.SetLastWriteTimeUtc(cs, DateTime.UtcNow); // an edit after the build
+        Assert.True(Updater.StagedBuildIsStale(repo, install));
+        Assert.True(Updater.HasChanges(repo, install)); // and the install is still behind as well
+    }
+
+    [Fact]
     public void A_failed_build_shows_its_errors_once_else_its_last_lines()
     {
         var output = new[] { "Restoring...", "x.cs(3,1): error CS1002: ; expected [a.csproj]", "x.cs(3,1): error CS1002: ; expected [a.csproj]", "done" };

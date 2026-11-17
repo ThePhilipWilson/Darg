@@ -43,6 +43,8 @@
                            Foreground="{DynamicResource Accent}"/>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                   <Button Content="{Binding RestartLabel}" Command="{Binding RestartCommand}" ToolTip.Tip="Close and reopen this build"/>
+                  <Button Content="{Binding UseBuiltLabel}" Command="{Binding UseBuiltCommand}" IsVisible="{Binding CanUseBuilt}"
+                          ToolTip.Tip="Restart into the update already built, without the changes made since"/>
                   <Button Classes="primary" Content="{Binding UpdateLabel}" Command="{Binding UpdateCommand}" IsVisible="{Binding CanUpdate}"
                           IsEnabled="{Binding !Building}"/>
                 </StackPanel>
