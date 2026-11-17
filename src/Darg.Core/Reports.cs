@@ -7,8 +7,10 @@ namespace Darg.Core;
 /// <param name="File">The report's file (its name is its id: date, time and card).</param>
 /// <param name="Agent">The agent that wrote it, when it was told its id; Darg forgets that agent once its turn ends.</param>
 /// <param name="Body">The markdown below the properties.</param>
+/// <param name="Qa">A QA handoff (<c>status: qa</c>, WOR-0088): the work went to the QA column for the person to check,
+/// and the agent that wrote it stays.</param>
 public sealed record AgentReport(string File, string Card, string Title, string Agent, IReadOnlyList<string> Commits,
-    string Repo, string Date, bool Read, string Body)
+    string Repo, string Date, bool Read, string Body, bool Qa = false)
 {
     public string Id => Path.GetFileNameWithoutExtension(File);
     public string Heading => Card.Length > 0 && Title.Length > 0 ? $"{Card}: {Title}" : Title.Length > 0 ? Title : Card.Length > 0 ? Card : Id;
@@ -16,10 +18,10 @@ public sealed record AgentReport(string File, string Card, string Title, string 
 
 /// <summary>A project's finished-agent reports (WOR-0061): <c>&lt;instance&gt;/projects/&lt;project&gt;/reports/</c>, one markdown
 /// file each, with Obsidian properties (card, title, agent, commits, repo, date, read). A card agent that is sure
-/// its work is done moves the card to done and writes one (told how by <see cref="Rules"/>); work that needs the
-/// person to look at it goes to the board's QA column instead, with no report, and the agent stays. Darg lists the
-/// reports, unread first in weight, marks one read when it's opened, and forgets the agent that wrote it, so a
-/// small one-shot task needs no tending.</summary>
+/// its work is done moves the card to done and writes one (told how by <see cref="Rules"/>), and Darg forgets the agent
+/// that wrote it, so a small one-shot task needs no tending; work that needs the person to look at it goes to the
+/// board's QA column with a short QA report (<c>status: qa</c>, WOR-0088), and that agent stays. Darg lists the
+/// reports, unread first in weight, and marks one read when it's opened, so Reports is the one place to triage from.</summary>
 public static partial class ReportStore
 {
     /// <summary>In a folder of its own, so a card agent can be given that folder (--add-dir) and nothing beside it.</summary>
@@ -52,7 +54,8 @@ public static partial class ReportStore
         var title = fields.GetValueOrDefault("title", "");
         if (title.Length == 0 && Regex.Match(body, @"^#\s+(.+)$", RegexOptions.Multiline) is { Success: true } h) title = h.Groups[1].Value.Trim();
         return new AgentReport(file, fields.GetValueOrDefault("card", ""), title, fields.GetValueOrDefault("agent", ""), commits,
-            fields.GetValueOrDefault("repo", ""), date, IsTrue(fields.GetValueOrDefault("read", "")), body.TrimEnd());
+            fields.GetValueOrDefault("repo", ""), date, IsTrue(fields.GetValueOrDefault("read", "")), body.TrimEnd(),
+            fields.GetValueOrDefault("status", "").Trim().Trim('"', '\'').Equals("qa", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Mark a report read or unread by rewriting its read property (added if missing); everything else stays as written.</summary>
@@ -72,32 +75,41 @@ public static partial class ReportStore
         System.IO.File.WriteAllText(file, updated, new UTF8Encoding(false));
     }
 
-    /// <summary>What a card agent is told about finishing, in place of "move the card to done": QA when the person
-    /// should look, else done with a report. Free of double quotes, angle brackets, ampersands and pipes.</summary>
+    /// <summary>What a card agent is told about finishing, in place of "move the card to done": QA with a short QA
+    /// report (<c>status: qa</c>) when the person should look, and the agent stays; else done with a report, and the
+    /// agent is forgotten. Free of double quotes, angle brackets, ampersands and pipes.</summary>
     /// <param name="qaColumn">The board's QA column, if it has one.</param>
-    /// <param name="agentId">The agent's own id, written into the report so Darg forgets the right agent.</param>
+    /// <param name="agentId">The agent's own id, written into the report so Darg forgets (or keeps) the right agent.</param>
     public static string Rules(string folder, Card card, string? qaColumn, string? agentId)
     {
-        var name = $"{DateTime.Now:yyyyMMdd-HHmm}-{card.Id}.md";
+        var stamp = $"{DateTime.Now:yyyyMMdd-HHmm}-{card.Id}";
+        string FileFor(string suffix) => Path.Combine(folder, stamp + suffix + ".md").Replace('\\', '/');
+        var props =
+            $"card: {card.Id}, title: the card's title, " + (agentId is not null ? $"agent: {agentId}, " : "") +
+            "commits: the short ids of your commits as they are on the branch they landed on, space-separated, repo: the repo's folder, " +
+            $"date: {DateTime.Now:yyyy-MM-dd} and the time, read: false";
+        var howToCheck = "a section headed ## How to check to the card file, below the description, with what changed, the branch and commit ids to look at, " +
+            "the exact command to run or file to open to try it (a screenshot path if you took one), and what to look for";
         var qa = qaColumn is not null
-            ? $"first add a section headed ## How to check to the card file, below the description, with what changed, the branch and commit ids to look at, " +
-              "the exact command to run or file to open to try it (a screenshot path if you took one), and what to look for; " +
-              $"then set its Status to {qaColumn} and move its id into that column in board.json's order"
-            : "leave it where it is (this board has no QA column)";
+            ? $"first add {howToCheck}; then set its Status to {qaColumn} and move its id into that column in board.json's order"
+            : $"first add {howToCheck}, and leave the card where it is (this board has no QA column)";
         return
             "When the work is finished and pushed, decide whether I need to check it. " +
             "It needs checking when part of it is something you couldn't see or verify yourself (how it looks, behaviour you didn't exercise live, " +
-            $"a choice you made on my behalf, tests you couldn't run): then {qa}, say in your last message exactly what to check, and write no report. " +
+            $"a choice you made on my behalf, tests you couldn't run): then {qa}, and say in your last message exactly what to check. " +
+            "Then, as the very last thing you do (after any merge, so the commit ids are final), write a short QA report to " +
+            $"{FileFor("-qa")} so I can triage this from Reports; Darg lists it as unread and keeps this agent, for me to talk to about what I find. " +
+            $"It starts with these properties between --- lines: status: qa, {props}. Below them, three short sections: " +
+            "## Changed (what you changed, in a few lines), ## Look at (what to try and what to look for; the How to check section has the detail), " +
+            "## Checked (what you verified yourself and how, and what you could not check). " +
             "Otherwise, when you are confident it is done and verified, move the card to done yourself: " +
             "set its Status to the board's last column (Completed if the board has no done column), add a Done line with today's date, " +
             "and move its id into that column in board.json's order. Then, as the very last thing you do (after any merge, so the commit ids are final), " +
-            $"write a short report to {Path.Combine(folder, name).Replace('\\', '/')} for me to read later; Darg lists it under Reports as unread " +
-            "and forgets this agent once your turn ends, so the report is what I will see of this work. It starts with these properties between --- lines: " +
-            $"card: {card.Id}, title: the card's title, " + (agentId is not null ? $"agent: {agentId}, " : "") +
-            "commits: the short ids of your commits as they are on the branch they landed on, space-separated, repo: the repo's folder, " +
-            $"date: {DateTime.Now:yyyy-MM-dd} and the time, read: false. Below them, three short sections: ## Asked (the problem, in a sentence or two), " +
+            $"write a short report to {FileFor("")} for me to read later; Darg lists it under Reports as unread " +
+            "and forgets this agent once your turn ends, so the report is what I will see of this work. " +
+            $"It starts with these properties between --- lines: {props}. Below them, three short sections: ## Asked (the problem, in a sentence or two), " +
             "## Done (what you changed and how you checked it), ## Left (anything not done, or None). " +
-            "Leave the card where it is while work is left.";
+            "Leave the card where it is, with no report, while work is left.";
     }
 
     /// <summary>The prompt for Work on a card already in the QA column: not more work, but getting the result
@@ -120,7 +132,8 @@ public static partial class ReportStore
         "Build on that work rather than starting again, fix what my notes say, and leave what already works alone. " +
         "If a note could mean several things, ask me with AskUserQuestion before changing anything. " +
         "Going back to QA, replace the How to check section with one for this round (what changed since, the new commits, what to look for) " +
-        $"rather than adding a second one, and leave the {QaNotes.Heading} section as it is.";
+        $"rather than adding a second one, leave the {QaNotes.Heading} section as it is, and write a fresh QA report for this round " +
+        "(a new file, as the rules below say) rather than editing the last one.";
 
     static bool IsTrue(string v) => v.Trim().Trim('"', '\'').ToLowerInvariant() is "true" or "yes" or "1";
 

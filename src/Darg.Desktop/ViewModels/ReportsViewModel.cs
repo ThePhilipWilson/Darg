@@ -22,7 +22,7 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     public string UnreadText => Unread > 99 ? "99+" : Unread.ToString();
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(EmptyText))] public partial bool HasReports { get; set; }
     public string EmptyText => HasReports ? "Pick a report to read it."
-        : "No reports yet. A card agent that is sure its work is done moves the card to done, writes a short report here (what was asked, what it did, its commits) and is forgotten; work that needs you to check it goes to the board's QA column instead.";
+        : "No reports yet. A card agent that is sure its work is done moves the card to done, writes a short report here (what was asked, what it did, its commits) and is forgotten; work that needs you to check it goes to the board's QA column with a short QA report here (marked to check), and its agent stays.";
     /// <summary>Only the unread ones in the list.</summary>
     [ObservableProperty] public partial bool UnreadOnly { get; set; }
     [ObservableProperty] public partial string Status { get; set; } = "";
@@ -147,6 +147,7 @@ public partial class ReportRow(AgentReport r) : ObservableObject
     public string Heading => Report.Heading;
     public string Meta => string.Join(" · ", new[]
     {
+        Report.Qa ? "to check" : "",
         Report.Date,
         Report.Commits.Count switch { 0 => "", 1 => "1 commit", var n => $"{n} commits" },
     }.Where(s => s.Length > 0));

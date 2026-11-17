@@ -122,6 +122,31 @@ public class ReportStoreTests
         foreach (var c in "<>&|") Assert.DoesNotContain(c, rules);
         Assert.Contains("this board has no QA column", ReportStore.Rules("r", card, null, null));
         Assert.Contains("## How to check", rules);
+        Assert.DoesNotContain("write no report", rules);
+    }
+
+    [Fact]
+    public void A_qa_handoff_writes_a_qa_report_of_its_own_and_the_agent_stays()
+    {
+        var card = new Card("WOR-0088", "QA reports", "In Progress", "", "Task", [], "x.md", "");
+        var rules = ReportStore.Rules("C:\\inst\\reports", card, "QA Ready", "abc1234567");
+        // a file of its own beside the done report's, so one agent can write both
+        Assert.Matches(@"C:/inst/reports/\d{8}-\d{4}-WOR-0088-qa\.md", rules);
+        Assert.Matches(@"C:/inst/reports/\d{8}-\d{4}-WOR-0088\.md", rules);
+        Assert.Contains("status: qa", rules);
+        Assert.Contains("keeps this agent", rules);
+        Assert.Contains("## Look at", rules);
+        Assert.Contains("## Checked", rules);
+        // the QA report comes after the card moves, so its commit ids are final
+        Assert.True(rules.IndexOf("set its Status to QA Ready") < rules.IndexOf("status: qa"));
+        // with no QA column there's still a QA report
+        Assert.Contains("status: qa", ReportStore.Rules("r", card, null, null));
+
+        var r = ReportStore.Parse(Report.Replace("card: WOR-0061", "status: qa\ncard: WOR-0061"), "x/20261117-0100-WOR-0061-qa.md");
+        Assert.True(r.Qa);
+        Assert.Equal("WOR-0061", r.Card);
+        Assert.True(ReportStore.Parse(Report.Replace("read: false", "read: false\nstatus: \"QA\""), "x.md").Qa);
+        Assert.False(ReportStore.Parse(Report, "x.md").Qa);
     }
 
     [Fact]
@@ -162,6 +187,7 @@ public class ReportStoreTests
         Assert.Contains("The button is grey.", p);
         Assert.Contains("How to check", p);
         Assert.Contains("## QA notes", p);
+        Assert.Contains("fresh QA report", p);
         var own = p.Replace("The button is grey.", "");
         Assert.DoesNotContain("\"", own);
         foreach (var c in "<>&|") Assert.DoesNotContain(c, own);
