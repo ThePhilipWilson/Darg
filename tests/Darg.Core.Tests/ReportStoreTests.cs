@@ -110,6 +110,15 @@ public class ReportStoreTests
     }
 
     [Fact]
+    public void Rework_column_is_found_by_name_but_never_the_done_column()
+    {
+        Assert.Equal("Needs More Work", BoardColumns.Rework([new("a", "To Do"), new("b", "Needs More Work"), new("c", "QA Ready"), new("d", "Done")]));
+        Assert.Equal("Rework", BoardColumns.Rework([new("a", "Rework"), new("b", "Done")]));
+        Assert.Null(BoardColumns.Rework([new("a", "To Do"), new("b", "QA Ready"), new("c", "Done")]));
+        Assert.Null(BoardColumns.Rework([new("a", "To Do"), new("b", "Send back")])); // the last column is done
+    }
+
+    [Fact]
     public void Rules_name_the_report_file_and_the_qa_column_and_go_on_a_command_line()
     {
         var card = new Card("WOR-0061", "Reports", "In Progress", "", "Task", [], "x.md", "");

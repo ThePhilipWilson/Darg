@@ -492,6 +492,7 @@ public partial class ProjectViewModel : ObservableObject
             // A card agent still at work writes its own report as its last step, so Darg leaves the writing to it.
             Board.EnteredQa = (card, file) =>
             {
+                QaAfterRework(card, file);
                 if (Agents.ForCard(card.Id) is { State: AgentState.Starting or AgentState.Working }) return;
                 var folder = Reports!.Folder; var repo = CardFolder(card);
                 _ = Task.Run(() => { try { DecisionReport.Write(folder, card, file, repo, DateTime.Now, TimeSpan.FromMinutes(2)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
@@ -546,7 +547,9 @@ public partial class ProjectViewModel : ObservableObject
                 var id = AgentsViewModel.NewId();
                 // a card in QA: Work on gets the result running for me to try (WOR-0075), not more work
                 var inQa = Board.InQa(card);
-                Watch(Agents.Start(inQa ? ReportStore.CheckPrompt(Name, card, file) : CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id, purpose: inQa ? AgentPurposes.Qa : AgentPurposes.Work));
+                // a card QA sent to needs more work: its agent is reworking it, so its return to QA runs QA (WOR-0115)
+                var purpose = inQa ? AgentPurposes.Qa : Board.InRework(card) ? AgentPurposes.Rework : AgentPurposes.Work;
+                Watch(Agents.Start(inQa ? ReportStore.CheckPrompt(Name, card, file) : CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id, purpose: purpose));
                 if (show) Section = Section.Agents;
             };
             // Run QA (WOR-0108): an agent checks the card from its How to check section; the board stays showing
@@ -554,12 +557,32 @@ public partial class ProjectViewModel : ObservableObject
             {
                 if (Agents.QaRunningFor(card.Id)) return;
                 var id = AgentsViewModel.NewId();
-                Watch(Agents.Start(ReportStore.QaRunPrompt(Name, card, file, Board.Columns.LastOrDefault()?.Name, AttentionColumn.Find(Board.Columns), Board.Columns.Take(Math.Max(0, Board.Columns.Count - 1)).FirstOrDefault(c => System.Text.RegularExpressions.Regex.IsMatch(c.Name, @"more work|rework|send back", System.Text.RegularExpressions.RegexOptions.IgnoreCase))?.Name), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (QA)", job: CardJob(card), id: id, purpose: AgentPurposes.Qa));
+                Watch(Agents.Start(ReportStore.QaRunPrompt(Name, card, file, Board.Columns.LastOrDefault()?.Name, AttentionColumn.Find(Board.Columns), BoardColumns.Rework(Board.Columns)), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (QA)", job: CardJob(card), id: id, purpose: AgentPurposes.Qa));
                 // the button comes back once the QA agent's turn ends: the board reads its state again
                 if (Agents.Find(id) is { } qa)
                     qa.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State)) Board.ReloadAll(); };
                 Board.ReloadAll(); // the button goes at once, not when the agent's state next changes
             };
+            // WOR-0115: a card back in QA after rework (sent back from QA, or Work on in the needs-more-work column) gets
+            // Run QA without asking. Only once the reworking agent's turn has ended: it may still be merging or writing its
+            // report, and QA should check what landed. Not if the card has left QA meanwhile or a QA agent is already on it.
+            void QaAfterRework(Card card, string file)
+            {
+                var last = Agents.Agents.Where(a => a.CardId == card.Id).MaxBy(a => a.Created);
+                if (last is not { Purpose: AgentPurposes.Rework }) return;
+                static bool Busy(AgentViewModel a) => a.State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou;
+                void Go() { if (Board.CardInQa(card.Id) && !Agents.QaRunningFor(card.Id)) Board.RunQa?.Invoke(card, file); }
+                if (!Busy(last)) { Go(); return; }
+                System.ComponentModel.PropertyChangedEventHandler? ended = null;
+                ended = (_, e) =>
+                {
+                    if (e.PropertyName != nameof(AgentViewModel.State) || Busy(last)) return;
+                    last.PropertyChanged -= ended;
+                    // after this change has been handled, as Forget is: the board may still be reading the agent's last move
+                    Avalonia.Threading.Dispatcher.UIThread.Post(Go);
+                };
+                last.PropertyChanged += ended;
+            }
             // sent back from QA with notes (WOR-0079): the usual card prompt, after the notes and how to build on the last round
             Board.Rework = (card, file, notes) =>
             {

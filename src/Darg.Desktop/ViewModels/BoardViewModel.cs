@@ -852,6 +852,14 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public bool InQa(Card card) =>
         _board is not null && BoardColumns.Qa(_board.Columns) is { } qa && BoardStore.PlaceOf(card.Status, _board.Columns) == BoardStore.PlaceOf(qa, _board.Columns);
 
+    /// <summary>Whether a card sits in the board's needs-more-work column (<see cref="BoardColumns.Rework"/>): QA failed it.</summary>
+    public bool InRework(Card card) =>
+        _board is not null && BoardColumns.Rework(_board.Columns) is { } r && BoardStore.PlaceOf(card.Status, _board.Columns) == BoardStore.PlaceOf(r, _board.Columns);
+
+    /// <summary>Whether the card with this id is in its board's QA column now, on whichever row shows it.</summary>
+    public bool CardInQa(string cardId) =>
+        Root.Rows.Any(r => r._board?.AllCards.FirstOrDefault(c => c.Id == cardId) is { } c && r.InQa(c));
+
     /// <summary>Send a card in QA back (WOR-0079): the notes go into the card under QA notes, an agent starts on
     /// them, and the card goes back to the working column. Returns what went wrong, or null.</summary>
     public string? SendBack(CardViewModel card, string notes)
