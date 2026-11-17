@@ -483,28 +483,27 @@ public partial class ProjectViewModel : ObservableObject
             Reports!.OpenCard = id => { if (!Board.OpenById(id)) return false; Section = Section.Board; return true; };
             Agents.RefreshCards();
             // a card landing in Needs Attention gets its decision report, whoever moved it (WOR-0092)
+            // WOR-0102: a card entering QA gets a QA report, one reaching done has it archived and a done report written
+            // (ReportFlow, where the rules and their tests are); this only says which agent is at work on the card.
+            // a card agent at work wins over a QA agent: it is the one that writes its own report
+            string? AtWork(Card card) => Agents.Agents.Where(a => a.CardId == card.Id && a.State is AgentState.Starting or AgentState.Working)
+                .Select(a => a.Purpose ?? "").OrderBy(p => p == AgentPurposes.Qa).Cast<string?>().FirstOrDefault();
+            void InBackground(Action write) => _ = Task.Run(() => { try { write(); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
             Board.NeedsAttention = (card, file) =>
             {
                 var folder = Reports!.Folder; var repo = CardFolder(card);
-                _ = Task.Run(() => { try { DecisionReport.Write(folder, card, file, repo, DateTime.Now, TimeSpan.FromMinutes(2)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
+                InBackground(() => ReportFlow.EnteredAttention(folder, card, file, repo, DateTime.Now));
             };
-            // WOR-0102: a card entering QA gets a QA report, one reaching done has it archived and a done report written.
-            // A card agent still at work writes its own report as its last step, so Darg leaves the writing to it.
             Board.EnteredQa = (card, file) =>
             {
                 QaAfterRework(card, file);
-                if (Agents.ForCard(card.Id) is { State: AgentState.Starting or AgentState.Working }) return;
-                var folder = Reports!.Folder; var repo = CardFolder(card);
-                _ = Task.Run(() => { try { DecisionReport.Write(folder, card, file, repo, DateTime.Now, TimeSpan.FromMinutes(2)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
+                var folder = Reports!.Folder; var repo = CardFolder(card); var agent = AtWork(card);
+                InBackground(() => ReportFlow.EnteredQa(folder, card, file, repo, DateTime.Now, agent));
             };
             Board.EnteredDone = (card, file) =>
             {
-                var folder = Reports!.Folder; var repo = CardFolder(card);
-                // a QA agent writes no report of its own, so Darg writes the done report for it; a card agent writes its own
-                var live = Agents.ForCard(card.Id) is { State: AgentState.Starting or AgentState.Working, Purpose: not AgentPurposes.Qa };
-                var archived = DecisionReport.Archive(folder, card.Id);
-                if (live) return;
-                _ = Task.Run(() => { try { DecisionReport.WriteDone(folder, card, file, repo, DateTime.Now, archived, TimeSpan.FromMinutes(10)); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
+                var folder = Reports!.Folder; var repo = CardFolder(card); var agent = AtWork(card);
+                InBackground(() => ReportFlow.EnteredDone(folder, card, file, repo, DateTime.Now, agent));
             };
             Board.ReportFor = id => Reports!.LatestFor(id);
             Board.OpenReport = file => { Reports!.Show(file); Section = Section.Reports; };

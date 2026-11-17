@@ -231,10 +231,13 @@ public static partial class ReportStore
         "This card is in QA: the work is done and I want you to QA it for me, not change it. Read the card file, especially its How to check section, " +
         "and the project's CLAUDE.md. Then do the checking yourself as far as you can: build it from the branch or commit the card names " +
         "(in a git worktree of its own if that is not what the main folder is on), run the tests and the commands the section gives, and exercise what it says to look for. " +
+        "Check by automation, not by handing steps to me: drive the app the way the project's CLAUDE.md says (its environment variables, its API, " +
+        "a throwaway instance, fake agents, moving a card by editing its file and board.json, UI Automation) and write a script or test where none exists. " +
         "Say in one message what you checked and how, what passed, what failed or looks wrong, and what you could not check and why. Change no code. " +
         "Then, as the last thing you do, move the card on the board by your verdict: " +
         (doneColumn is not null ? $"everything passed and nothing needs my eyes: set its Status to {doneColumn}, add a Done line with today's date, and move its id into that column in board.json's order; " : "everything passed: leave it where it is; ") +
-        (attentionColumn is not null ? $"it passed but something needs my judgement or you could not check part of it: move it to {attentionColumn} the same way (Darg writes the decision report itself); " : "") +
+        (attentionColumn is not null ? $"it passed but something needs my judgement (how it looks or feels, a choice that is mine), or a part could not be checked by automation even after you tried: " +
+            $"say in the card exactly why that part can't be automated, so it can be ticketed, and move it to {attentionColumn} the same way (Darg writes the decision report itself); " : "") +
         (reworkColumn is not null ? $"something failed or looks wrong: put the findings under a QA notes style list in the card file and move it to {reworkColumn} the same way. " : "something failed: leave it in QA and say so plainly. ") +
         "If something won't build or the How to check section is missing, say so plainly and move it to " + (reworkColumn ?? attentionColumn ?? "nowhere, leave it") + ".";
 
