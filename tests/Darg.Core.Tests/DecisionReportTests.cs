@@ -119,6 +119,29 @@ public class DecisionReportTests
     }
 
     [Fact]
+    public void Clean_up_archives_done_cards_qa_reports_writes_the_done_report_and_is_idempotent()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "darg-clean-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var card = Path.Combine(dir, "card.md");
+            File.WriteAllText(card, CardText);
+            var reports = Path.Combine(dir, "reports");
+            DecisionReport.Write(reports, C, card, "", new DateTime(2026, 11, 17, 11, 0, 0), TimeSpan.FromMinutes(2));
+            var now = new DateTime(2026, 11, 17, 12, 0, 0);
+            var (archived, written) = DecisionReport.CleanUp(reports, [(C, card)], _ => "", now);
+            Assert.Equal((1, 1), (archived, written));
+            Assert.Equal(ReportKind.Finished, ReportStore.List(reports).Single().Kind);
+            Assert.Equal((0, 0), DecisionReport.CleanUp(reports, [(C, card)], _ => "", now.AddMinutes(1)));
+            // a done card that never had a QA report is left alone
+            var other = new Card("WOR-0999", "Old", "Done", "", "Task", [], "x.md", "");
+            Assert.Equal((0, 0), DecisionReport.CleanUp(reports, [(other, card)], _ => "", now));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void An_agents_done_report_stops_darg_writing_one_and_approving_still_settles_the_archived_report()
     {
         var dir = Path.Combine(Path.GetTempPath(), "darg-done2-" + Guid.NewGuid().ToString("N"));

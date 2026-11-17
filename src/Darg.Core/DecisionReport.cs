@@ -161,6 +161,24 @@ public static partial class DecisionReport
         return file;
     }
 
+    /// <summary>Clean up (WOR-0112): for every done card that has a QA report, in the list or already archived, archive
+    /// what is still in the list and make sure a done report exists (written from the QA report when none does).
+    /// Returns how many QA reports were archived and how many done reports written.</summary>
+    public static (int Archived, int Written) CleanUp(string folder, IEnumerable<(Card Card, string File)> doneCards, Func<Card, string> repoFor, DateTime now)
+    {
+        int archived = 0, written = 0;
+        var inArchive = Directory.Exists(Path.Combine(folder, ArchiveFolder)) ? ReportStore.List(Path.Combine(folder, ArchiveFolder)).Where(r => r.Qa).ToList() : [];
+        foreach (var (card, file) in doneCards)
+        {
+            var moved = Archive(folder, card.Id);
+            var before = inArchive.Where(r => r.Card == card.Id).ToList();
+            if (moved.Count == 0 && before.Count == 0) continue; // never had a QA report: nothing to tidy
+            archived += moved.Count;
+            if (WriteDone(folder, card, file, repoFor(card), now, [.. moved, .. before], TimeSpan.MaxValue) is not null) written++;
+        }
+        return (archived, written);
+    }
+
     public static string BuildDone(Card card, string cardText, IReadOnlyList<string> commits, string repo, AgentReport? qa, DateTime now)
     {
         static string Or(string s, string none) => s.Trim().Length > 0 ? s.Trim() : none;

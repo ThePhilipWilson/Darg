@@ -55,6 +55,18 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
         Selected = Reports.FirstOrDefault(r => r.Report.File == file);
     }
 
+    /// <summary>Set by the project (WOR-0112): archive the QA reports of done cards and write any missing done report; says what it did.</summary>
+    public Func<string>? CleanUpDone { get; set; }
+
+    [RelayCommand]
+    void CleanUp()
+    {
+        if (CleanUpDone is null) return;
+        try { Status = CleanUpDone(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Clean up stopped: {e.Message}"; }
+        Reload();
+    }
+
     [RelayCommand]
     void Approve()
     {
