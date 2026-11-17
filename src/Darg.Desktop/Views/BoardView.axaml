@@ -267,6 +267,7 @@
             <Button Classes="primary" Content="{Binding IsNew, Converter={x:Static vm:Bools.CreateOrSave}}" Command="{Binding SaveCommand}"/>
             <Button Content="Close" Command="{Binding CancelCommand}"/>
             <Button Content="{Binding WorkOnText}" Command="{Binding WorkOnCommand}" IsVisible="{Binding CanWorkOn}"/>
+            <Button Content="🧪 Run QA" Command="{Binding RunQaCommand}" IsVisible="{Binding CanRunQa}" ToolTip.Tip="An agent builds and checks the card from its How to check section and tells you what passed and what didn't. It changes no code and the card stays in QA"/>
             <Button Content="📋 Report" Command="{Binding OpenReportCommand}" IsVisible="{Binding HasReport}" ToolTip.Tip="Open the report written for this card (its decision report, when it's in Needs Attention)"/>
           </StackPanel>
           <!-- WOR-0095: start the QA verdict on a card in QA whose agent is done -->

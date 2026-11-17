@@ -539,6 +539,12 @@ public partial class ProjectViewModel : ObservableObject
                 Watch(Agents.Start(inQa ? ReportStore.CheckPrompt(Name, card, file) : CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id));
                 if (show) Section = Section.Agents;
             };
+            // Run QA (WOR-0108): an agent checks the card from its How to check section; the board stays showing
+            Board.RunQa = (card, file) =>
+            {
+                var id = AgentsViewModel.NewId();
+                Watch(Agents.Start(ReportStore.QaRunPrompt(Name, card, file), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (QA)", job: CardJob(card), id: id));
+            };
             // sent back from QA with notes (WOR-0079): the usual card prompt, after the notes and how to build on the last round
             Board.Rework = (card, file, notes) =>
             {

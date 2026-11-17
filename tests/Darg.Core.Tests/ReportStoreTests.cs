@@ -204,6 +204,17 @@ public class ReportStoreTests
     }
 
     [Fact]
+    public void Qa_run_prompt_checks_without_changing_and_goes_on_a_command_line()
+    {
+        var card = new Card("WOR-0108", "QA", "QA Ready", "", "Task", [], "x.md", "");
+        var p = ReportStore.QaRunPrompt("Darg", card, "C:\\b\\x.md");
+        Assert.Contains("How to check", p);
+        Assert.Contains("Change no code", p);
+        Assert.DoesNotContain("\"", p);
+        foreach (var c in "<>&|") Assert.DoesNotContain(c, p);
+    }
+
+    [Fact]
     public void Check_prompt_points_at_the_card_and_goes_on_a_command_line()
     {
         var card = new Card("WOR-0075", "QA", "QA Ready", "", "Task", [], "x.md", "");

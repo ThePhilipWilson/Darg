@@ -139,6 +139,16 @@ public static partial class ReportStore
         "the card names, in a git worktree of its own if that is not what the main folder is on, and leave it running. Say in one message what is running, " +
         "from which commit, and what to look at. Change no code and don't move the card. If something won't build or the How to check section is missing, say so plainly.";
 
+    /// <summary>The prompt for Run QA on a card in QA (WOR-0108): the agent does the checking itself, from the How to check
+    /// section, and reports what passed and what didn't. Free of double quotes, angle brackets, ampersands and pipes.</summary>
+    public static string QaRunPrompt(string projectName, Card card, string file) =>
+        $"Work on this card from the {projectName} board: {card.Id}: {card.Title}{Environment.NewLine}Card file: {file}{Environment.NewLine}{Environment.NewLine}" +
+        "This card is in QA: the work is done and I want you to QA it for me, not change it. Read the card file, especially its How to check section, " +
+        "and the project's CLAUDE.md. Then do the checking yourself as far as you can: build it from the branch or commit the card names " +
+        "(in a git worktree of its own if that is not what the main folder is on), run the tests and the commands the section gives, and exercise what it says to look for. " +
+        "Say in one message what you checked and how, what passed, what failed or looks wrong, and what you could not check and why, so I only have to look at that. " +
+        "Change no code and don't move the card or write a report: the verdict is mine. If something won't build or the How to check section is missing, say so plainly.";
+
     /// <summary>What goes before a card agent's usual prompt when the person sends a card back from QA with
     /// notes (WOR-0079): build on the work the How to check section names, fix what the notes say, and give the
     /// next round its own How to check. Free of double quotes, angle brackets, ampersands and pipes in its own words.</summary>

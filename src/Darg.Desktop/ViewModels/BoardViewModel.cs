@@ -38,6 +38,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>Set by the project: start an agent on a card. Passed: the card's file path, the ids of cards
     /// other agents are being started on at the same time, and whether to show the agent.</summary>
     public Action<Card, string, IReadOnlyList<string>, bool>? WorkOn { get => _parent is null ? field : _parent.WorkOn; set; }
+    /// <summary>Set by the project: start an agent that QAs a card in QA (WOR-0108): the card's file path.</summary>
+    public Action<Card, string>? RunQa { get => _parent is null ? field : _parent.RunQa; set; }
     /// <summary>Picked card ids. Only ever cards that are showing: a filter that hides one unpicks it, so a
     /// batch never touches a card you can't see.</summary>
     readonly HashSet<string> _picked = [];
@@ -855,6 +857,14 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         else if (reload) Reload();
     }
 
+    /// <summary>Run QA on a card in QA: an agent checks it from the How to check section. The card stays where it is.</summary>
+    public void StartQa(CardViewModel card)
+    {
+        if (Folder is null || RunQa is null) return;
+        if (Root.Editor?.CardId == card.Id) Root.Editor = null;
+        RunQa(card.Card, Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File)));
+    }
+
     /// <summary>Improve a card (WOR-0073): an agent fills its description out, asking first if the words are
     /// unclear. The card stays where it is and free for Work on once that's done.</summary>
     public void StartImprove(CardViewModel card) => StartImprove(card.Card);
@@ -1088,6 +1098,7 @@ public sealed partial class CardViewModel : ObservableObject
     public IRelayCommand WorkOnCommand { get; }
     public IRelayCommand OpenAgentCommand { get; }
     public IRelayCommand ImproveCommand { get; }
+    public IRelayCommand RunQaCommand { get; }
 
     public CardViewModel(Card card, IEnumerable<(string Id, string Name)> lists, BoardViewModel board, AgentViewModel? agent = null,
         IEnumerable<string>? otherBoards = null)
@@ -1098,9 +1109,11 @@ public sealed partial class CardViewModel : ObservableObject
         WorkOnCommand = new RelayCommand(() => board.StartWork(this));
         OpenAgentCommand = new RelayCommand(() => { if (Agent is not null) board.OpenAgent?.Invoke(Agent); });
         ImproveCommand = new RelayCommand(() => board.StartImprove(this));
+        RunQaCommand = new RelayCommand(() => board.StartQa(this));
         var inQa = board.InQa(card);
         MoveTargets = [
             new MoveTarget(agent is not null ? "Open its agent" : inQa ? "▶ Get it running for me to try" : "Work on this with an agent", agent is null ? WorkOnCommand : OpenAgentCommand),
+            .. agent is null && inQa ? [new MoveTarget("🧪 Run QA (an agent checks it)", RunQaCommand)] : Array.Empty<MoveTarget>(),
             // sending back takes notes, typed in the card's panel
             .. agent is null && (inQa || board.InAttention(card)) ? [
                 new MoveTarget("✓ Approve: move to done", new RelayCommand(() => { if (board.Approve(card.Id) is null) board.Root.Approved?.Invoke(card.Id); })),
@@ -1193,6 +1206,14 @@ public partial class CardEditor : ObservableObject
     /// <summary>The card is in the board's QA column: Work on gets it running to try, and it can be sent back.</summary>
     public bool InQa => _card is not null && _board.InQa(_card.Card);
     public bool InAttention => _card is not null && _board.InAttention(_card.Card);
+    public bool CanRunQa => InQa && CanWorkOn;
+    [RelayCommand]
+    void RunQa()
+    {
+        if (_card is null) return;
+        _board.Root.Editor = null;
+        _board.StartQa(_card);
+    }
     public bool CanSendBack => (InQa || InAttention) && CanWorkOn;
     /// <summary>A report for this card exists (its decision report, once it has landed in needs attention).</summary>
     public bool HasReport => _card is not null && _board.ReportFor?.Invoke(_card.Id) is not null;
@@ -1228,7 +1249,7 @@ public partial class CardEditor : ObservableObject
         FlowTargets = MakeFlowTargets();
         OnPropertyChanged(nameof(FlowTargets));
         OnPropertyChanged(nameof(CanWorkOn));
-        OnPropertyChanged(nameof(CanSendBack)); OnPropertyChanged(nameof(CanQaVerdict)); OnPropertyChanged(nameof(CanToAttention)); OnPropertyChanged(nameof(HasReport)); OnPropertyChanged(nameof(InAttention));
+        OnPropertyChanged(nameof(CanSendBack)); OnPropertyChanged(nameof(CanRunQa)); OnPropertyChanged(nameof(CanQaVerdict)); OnPropertyChanged(nameof(CanToAttention)); OnPropertyChanged(nameof(HasReport)); OnPropertyChanged(nameof(InAttention));
     }
 
     IEnumerable<string> LabelList() => LabelsText.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
