@@ -4,7 +4,10 @@ namespace Darg.Core.Tests;
 
 public sealed class TicketTitleTests : IDisposable
 {
-    readonly string _dir = Directory.CreateTempSubdirectory("wb-tt-").FullName;
+    // The board gets a folder of its own: Create numbers past every board beside it, and %TEMP% holds other
+    // tests' boards (a T board left there by a killed run made this file's card T-0002 for weeks).
+    readonly string _root = Directory.CreateTempSubdirectory("wb-tt-").FullName;
+    string _dir => Path.Combine(_root, "board");
 
     const string Perf = "performance issues. noticeable hanging, particularly when starting multiple tickets";
     const string Truncate = "when turning a note into a ticket don't truncate out the title";
@@ -43,6 +46,7 @@ public sealed class TicketTitleTests : IDisposable
 
     string Board()
     {
+        Directory.CreateDirectory(_dir);
         File.WriteAllText(Path.Combine(_dir, "board.json"), """{"columns":[],"prefix":"T","nextId":1,"order":{}}""");
         return _dir;
     }
@@ -84,5 +88,5 @@ public sealed class TicketTitleTests : IDisposable
         Assert.Equal("logo edges are jagged", BoardStore.ReadCards(board).Single().Title);
     }
 
-    public void Dispose() => Directory.Delete(_dir, true);
+    public void Dispose() => Directory.Delete(_root, true);
 }
