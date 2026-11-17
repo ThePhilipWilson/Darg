@@ -47,6 +47,9 @@
                           ToolTip.Tip="Restart into the update already built, without the changes made since"/>
                   <Button Classes="primary" Content="{Binding UpdateLabel}" Command="{Binding UpdateCommand}" IsVisible="{Binding CanUpdate}"
                           IsEnabled="{Binding !Building}"/>
+                  <!-- a live copy (tools/live.ps1, WOR-0126) takes the branch's new commits in place instead -->
+                  <Button Classes="primary" Content="{Binding PullInLabel}" Command="{Binding PullInCommand}" IsVisible="{Binding IsLive}"
+                          IsEnabled="{Binding CanPullIn}" ToolTip.Tip="Move the live worktree to the branch's newest commit; dotnet watch applies it while Darg runs"/>
                 </StackPanel>
                 <TextBlock Classes="dim small" Text="{Binding Status}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                            TextWrapping="Wrap"/>

@@ -12,12 +12,14 @@ public partial class MainWindow : Window
         WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
     void OnClose(object? s, Avalonia.Interactivity.RoutedEventArgs e) => Close();
 
+    readonly ViewModels.MainViewModel _vm;
+    Views.StickToBottom? _follow;
+
     public MainWindow()
     {
         InitializeComponent();
-        var vm = new ViewModels.MainViewModel();
+        var vm = _vm = new ViewModels.MainViewModel();
         DataContext = vm;
-        Views.TabDrag.Attach(ProjectTabs, vm.MoveProject);
         Activated += (_, _) => vm.WindowActive = true;
         Deactivated += (_, _) => vm.WindowActive = false;
         vm.BringToFront += () =>
@@ -27,12 +29,6 @@ public partial class MainWindow : Window
             Topmost = true; Topmost = false; // Windows won't always let a background app take focus; this at least raises it
         };
         Closing += (_, _) => vm.SaveAll();
-        if (RestartButton.Flyout is Flyout restart)
-            restart.Opening += (_, _) =>
-            {
-                if (restart.Content is Control c) c.DataContext = vm.Restart;
-                vm.Restart.Refresh();
-            };
         Closed += (_, _) => Notifier.Clear();
         // the maximize button shows "restore" while maximized
         PropertyChanged += (_, e) =>
@@ -51,6 +47,35 @@ public partial class MainWindow : Window
             else if (kind == Avalonia.Input.PointerUpdateKind.XButton2Pressed) { vm.GoForward(); e.Handled = true; }
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
 
+        // the chat keeps to its newest line as it grows (Views.StickToBottom), whichever chat it is and
+        // however it got there; opening the bubble or switching chats starts at the bottom
+        vm.Mascot.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ViewModels.MascotViewModel.Open) && vm.Mascot.Open)
+            {
+                _follow?.Reset();
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => MascotBox.Focus());
+            }
+            if (e.PropertyName == nameof(ViewModels.MascotViewModel.Items)) _follow?.Reset();
+        };
+        InitializeComponentState();
+    }
+
+    /// <summary>What hangs on the window's named parts. Kept apart from the constructor for a live copy
+    /// (tools/live.ps1, WOR-0126): HotAvalonia makes the parts anew when it reloads MainWindow.axaml and then
+    /// calls a method of this name, while the constructor never runs again. Wiring that hangs on the window
+    /// itself or on the view model stays in the constructor, so it isn't doubled.</summary>
+    void InitializeComponentState()
+    {
+        var vm = _vm;
+        Views.TabDrag.Attach(ProjectTabs, vm.MoveProject);
+        if (RestartButton.Flyout is Flyout restart)
+            restart.Opening += (_, _) =>
+            {
+                if (restart.Content is Control c) c.DataContext = vm.Restart;
+                vm.Restart.Refresh();
+            };
+        MaxButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
         // Bench's box: Enter sends, Shift+Enter is a new line; the chat follows its newest line.
         MascotBox.AddHandler(KeyDownEvent, (_, e) =>
         {
@@ -58,18 +83,7 @@ public partial class MainWindow : Window
             e.Handled = true;
             vm.Mascot.SendCommand.Execute(null);
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
-        // the chat keeps to its newest line as it grows (Views.StickToBottom), whichever chat it is and
-        // however it got there; opening the bubble or switching chats starts at the bottom
-        var follow = new Views.StickToBottom(MascotScroll);
-        vm.Mascot.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(ViewModels.MascotViewModel.Open) && vm.Mascot.Open)
-            {
-                follow.Reset();
-                Avalonia.Threading.Dispatcher.UIThread.Post(() => MascotBox.Focus());
-            }
-            if (e.PropertyName == nameof(ViewModels.MascotViewModel.Items)) follow.Reset();
-        };
+        _follow = new Views.StickToBottom(MascotScroll);
         MoveByHeader(MascotBubble, MascotHeader);
         // Fettle himself moves too: drag the critter (a click still opens the box) and the box goes with it
         MoveByHeader(MascotStack, MascotCritter, dragFrom: 6);
