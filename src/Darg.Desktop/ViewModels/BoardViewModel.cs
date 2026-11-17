@@ -1104,6 +1104,8 @@ public sealed partial class CardViewModel : ObservableObject
 
     /// <summary>A QA agent was running on the card when this was built (its context menu's Run QA depends on it).</summary>
     public bool QaWasRunning { get; }
+    /// <summary>The card is in QA and no QA agent is running on it: its tile shows Run QA, as the panel and menu do.</summary>
+    public bool ShowRunQa { get; }
     public CardViewModel(Card card, IEnumerable<(string Id, string Name)> lists, BoardViewModel board, AgentViewModel? agent = null,
         IEnumerable<string>? otherBoards = null)
     {
@@ -1116,6 +1118,7 @@ public sealed partial class CardViewModel : ObservableObject
         ImproveCommand = new RelayCommand(() => board.StartImprove(this));
         RunQaCommand = new RelayCommand(() => board.StartQa(this));
         var inQa = board.InQa(card);
+        ShowRunQa = inQa && !QaWasRunning;
         MoveTargets = [
             new MoveTarget(agent is not null ? "Open its agent" : inQa ? "▶ Get it running for me to try" : "Work on this with an agent", agent is null ? WorkOnCommand : OpenAgentCommand),
             .. inQa && !QaWasRunning ? [new MoveTarget("🧪 Run QA (an agent checks it)", RunQaCommand)] : Array.Empty<MoveTarget>(),
