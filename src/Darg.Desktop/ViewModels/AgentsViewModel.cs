@@ -238,7 +238,8 @@ public partial class AgentsViewModel : ObservableObject
     /// <summary>True while any agent here waits on the person (shown on the project's tab).</summary>
     [ObservableProperty] public partial bool NeedingYou { get; set; }
     public event Action<AgentViewModel>? AgentNeedsYou;
-    /// <summary>Something the person may want to hear about: (agent, what happened, detail).</summary>
+    /// <summary>Something the person needs to hear about (a question, a permission ask, or the end of a long turn;
+    /// see <see cref="Decisions"/>): (agent, what happened, detail).</summary>
     public event Action<AgentViewModel, string, string>? Notify;
     public AgentViewModel? Find(string id) => Agents.FirstOrDefault(a => a.Id == id);
     /// <summary>The newest agent started on a card that hasn't ended.</summary>
@@ -343,7 +344,6 @@ public partial class AgentsViewModel : ObservableObject
             a.Flow = r;
             return a;
         });
-        run.Finished += (a, how, ok) => { if (a is not null) Notify?.Invoke(a, ok ? "flow finished" : "flow stopped", $"{flow.Name}: {how}"); };
         run.Begin();
         return run;
     }
@@ -405,8 +405,8 @@ public partial class AgentsViewModel : ObservableObject
             try { Directory.CreateDirectory(_reports); reports = ["--add-dir", _reports]; }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             return log is null
-                ? ["--add-dir", dir, .. reports, "--append-system-prompt", ArtifactStore.Briefing(dir)]
-                : ["--add-dir", dir, "--add-dir", Path.GetDirectoryName(log)!, .. reports, "--append-system-prompt", ArtifactStore.Briefing(dir) + " " + MistakeLog.Briefing(log)];
+                ? ["--add-dir", dir, .. reports, "--append-system-prompt", ArtifactStore.Briefing(dir) + " " + Decisions.Briefing]
+                : ["--add-dir", dir, "--add-dir", Path.GetDirectoryName(log)!, .. reports, "--append-system-prompt", ArtifactStore.Briefing(dir) + " " + MistakeLog.Briefing(log) + " " + Decisions.Briefing];
         }
         catch (Exception) { return []; } // no folder, no artifacts; the agent still runs
     }
@@ -462,6 +462,7 @@ public partial class AgentViewModel : ObservableObject
     public string Id { get; private init; } = Guid.NewGuid().ToString("N")[..10];
     /// <summary>The board card this agent was started on, if any.</summary>
     public string? CardId { get; }
+    /// <summary>A question, a permission ask, or the end of a long turn (<see cref="Decisions"/>, WOR-0078).</summary>
     public event Action<string, string>? Notify;
     /// <summary>The flow this agent is a stage of, while this run of Darg lasts.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(InFlow))] public partial FlowRun? Flow { get; set; }
@@ -568,12 +569,7 @@ public partial class AgentViewModel : ObservableObject
     public bool FinishedTurn => Items.LastOrDefault() is NoteItem { Bad: false } n && n.Text.StartsWith("Turn done", StringComparison.Ordinal);
 
     /// <summary>A turn starts: progress counts from nothing again.</summary>
-    /// <summary>A turn that ends sooner than this isn't worth a notification: the person only asked for a quick thing (WOR-0081).</summary>
-    public static readonly TimeSpan LongTurn = TimeSpan.FromMinutes(2);
-    DateTime _turnStart = DateTime.MinValue;
-
-    /// <summary>Whether a turn that took <paramref name="took"/> is worth a "finished" notification. Errors, questions and permission asks always notify.</summary>
-    public static bool WorthTellingFinished(TimeSpan took, bool isError) => isError || took >= LongTurn;
+    DateTime _turnStart = DateTime.MinValue; // when the turn began, for whether its end notifies (Decisions.LongTurn)
 
     void TurnBegins(string what)
     {
@@ -886,7 +882,8 @@ public partial class AgentViewModel : ObservableObject
                 Save();
                 TurnEnded?.Invoke(f.IsError);
                 // only long turns (or a failed one) interrupt: a quick answer is already in the transcript (WOR-0081)
-                if (_turnStart == DateTime.MinValue || WorthTellingFinished(DateTime.UtcNow - _turnStart, f.IsError))
+                // only a long turn's end notifies, failed or not; a question or permission always does (WOR-0081, WOR-0078)
+                if (Decisions.TellTurnEnded(_turnStart == DateTime.MinValue ? null : DateTime.UtcNow - _turnStart))
                     Notify?.Invoke(f.IsError ? "stopped with an error" : "finished",
                         Items.OfType<TextItem>().LastOrDefault()?.Text ?? f.Text);
                 break;
@@ -924,7 +921,7 @@ public partial class AgentViewModel : ObservableObject
         Activity = LimitLine;
         Save();
         if (!again) TurnEnded?.Invoke(true); // a flow that waits on this agent keeps waiting while it does
-        Notify?.Invoke("is out of usage", LimitLine);
+        // no notification: it waits for the reset on its own, nothing to decide (WOR-0078)
     }
 
     /// <summary>The first non-empty line of some text, without markdown heading marks, cut to fit a list row.</summary>

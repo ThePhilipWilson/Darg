@@ -29,7 +29,7 @@ public static class DefaultContext
         sb.AppendLine("- `--append-system-prompt`, with this text:");
         sb.AppendLine();
         sb.AppendLine("```text");
-        sb.AppendLine(ArtifactStore.Briefing(artifactsDir) + " " + MistakeLog.Briefing(mistakes));
+        sb.AppendLine(ArtifactStore.Briefing(artifactsDir) + " " + MistakeLog.Briefing(mistakes) + " " + Decisions.Briefing);
         sb.AppendLine("```");
         sb.AppendLine();
         sb.AppendLine("## CLAUDE.md files Claude Code loads");
