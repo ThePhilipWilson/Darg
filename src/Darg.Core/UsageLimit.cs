@@ -19,6 +19,11 @@ public static partial class UsageLimit
     /// <summary>Whether this error text is a usage limit (not some other failure).</summary>
     public static bool IsLimit(string? text) => text is { Length: > 0 } && LimitText().IsMatch(text);
 
+    /// <summary>Whether a finished turn stopped because the limit was hit. Only a turn that errored can have: a
+    /// normal reply that quotes "usage limit" (an answer about limits, a file being read) is not one (WOR-0093).</summary>
+    public static bool StoppedByLimit(bool isError, string? turnText, bool rejectedEvent, string? lastReply) =>
+        isError && (rejectedEvent || IsLimit(turnText) || IsLimit(lastReply));
+
     /// <summary>When the limit in this text resets, if it says (null if not).</summary>
     public static DateTimeOffset? ResetFrom(string? text, DateTimeOffset now)
     {

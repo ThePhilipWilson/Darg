@@ -928,7 +928,7 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>Whether a turn stopped because the usage limit was hit (the error text says so, or it failed after
     /// Claude Code said the limit was hit).</summary>
     bool IsLimit(TurnFinished f) =>
-        UsageLimit.IsLimit(f.Text) || (f.IsError && (_rejected is not null || UsageLimit.IsLimit(Items.OfType<TextItem>().LastOrDefault()?.Text)));
+        UsageLimit.StoppedByLimit(f.IsError, f.Text, _rejected is not null, Items.OfType<TextItem>().LastOrDefault()?.Text);
 
     void OutOfUsage(TurnFinished f)
     {
