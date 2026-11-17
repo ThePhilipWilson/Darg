@@ -25,7 +25,7 @@ public partial class MainViewModel
         Add("agent", "one agent: {id, last?}. Its details and transcript, the last n entries (default 20).", OneAgent);
         Add("start-agent", "start an agent in a project with a prompt: {project, prompt, cwd?, name?}. Returns its id. It costs a session: only when Philip asks.", StartAgent);
         Add("work-on", "start an agent on a board card, as the card's Work on button does (moves it to In Progress): {project, card}, or on several at once as ▶ Work on N does: {project, cards} (a list, or ids separated by spaces). Only when Philip asks.", WorkOn);
-        Add("improve-card", "start an agent that fills a thin card out (what's wanted, where in the code, done when), asking Philip first if its words are unclear; the card's Improve button: {project, card}. Only when Philip asks.", ImproveCard);
+        Add("improve-card", "start an agent that fills a thin card out (what's wanted, where in the code, done when), asking Philip first if its words are unclear; the card's Improve button: {project, card}, or an agent each on several at once as ✦ Improve N does: {project, cards} (a list, or ids separated by spaces). Only when Philip asks.", ImproveCard);
         Add("send-back", "send a card in the QA column back with what's wrong, as its panel's Send back does: {project, card, notes}. The notes go into the card " +
                          "under QA notes, it returns to In Progress and an agent reworks it from them. Only when Philip asks, with his words as the notes.", SendBack);
         Add("say","send a message to a project's agent, as if Philip typed it: {id, text}. A saved agent resumes its session.", Say);
@@ -182,6 +182,7 @@ public partial class MainViewModel
     {
         var p = FindProject(a);
         if (p.Board is null || p.Agents is null) throw new ApiError($"{p.Name} needs a board and agents for that.");
+        if (a.Get("cards") is not null) return p.Board.ImproveCards(a.List("cards"));
         var id = a.Need("card");
         if (p.Board.Show(id) is not { } card) throw new ApiError($"No card {id} on {p.Name}'s boards.");
         p.Board.StartImprove(card);
