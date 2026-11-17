@@ -201,6 +201,7 @@ public partial class MainViewModel : ObservableObject
     {
         foreach (var p in Projects) p.Agents?.SaveAll();
         Mascot.SaveAll();
+        AgentStore.Flush(); // saves are written in the background: all of them before the app goes
     }
 
     // ---------------------------------------------------------------- Setup
@@ -319,6 +320,7 @@ public partial class MainViewModel : ObservableObject
     {
         Log(project.Config.Id, agent.Id, project.Name, agent.Name, what, detail);
         var looking = WindowActive && Selected == project && project.OnAgents && project.Agents?.Shown == agent;
+        using var timing = StallWatch.Shared.Section("Notifier.Show");
         if (!looking) Notifier.Show(project.Config.Id, agent.Id, NotificationEntry.HeaderFor(project.Name, agent.Name, what), project.Name, detail);
     }
 
@@ -463,6 +465,7 @@ public partial class ProjectViewModel : ObservableObject
             Board.StartAgent = (prompt, cwd, name, dirs) => { Agents.Start(prompt, cwd, name: name, dirs: dirs); Section = Section.Agents; };
             string CardPrompt(Card card, string file, IReadOnlyList<string> alongside, string? agentId = null)
             {
+                using var timing = StallWatch.Shared.Section("CardPrompt");
                 // everyone at work in this folder: the batch this card was started with, and agents busy here now
                 var folder = CardFolder(card);
                 var busy = Agents.Agents
@@ -482,6 +485,7 @@ public partial class ProjectViewModel : ObservableObject
                 a.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State) && a.State == AgentState.Exited) Board.Reload(); };
             Board.WorkOn = (card, file, alongside, show) =>
             {
+                using var timing = StallWatch.Shared.Section("Board.WorkOn");
                 var id = AgentsViewModel.NewId();
                 // a card in QA: Work on gets the result running for me to try (WOR-0075), not more work
                 var inQa = Board.InQa(card);

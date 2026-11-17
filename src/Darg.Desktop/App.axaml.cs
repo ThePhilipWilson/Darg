@@ -27,6 +27,14 @@ public partial class App : Application
             catch (System.Exception) { }
             e.Handled = true;
         };
+        // a heartbeat on the UI thread: any gap over 200 ms (a freeze) goes to stalls.log with what ran in it (WOR-0076)
+        try { Darg.Core.StallWatch.Shared.LogFile = System.IO.Path.Combine(Darg.Core.InstanceConfig.Folder(), "stalls.log"); }
+        catch (System.Exception) { }
+        // DARG_STALL_MS: a lower threshold, to look at smaller hitches
+        if (int.TryParse(System.Environment.GetEnvironmentVariable("DARG_STALL_MS"), out var ms) && ms > 0)
+            Darg.Core.StallWatch.Shared.Threshold = System.TimeSpan.FromMilliseconds(ms);
+        new Avalonia.Threading.DispatcherTimer(Darg.Core.StallWatch.Shared.Interval, Avalonia.Threading.DispatcherPriority.Input,
+            (_, _) => Darg.Core.StallWatch.Shared.Beat()).Start();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow();

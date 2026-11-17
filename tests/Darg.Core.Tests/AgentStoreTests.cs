@@ -28,5 +28,29 @@ public sealed class AgentStoreTests : IDisposable
         Assert.Equal("ok", Assert.Single(AgentStore.List(_dir)).Id);
     }
 
+    [Fact]
+    public void A_save_in_the_background_is_listed_newest_last_written()
+    {
+        // a long transcript, as a card agent's is by its last turn
+        var items = Enumerable.Range(0, 300).Select(i => new ItemRecord { Kind = "tool", Name = "Read", Result = new string('x', 4000) }).ToList();
+        AgentStore.SaveLater(_dir, new AgentRecord { Id = "a", Name = "first", Items = items });
+        AgentStore.SaveLater(_dir, new AgentRecord { Id = "a", Name = "second", Items = items });
+        AgentStore.SaveLater(_dir, new AgentRecord { Id = "b", Name = "other" });
+        var list = AgentStore.List(_dir); // waits for what's waiting
+        Assert.Equal("second", list.Single(r => r.Id == "a").Name);
+        Assert.Contains(list, r => r.Id == "b");
+    }
+
+    [Fact]
+    public void A_deleted_agent_isnt_written_back_by_a_save_still_waiting()
+    {
+        var items = Enumerable.Range(0, 300).Select(i => new ItemRecord { Kind = "tool", Result = new string('x', 4000) }).ToList();
+        for (var i = 0; i < 5; i++) AgentStore.SaveLater(_dir, new AgentRecord { Id = $"busy{i}", Items = items });
+        AgentStore.SaveLater(_dir, new AgentRecord { Id = "gone", Items = items });
+        AgentStore.Delete(_dir, "gone");
+        AgentStore.Flush();
+        Assert.False(File.Exists(Path.Combine(_dir, "gone.json")));
+    }
+
     public void Dispose() => Directory.Delete(_dir, true);
 }

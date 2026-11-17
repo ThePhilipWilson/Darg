@@ -24,17 +24,21 @@ public static class Notifier
     public static void Show(string projectId, string agentId, string title, string agentName, string detail)
     {
 #if WINDOWS
-        try
+        // off the UI thread: a toast takes about 100 ms to show, and five agents finishing together froze the window (WOR-0076)
+        Task.Run(() =>
         {
-            new Microsoft.Toolkit.Uwp.Notifications.ToastContentBuilder()
-                .AddArgument("project", projectId)
-                .AddArgument("agent", agentId)
-                .AddText(title)
-                .AddText(agentName)
-                .AddText(detail.Length > 180 ? detail[..180] + "…" : detail)
-                .Show();
-        }
-        catch (Exception) { /* notifications off or unavailable: the tab badge still shows */ }
+            try
+            {
+                new Microsoft.Toolkit.Uwp.Notifications.ToastContentBuilder()
+                    .AddArgument("project", projectId)
+                    .AddArgument("agent", agentId)
+                    .AddText(title)
+                    .AddText(agentName)
+                    .AddText(detail.Length > 180 ? detail[..180] + "…" : detail)
+                    .Show();
+            }
+            catch (Exception) { /* notifications off or unavailable: the tab badge still shows */ }
+        });
 #endif
     }
 

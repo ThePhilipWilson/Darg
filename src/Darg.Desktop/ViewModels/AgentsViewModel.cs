@@ -33,7 +33,7 @@ public partial class AgentsViewModel : ObservableObject
     /// <summary>Give an agent a short title (Haiku, else a guess from the words) and save it.</summary>
     static async Task Retitle(AgentViewModel a, string firstMessage)
     {
-        a.Name = await ChatTitle.Make(firstMessage);
+        a.Name = await Task.Run(() => ChatTitle.Make(firstMessage)); // Haiku's process starts off the UI thread
         a.Save();
     }
 
@@ -225,7 +225,7 @@ public partial class AgentsViewModel : ObservableObject
     bool IsCardDone(string? cardId) => cardId is not null && CardIsDone?.Invoke(cardId) == true;
 
     /// <summary>Re-read every card agent's card after the boards change (a card moved to Done shows on its agent).</summary>
-    public void RefreshCards() { foreach (var a in Agents) if (a.CardId is not null) a.CardDone = IsCardDone(a.CardId); }
+    public void RefreshCards() { using var timing = StallWatch.Shared.Section("Agents.RefreshCards"); foreach (var a in Agents) if (a.CardId is not null) a.CardDone = IsCardDone(a.CardId); }
     [ObservableProperty] public partial AgentViewModel? Selected { get; set; }
     [ObservableProperty] public partial string NewPrompt { get; set; } = "";
     /// <summary>Where a new agent from the box starts: the project's first repo unless another is picked.</summary>
@@ -363,9 +363,13 @@ public partial class AgentsViewModel : ObservableObject
     public AgentViewModel Start(string prompt, string? cwd = null, string? cardId = null, string? name = null, AgentJob? job = null, string? id = null,
         IReadOnlyList<string>? dirs = null)
     {
+        using var timing = StallWatch.Shared.Section("Agents.Start");
         id ??= NewId();
         job ??= new AgentJob(JobKinds.Chat, prompt);
-        var profile = ModelProfiles.Pick(ModelProfiles.Load(), job with { Project = job.Project ?? project.Id });
+        // off the UI thread: reading profiles.md, and Haiku's pick, whose process start and prompt write are
+        // synchronous (one per card when several start at once, WOR-0076)
+        var forJob = job with { Project = job.Project ?? project.Id };
+        var profile = Task.Run(() => ModelProfiles.Pick(ModelProfiles.Load(), forJob));
         var folder = string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd;
         var agent = new AgentViewModel(folder, prompt, cardId, name ?? ChatTitle.Guess(prompt),
             args: [.. ArtifactArgs(id), .. RepoArgs(folder), .. (dirs ?? []).SelectMany(d => new[] { "--add-dir", d })], id: id, profile: profile) { StoreFolder = _store };
@@ -751,15 +755,17 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>Start (or resume) the Claude session and send it a message.</summary>
     void Begin(string message, bool resume)
     {
+        using var timing = StallWatch.Shared.Section("Agent.Begin");
         try
         {
             List<string> args = resume && SessionId is not null ? ["--resume", SessionId, .. _args] : [.. _args];
             args.AddRange(AgentChoices.LaunchArgs(_model, _effort, _mode));
-            var session = AgentSession.Start(Cwd, extraArgs: args);
+            AgentSession session;
+            using (StallWatch.Shared.Section("AgentSession.Start")) session = AgentSession.Start(Cwd, extraArgs: args);
             _session = session;
             // a session closed on request still reports its last events and its exit: they're not news
             session.Event += e => Dispatcher.UIThread.Post(() => { if (_session == session) On(e); });
-            session.Send(message);
+            session.Send(message); // queued: it never waits for claude to read (WOR-0076)
             TurnBegins("Starting…");
             State = AgentState.Starting;
         }
@@ -775,11 +781,13 @@ public partial class AgentViewModel : ObservableObject
     public void Save()
     {
         if (StoreFolder is null) return;
+        using var timing = StallWatch.Shared.Section("Agent.Save");
         try
         {
-            AgentStore.Save(StoreFolder, new AgentRecord
+            // the record is a snapshot taken here; it is written in the background (WOR-0076)
+            AgentStore.SaveLater(StoreFolder, new AgentRecord
             {
-                Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Project = Project, SessionId = SessionId, Args = _args,
+                Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Project = Project, SessionId = SessionId, Args = [.. _args],
                 Model = _model, Effort = _effort, Mode = _mode, ContinueAt = ContinueAt,
                 Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
             });
@@ -809,6 +817,7 @@ public partial class AgentViewModel : ObservableObject
 
     void On(AgentEvent e)
     {
+        using var timing = StallWatch.Shared.Section("Agent event " + e.GetType().Name);
         switch (e)
         {
             case SessionStarted s:

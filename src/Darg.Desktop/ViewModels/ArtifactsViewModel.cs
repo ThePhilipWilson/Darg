@@ -73,6 +73,7 @@ public partial class ArtifactsViewModel : ObservableObject
     /// <summary>Read the folder again, keeping what's open and which agents' folders are closed.</summary>
     public void Refresh()
     {
+        using var timing = StallWatch.Shared.Section("Artifacts.Refresh");
         var keep = Selected?.Artifact.Path;
         var all = ArtifactStore.List(_project);
         Groups.Clear();

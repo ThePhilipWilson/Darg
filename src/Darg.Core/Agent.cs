@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 
 namespace Darg.Core;
 
@@ -235,7 +236,11 @@ public sealed class AgentSession : IAsyncDisposable
 {
     readonly Process _proc;
     readonly StringBuilder _stderr = new();
-    readonly object _write = new();
+    // what's sent goes through a queue written on a thread of its own: a write to stdin blocks until the child reads,
+    // and claude reads nothing until it has started up, so a card's prompt (more than the pipe holds) written
+    // straight from the UI thread froze the window until then (WOR-0076)
+    readonly Channel<string> _outbox = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });
+    Task _writer = Task.CompletedTask;
     int _nextId;
 
     public event Action<AgentEvent>? Event;
@@ -272,11 +277,18 @@ public sealed class AgentSession : IAsyncDisposable
             psi.ArgumentList.Add(a);
         if (model is not null) { psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model); }
         foreach (var a in extraArgs ?? []) psi.ArgumentList.Add(a);
+        return Run(psi);
+    }
 
+    /// <summary>Run a session on a process that speaks stream-json (claude, as <see cref="Start(string, string?, IEnumerable{string}?)"/>
+    /// sets it up, or a stand-in). Its stdin, stdout and stderr must be redirected.</summary>
+    public static AgentSession Run(ProcessStartInfo psi)
+    {
         var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        var s = new AgentSession(proc, cwd);
+        var s = new AgentSession(proc, psi.WorkingDirectory);
         proc.Start();
         proc.StandardInput.AutoFlush = true;
+        s._writer = Task.Run(s.WriteLoop);
         _ = Task.Run(s.ReadLoop);
         _ = Task.Run(async () => { string? l; while ((l = await proc.StandardError.ReadLineAsync()) is not null) lock (s._stderr) s._stderr.AppendLine(l); });
         s.SendRaw(new JsonObject { ["type"] = "control_request", ["request_id"] = "init", ["request"] = new JsonObject { ["subtype"] = "initialize" } });
@@ -298,9 +310,17 @@ public sealed class AgentSession : IAsyncDisposable
         Event?.Invoke(new SessionExited(_proc.ExitCode, err));
     }
 
-    void SendRaw(JsonObject msg)
+    /// <summary>Queue a line for the session's stdin; it is written in order, off the caller's thread.</summary>
+    void SendRaw(JsonObject msg) => _outbox.Writer.TryWrite(msg.ToJsonString());
+
+    async Task WriteLoop()
     {
-        lock (_write) _proc.StandardInput.WriteLine(msg.ToJsonString());
+        try
+        {
+            await foreach (var line in _outbox.Reader.ReadAllAsync())
+                await _proc.StandardInput.WriteLineAsync(line);
+        }
+        catch (Exception e) when (e is IOException or ObjectDisposedException or InvalidOperationException) { } // it has gone
     }
 
     /// <summary>A message from the person, as a new turn.</summary>
@@ -373,7 +393,11 @@ public sealed class AgentSession : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        try { _proc.StandardInput.Close(); } catch (InvalidOperationException) { }
+        // what was sent goes first; a child that still hasn't read it after a while is stuck, and is ended
+        _outbox.Writer.TryComplete();
+        try { await _writer.WaitAsync(TimeSpan.FromSeconds(3)); }
+        catch (TimeoutException) { try { _proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } }
+        try { _proc.StandardInput.Close(); } catch (Exception e) when (e is InvalidOperationException or IOException) { }
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
