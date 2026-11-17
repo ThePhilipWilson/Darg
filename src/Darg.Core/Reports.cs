@@ -303,7 +303,7 @@ public static class QaNotes
     /// <summary>Add a dated entry to the card's QA notes, making the section at the end if it has none.</summary>
     public static void Add(string file, string notes, DateTime when) => Add(file, notes, when, Heading);
 
-    /// <summary>Why a card was sent to Needs Phil Attention (WOR-0111): the same dated entries, under their own heading.</summary>
+    /// <summary>Why a card was sent to For Human Attention (WOR-0111): the same dated entries, under their own heading.</summary>
     public const string AttentionHeading = "## Why it needs attention";
 
     /// <summary>Add a dated entry under <paramref name="heading"/>, making the section at the end if it has none.</summary>

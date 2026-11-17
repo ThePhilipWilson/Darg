@@ -32,7 +32,7 @@ public sealed class NewBoardTests : IDisposable
         Assert.Equal(["Main", "UI"], BoardStore.List(_root));
         var b = BoardStore.Load(ui);
         Assert.Equal("WOR", b.Prefix);
-        Assert.Equal(["To Do", "In Progress", "Done"], b.Columns.Select(c => c.Name));
+        Assert.Equal(["To Do", "In Progress", "For Human Attention", "Done"], b.Columns.Select(c => c.Name));
         Assert.Equal("WOR-0004", BoardStore.Create(ui, "First on UI").Id); // Main's nextId is 4
         Assert.Equal("WOR-0005", BoardStore.Create(_main, "Next on Main").Id); // and Main sees UI's
     }

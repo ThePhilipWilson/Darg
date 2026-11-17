@@ -635,7 +635,12 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _reloadWaiting = false;
         if (Folder is null) return;
         using var timing = StallWatch.Shared.Section("Board.Reload");
-        try { using var loading = StallWatch.Shared.Section("BoardStore.Load"); _board = BoardStore.Load(Folder); }
+        try
+        {
+            using var loading = StallWatch.Shared.Section("BoardStore.Load");
+            BoardStore.EnsureAttentionColumn(Folder);
+            _board = BoardStore.Load(Folder);
+        }
         catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
         NoticeAttention();
         if (Root.SyncLabels()) ApplyAll(); else Apply();
@@ -812,7 +817,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>Move a card to the board's needs-attention column. Returns what went wrong, or null.</summary>
     public string? MoveToAttention(string cardId, string why = "")
     {
-        if (_board is null || AttentionColumn.Find(_board.Columns) is not { } name || _board.Columns.FirstOrDefault(c => c.Name == name) is not { } col) return "This board has no Needs Attention column.";
+        if (_board is null || AttentionColumn.Find(_board.Columns) is not { } name || _board.Columns.FirstOrDefault(c => c.Name == name) is not { } col) return "This board has no For Human Attention column.";
         // the reason goes into the card first, so the decision report written on landing can quote it (WOR-0111)
         if (why.Trim().Length > 0 && Folder is not null && _board.AllCards.FirstOrDefault(c => c.Id == cardId) is { } card)
         {
@@ -1368,7 +1373,7 @@ public partial class CardEditor : ObservableObject
         _board.StartWork(_card);
     }
 
-    /// <summary>The QA verdict buttons (WOR-0095): a card in QA with no agent running can be sent to Needs Phil Attention
+    /// <summary>The QA verdict buttons (WOR-0095): a card in QA with no agent running can be sent to For Human Attention
     /// (its decision report is written by the board's reload), approved to done, or sent back with notes below.</summary>
     public bool CanQaVerdict => (InQa || InAttention) && CanWorkOn;
     public bool CanToAttention => InQa && HasAttentionColumn;
