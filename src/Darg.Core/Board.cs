@@ -24,13 +24,26 @@ public static class CardTypes
     public const string Task = "Task", Bug = "Bug", Story = "Story";
     public static readonly IReadOnlyList<string> All = [Task, Bug, Story];
 
-    /// <summary>The type to give a card made from words someone wrote (a note, an issue): Bug when they
-    /// open with "bug" ("Bug: ...", "bug - ...", "[bug] ...", "Bug forgetting ...") or a label is bug,
-    /// bugs or type: bug; else Task.</summary>
+    /// <summary>The type to give a card made from words someone wrote (a note, an issue): Bug when a label is
+    /// bug, bugs or type: bug, or the words say something is wrong, written any of the ways people put it
+    /// (<see cref="BugWords"/>); else Task. Philip's post-its said "got a bug with", "had a bug where", "fix
+    /// ...", "is broken" as often as "Bug: ..." (WOR-0082). A wrong guess costs a click in the card panel.</summary>
     public static string Guess(string text, IEnumerable<string>? labels = null) =>
-        Regex.IsMatch(text, @"^\W*bugs?\b", RegexOptions.IgnoreCase)
+        BugWords.IsMatch(text)
         || (labels ?? []).Any(l => Regex.IsMatch(l.Trim(), @"^(type\s*[:/]\s*)?bugs?$", RegexOptions.IgnoreCase))
             ? Bug : Task;
+
+    /// <summary>Words that say a bug: opening with "bug" ("Bug: ...", "[bug] ...", "Bugs in ...") or "fix"; a bug
+    /// had or found ("got a bug with", "there's a bug", "the bug where"); something broken, crashing, not
+    /// working, wrong, hanging or glitching, or drawn cut off, clipped or misaligned. Mentioning bugs in passing ("ticket types, task and bug") isn't one.</summary>
+    static readonly Regex BugWords = new(
+        @"^\W*bugs?\b|^\W*fix\s" +
+        @"|\b(?:got|had|have|has|found|there'?s|there\s+is|spotted)\s+(?:a|an|another|some)?\s*bugs?\b" +
+        @"|\b(?:a|the|this|that)\s+bugs?\s+(?:where|with|in|when|on|that|which)\b" +
+        @"|\b(?:crash(?:es|ed|ing)?|broken|broke|wrong|regress(?:ion|ed)|glitch(?:es|ing|y)?|freez(?:es|ing)|hangs|hanging)\b" +
+        @"|\b(?:cut\s+off|clipped|misaligned)\b" +
+        @"|\b(?:doesn'?t|does\s+not|don'?t|do\s+not|isn'?t|is\s+not|aren'?t|not|stopped|no\s+longer)\s+work(?:s|ing)?\b",
+        RegexOptions.IgnoreCase);
 }
 
 public sealed record Column(string Id, string Name);

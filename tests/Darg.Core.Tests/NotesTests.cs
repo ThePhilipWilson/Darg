@@ -88,10 +88,27 @@ public sealed class CreateCardTests : IDisposable
     [InlineData("Crash on open", "bug", "Bug")]
     [InlineData("Crash on open", "type: bug", "Bug")]
     [InlineData("Crash on open", "Type/Bug", "Bug")]
+    [InlineData("got a bug with lots of overlapping text at the top of the agent bar", null, "Bug")]
+    [InlineData("had a bug where I created a postit and then had it make a ticket", null, "Bug")]
+    [InlineData("there's a bug in the wall archive", null, "Bug")]
+    [InlineData("the bug where toasts open the wrong agent", null, "Bug")]
+    [InlineData("fix logo aliasing", null, "Bug")]
+    [InlineData("Fix write it down text being white on postits", null, "Bug")]
+    [InlineData("the update button is broken", null, "Bug")]
+    [InlineData("app crashes when a board has no columns", null, "Bug")]
+    [InlineData("doc links don't work", null, "Bug")]
+    [InlineData("cross repo links aren't working", null, "Bug")]
+    [InlineData("drag stopped working after the rename", null, "Bug")]
+    [InlineData("toasts open the wrong agent", null, "Bug")]
+    [InlineData("fettle pip is cut off so not full circle", null, "Bug")]
+    [InlineData("performance issues. noticeable hanging when starting tickets", null, "Bug")]
     [InlineData("ticket types, task and bug for now", null, "Task")]
     [InlineData("Debugger attach button", null, "Task")]
     [InlineData("bugbear art pass", null, "Task")]
-    [InlineData("Crash on open", "debugging", "Task")]
+    [InlineData("fixed-width column option", null, "Task")]
+    [InlineData("don't need a notification for every task that finishes", null, "Task")]
+    [InlineData("documentation links need to work", null, "Task")]
+    [InlineData("Board polish", "debugging", "Task")]
     public void Guesses_bug_from_the_words_or_labels(string text, string? label, string expected) =>
         Assert.Equal(expected, CardTypes.Guess(text, label is null ? null : [label]));
 
@@ -166,6 +183,43 @@ public sealed class NoteStoreTests : IDisposable
         Assert.Equal(["design"], card.Labels);
         Assert.Equal("T-0001", note.Ticket);
         Assert.Equal("T-0001", NoteStore.List(_dir).Single(x => x.Id == "n1").Ticket);
+    }
+
+    [Theory] // WOR-0082: real post-its whose words past character 70 were lost
+    [InlineData("finished agent reports. when a task has been viewed as done by an agent it should mark the ticket done.",
+        "finished agent reports", "when a task has been viewed as done by an agent it should mark the ticket done.")]
+    [InlineData("a top bar that isn't the windows bar. got darg twice at the top, would rather have our own top bar",
+        "a top bar that isn't the windows bar", "got darg twice at the top, would rather have our own top bar")]
+    [InlineData("Commit and push rules should be per repo, not one rule for all of Workbench. Fettle is told \"Never commit\" everywhere.",
+        "Commit and push rules should be per repo, not one rule for all of Workbench", "Fettle is told \"Never commit\" everywhere.")]
+    [InlineData("why does the wall forget its scroll when a note is ticketed and the board reloads? it jumps to the top",
+        "why does the wall forget its scroll when a note is ticketed and the board reloads?", "it jumps to the top")]
+    [InlineData("multi-agent flows, e.g. designer, engineer and qa handing work on to each other until the qa passes it",
+        "multi-agent flows, e.g. designer, engineer and qa handing work on to…",
+        "multi-agent flows, e.g. designer, engineer and qa handing work on to each other until the qa passes it")]
+    [InlineData("not particularly easy to create new boards, would really like a Smart Generate boards that figures out how best to organise the backlog",
+        "not particularly easy to create new boards, would really like a Smart…",
+        "not particularly easy to create new boards, would really like a Smart Generate boards that figures out how best to organise the backlog")]
+    [InlineData("Cow: the pail\nfills across the run", "Cow: the pail", "fills across the run")]
+    [InlineData("I want a restart and update button.", "I want a restart and update button.", "")]
+    public void A_long_first_line_gives_a_short_title_and_keeps_every_word(string text, string title, string body)
+    {
+        Assert.Equal((title, body), NoteStore.TicketText(text));
+        Assert.True(title.TrimEnd('…').Length <= NoteStore.TitleMax || !title.EndsWith('…'));
+        var words = (string s) => s.Replace("…", " ").Split((char[])[' ', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(w => w.TrimEnd('.'));
+        Assert.Empty(words(text).Except(words(title + " " + body)));
+    }
+
+    [Fact]
+    public void A_long_note_becomes_a_card_with_the_rest_in_its_description_and_a_type()
+    {
+        var board = Directory.CreateDirectory(Path.Combine(_dir, "board")).FullName;
+        File.WriteAllText(Path.Combine(board, "board.json"), """{"columns":[],"prefix":"T","nextId":1,"order":{}}""");
+        var n = NoteStore.Save(_dir, new Note("n1", "had a bug where I created a postit and then had it make a ticket but when I clicked the ticket link it wouldn't open it. leaving and coming back it opened\nso not refreshed?", "Loose", "yellow", [], "", ""));
+        var (_, card) = NoteStore.MakeTicket(_dir, n, board);
+        Assert.Equal("had a bug where I created a postit and then had it make a ticket but…", card.Title);
+        Assert.StartsWith("had a bug where I created a postit and then had it make a ticket but when I clicked the ticket link it wouldn't open it. leaving and coming back it opened\n\nso not refreshed?\n\nFrom a note on the wall (n1).", card.Description);
+        Assert.True(card.IsBug);
     }
 
     [Fact]
