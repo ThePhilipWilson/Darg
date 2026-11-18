@@ -122,6 +122,9 @@ public partial class MainViewModel : ObservableObject
         {
             agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
             agents.AsksSettled += agent => Settle(vm.Config.Id, agent.Id);
+            // WOR-0124: a card waiting on a decision notifies as a question does; clicking opens the card
+            vm.CardNotify += (card, title, question) => TellCard(vm, card, title, question);
+            vm.CardSettled += card => Settle(vm.Config.Id, CardPrefix + card);
             agents.Mascot = Mascot; // null while the app starts; set just after Bench is made
         }
         if (vm.Notes is { } notes) notes.Organise = (shown, text) => Mascot?.Ask(shown, text) ?? false;
@@ -338,9 +341,30 @@ public partial class MainViewModel : ObservableObject
         if (!looking) Notifier.Show(project.Config.Id, agent.Id, NotificationEntry.HeaderFor(project.Name, agent.Name, what), project.Name, detail);
     }
 
+    /// <summary>A notification's "agent" for a card waiting on a decision (WOR-0124): opening it opens the card.</summary>
+    public const string CardPrefix = "card:";
+
+    /// <summary>A card is waiting on my decision (WOR-0124), unless I'm looking at it already.</summary>
+    void TellCard(ProjectViewModel project, string card, string title, string question)
+    {
+        Log(project.Config.Id, CardPrefix + card, project.Name, $"{card} {title}", NotificationEntry.DecisionWaits, question);
+        var looking = WindowActive && Selected == project && project.OnBoard && project.Board?.Editor?.CardId == card;
+        if (!looking) Notifier.Show(project.Config.Id, CardPrefix + card, NotificationEntry.HeaderFor(project.Name, $"{card} {title}", NotificationEntry.DecisionWaits), project.Name, question);
+    }
+
     /// <summary>Open a project's agent: its tab, the agents section, that agent, the window to the front.</summary>
     public void OpenAgent(string projectId, string agentId)
     {
+        if (agentId.StartsWith(CardPrefix, StringComparison.Ordinal))
+        {
+            if (Projects.FirstOrDefault(p => p.Config.Id == projectId) is { Board: { } board } owner)
+            {
+                Selected = owner;
+                if (board.OpenById(agentId[CardPrefix.Length..])) owner.OpenCommand.Execute(nameof(Section.Board));
+            }
+            BringToFront?.Invoke();
+            return;
+        }
         if (projectId == MascotId)
         {
             // a Bench chat: its project's tab, then that chat in Bench's box
@@ -377,7 +401,9 @@ public record NotificationEntry(string ProjectId, string AgentId, string Project
     public static string HeaderFor(string project, string agent, string what) =>
         string.IsNullOrWhiteSpace(agent) ? $"{project}: {what}" : $"{agent}: {what}";
     /// <summary>A question or permission ask, which goes stale once answered.</summary>
-    public bool IsAsk => What == "has a question" || What.StartsWith("wants to use ");
+    public bool IsAsk => What == "has a question" || What == DecisionWaits || What.StartsWith("wants to use ");
+    /// <summary>What a card waiting on a decision says (WOR-0124).</summary>
+    public const string DecisionWaits = "needs your decision";
     public string Title => HeaderFor(Project, Agent, What);
     public string Sub => $"{Project} · {At:HH:mm}";
 }
@@ -410,6 +436,10 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>What card agents filed when they finished (there with the agents feature).</summary>
     public ReportsViewModel? Reports { get; }
     public bool UsesTerminal => Consoles is not null;
+    /// <summary>A card is waiting on my decision (WOR-0124): its id, title and question. Notifies as an agent's question does.</summary>
+    public event Action<string, string, string>? CardNotify;
+    /// <summary>A card's decision was answered (WOR-0124): its notification goes from the list.</summary>
+    public event Action<string>? CardSettled;
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnFlows), nameof(OnReports), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
     public partial Section Section { get; set; }
@@ -493,6 +523,80 @@ public partial class ProjectViewModel : ObservableObject
             {
                 var folder = Reports!.Folder; var repo = CardFolder(card);
                 InBackground(() => ReportFlow.EnteredAttention(folder, card, file, repo, DateTime.Now));
+                DecisionOnLanding(card, file);
+            };
+            // WOR-0124: a card in For Human Attention waits on a decision. Once the turn of the agent that moved it has
+            // ended (it may write the section just after the move), the decision tells me; with none, that agent is
+            // asked for one, and if it gives none (or there's no agent to ask) Haiku drafts one from the card.
+            void DecisionOnLanding(Card card, string file)
+            {
+                var mover = Agents.Agents.Where(a => a.CardId == card.Id).MaxBy(a => a.Created);
+                AfterTurn(mover, () => Check(nudged: false));
+                void Check(bool nudged)
+                {
+                    if (!Board.CardInAttention(card.Id)) return; // answered or moved on meanwhile
+                    var column = AttentionColumn.Find(Board.Columns) ?? BoardStore.AttentionName;
+                    string text;
+                    try { text = File.ReadAllText(file); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; }
+                    if (CardDecision.Read(text) is { Valid: true } d) { DecisionWaits(card, d); return; }
+                    if (!nudged && mover is not null && Agents.Find(mover.Id) is not null && mover.SessionId is not null)
+                    {
+                        mover.Say($"Darg: {card.Id} landed in {column} with no decision. Asked for one.", CardDecision.Nudge(card, file, column));
+                        AfterTurn(mover, () => Check(nudged: true));
+                        return;
+                    }
+                    _ = Task.Run(async () =>
+                    {
+                        var draft = await CardDecision.Draft(card, text, column);
+                        if (draft is null) return;
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                        {
+                            try
+                            {
+                                if (!Board.CardInAttention(card.Id) || CardDecision.Read(File.ReadAllText(file)) is { Valid: true }) return;
+                                draft.WriteTo(file);
+                            }
+                            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; }
+                            DecisionWaits(card, draft);
+                        });
+                    });
+                }
+            }
+            // after the agent's turn (and any question it is waiting on) has ended; at once when there is none
+            void AfterTurn(AgentViewModel? agent, Action go)
+            {
+                static bool Busy(AgentViewModel a) => a.State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou;
+                if (agent is null || !Busy(agent)) { Avalonia.Threading.Dispatcher.UIThread.Post(go); return; }
+                System.ComponentModel.PropertyChangedEventHandler? ended = null;
+                ended = (_, e) =>
+                {
+                    if (e.PropertyName != nameof(AgentViewModel.State) || Busy(agent)) return;
+                    agent.PropertyChanged -= ended;
+                    Avalonia.Threading.Dispatcher.UIThread.Post(go);
+                };
+                agent.PropertyChanged += ended;
+            }
+            void DecisionWaits(Card card, CardDecision d) => CardNotify?.Invoke(card.Id, card.Title, d.Question);
+            // WOR-0124: an answer with no done/back/stay goes to the agent that asked if it's still listed, else to a new card agent
+            Board.DecisionToAgent = (card, file, decision, answer, notes) =>
+            {
+                var asker = decision.AgentId is { } aid ? Agents.Find(aid) : null;
+                asker ??= Agents.Agents.Where(a => a.CardId == card.Id && a.SessionId is not null).MaxBy(a => a.Created);
+                if (asker is not null && asker.SessionId is not null)
+                {
+                    // one mid-turn gets it when the turn ends, as a message typed then would
+                    var message = CardDecision.AnswerMessage(card, decision, answer, notes);
+                    AfterTurn(asker, () => asker.Say(message, message));
+                    return;
+                }
+                var id = AgentsViewModel.NewId();
+                var prompt = CardDecision.AnswerPreface(decision, answer, notes) + Environment.NewLine + Environment.NewLine + CardPrompt(card, file, [], id);
+                Watch(Agents.Start(prompt, CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (answered)", job: CardJob(card), id: id, purpose: AgentPurposes.Work));
+            };
+            Board.DecisionSettled = (card, decision, notes) =>
+            {
+                Reports!.SettledFromBoard(card, decision, notes);
+                CardSettled?.Invoke(card);
             };
             Board.EnteredQa = (card, file) =>
             {

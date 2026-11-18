@@ -209,7 +209,8 @@ public static partial class ReportStore
             $"write it to {FileFor("")} as above but with status: investigation as its first property (Asked is the question, Done is what you found and how, Left is what is still unknown, or None), then move the card to done. " +
             Cnr(FileFor("")) + " " +
             "Leave the card where it is, with no report, while work is left." + (attentionColumn is not null
-                ? $" If you move the card to {attentionColumn}, don't write its decision report: Darg writes one when a card lands there, from the card file, so keep How to check in the card up to date."
+                ? $" If you move the card to {attentionColumn}, don't write its decision report: Darg writes one when a card lands there, from the card file, so keep How to check in the card up to date. " +
+                  CardDecision.Rules(attentionColumn)
                 : "");
     }
 
@@ -250,7 +251,8 @@ public static partial class ReportStore
         "Then, as the last thing you do, move the card on the board by your verdict: " +
         (doneColumn is not null ? $"everything passed and nothing needs my eyes: set its Status to {doneColumn}, add a Done line with today's date, and move its id into that column in board.json's order; " : "everything passed: leave it where it is; ") +
         (attentionColumn is not null ? $"it passed but something needs my judgement (how it looks or feels, a choice that is mine), or a part could not be checked by automation even after you tried: " +
-            $"say in the card exactly why that part can't be automated, so it can be ticketed, and move it to {attentionColumn} the same way (Darg writes the decision report itself); " : "") +
+            $"say in the card exactly why that part can't be automated, so it can be ticketed, and move it to {attentionColumn} the same way (Darg writes the decision report itself); " +
+            CardDecision.Rules(attentionColumn) + " " : "") +
         (reworkColumn is not null ? $"something failed or looks wrong: put the findings under a QA notes style list in the card file and move it to {reworkColumn} the same way. " : "something failed: leave it in QA and say so plainly. ") +
         "If something won't build or the How to check section is missing, say so plainly and move it to " + (reworkColumn ?? attentionColumn ?? "nowhere, leave it") + ".";
 

@@ -20,6 +20,8 @@ public static class AttentionColumn
 public static partial class DecisionReport
 {
     public const string Pending = "pending", Approved = "approved", SentBack = "sent back";
+    /// <summary>The card's own decision was answered with something other than approve or send back (WOR-0124).</summary>
+    public const string Answered = "answered";
 
     public static string FileName(string card, DateTime now) => $"{now:yyyyMMdd-HHmm}-{card}-qa.md";
 
@@ -87,8 +89,19 @@ public static partial class DecisionReport
         if (look.Length > 0 && how.Length > 0) sb.Append("### How to check (from the card)\n\n").Append(how).Append("\n\n");
         sb.Append("## Checked\n\n").Append(Or(checkedText, "No agent report says what was verified, so treat it as unchecked.")).Append("\n\n");
         if (qaNotes.Length > 0) sb.Append("## Earlier QA notes\n\n").Append(qaNotes).Append("\n\n");
-        sb.Append("## Decision\n\n")
-          .Append("**Recommendation:** ").Append(Recommendation(how, checkedText, agentReport is not null)).Append("\n\n")
+        sb.Append("## Decision\n\n");
+        // the card's own decision (WOR-0124) leads: answer it from the card's panel, where its options are buttons
+        if (CardDecision.Read(cardText) is { Valid: true } asked)
+        {
+            sb.Append("**Question:** ").Append(asked.Question).Append("\n\n");
+            foreach (var o in asked.Options)
+                sb.Append("- **").Append(o.Label).Append("**").Append(o.Recommended ? " (recommended)" : "").Append(' ').Append(o.ActionText)
+                  .Append(o.Description.Length > 0 ? ": " + o.Description : "").Append('\n');
+            if (asked.Context.Length > 0) sb.Append("\n**Context:** ").Append(asked.Context).Append('\n');
+            sb.Append("\nPick an option on the card (Open card): its panel shows them as buttons.\n\n");
+        }
+        else sb.Append("**Recommendation:** ").Append(Recommendation(how, checkedText, agentReport is not null)).Append("\n\n");
+        sb
           .Append("- [ ] Approve (Approve in Reports moves the card to Done)\n")
           .Append("- [ ] Send back (Send back in Reports puts your notes in the card and starts an agent on them)\n\n")
           .Append("Notes:\n");
@@ -215,8 +228,8 @@ public static partial class DecisionReport
         var text = System.IO.File.ReadAllText(file).Replace("\r\n", "\n");
         text = DecisionLine().IsMatch(text) ? DecisionLine().Replace(text, $"decision: {decision}", 1)
             : Regex.Replace(text, "^(status:.*)$", "$1\ndecision: " + decision, RegexOptions.Multiline);
-        var box = decision == Approved ? "- [ ] Approve" : "- [ ] Send back";
-        var at = text.IndexOf(box, StringComparison.Ordinal);
+        var box = decision == Approved ? "- [ ] Approve" : decision == SentBack ? "- [ ] Send back" : null;
+        var at = box is null ? -1 : text.IndexOf(box, StringComparison.Ordinal);
         if (at >= 0) text = text[..(at + 3)] + "x" + text[(at + 4)..];
         var n = text.LastIndexOf("\nNotes:", StringComparison.Ordinal);
         if (n >= 0) text = text[..n] + $"\nNotes: {notes.Trim()}\n";

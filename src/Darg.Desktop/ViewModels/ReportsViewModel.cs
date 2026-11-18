@@ -130,13 +130,17 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>The card was approved to done from its panel (WOR-0105): its newest unsettled report is marked approved, as Approve here would.</summary>
-    public void ApprovedFromBoard(string card)
+    public void ApprovedFromBoard(string card) => SettledFromBoard(card, DecisionReport.Approved, "");
+
+    /// <summary>The card's decision was settled from its panel (WOR-0124): approved, sent back or answered. Its newest
+    /// unsettled report says so, as Approve or Send back here would.</summary>
+    public void SettledFromBoard(string card, string decision, string notes)
     {
         var r = _all.Where(x => x.Card == card).OrderByDescending(x => x.Date, StringComparer.Ordinal).FirstOrDefault();
         if (r is null || !(r.Decision == DecisionReport.Pending || (r.Qa && r.Decision.Length == 0))) return;
-        try { DecisionReport.Settle(r.File, DecisionReport.Approved, ""); }
+        try { DecisionReport.Settle(r.File, decision, notes); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Can't write the decision into {r.Id}: {e.Message}"; return; }
-        Status = $"{card} approved and moved to done.";
+        Status = decision == DecisionReport.Approved ? $"{card} approved and moved to done." : decision == DecisionReport.SentBack ? $"{card} sent back." : $"{card} answered.";
         Reload();
     }
 
