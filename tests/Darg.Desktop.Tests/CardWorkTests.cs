@@ -123,6 +123,9 @@ public class CardWorkTests
             await app.Until(() => app.Agents.Agents.Any(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Qa),
                 "a QA agent on the card once the rework turn ended");
             Assert.Equal(AgentState.Idle, rework.State);
+            // and its process has started: one still waiting on its model pick when the test ends starts during the next
+            // test, logs into that test's fake-claude log and fails it (WOR-0131 hit this in Send back's test)
+            await app.Until(() => app.Prompts().Any(p => p.Contains("QA it for me")), "the QA agent to be sent its prompt");
         }
         finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
     }
