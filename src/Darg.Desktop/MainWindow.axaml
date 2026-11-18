@@ -149,22 +149,24 @@
               BorderThickness="1" CornerRadius="14" BoxShadow="0 14 40 0 #90000000" HorizontalAlignment="Right">
         <DockPanel>
           <Border x:Name="MascotHeader" DockPanel.Dock="Top" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="12,8"
-                  Background="Transparent" Cursor="SizeAll" ToolTip.Tip="Drag to move · double-click to put it back">
+                  Background="Transparent" Cursor="SizeAll">
+            <!-- the move cursor is inherited, by a dropdown's popup too, so each control here sets its own; the tip sits on
+                 the title, or it would show over the dropdown and the buttons as well (WOR-0130) -->
             <StackPanel Spacing="6">
               <DockPanel>
-                <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent"
+                <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent" Cursor="Arrow"
                         AutomationProperties.Name="Hide Fettle"/>
-                <Button DockPanel.Dock="Right" Content="+ New chat" Command="{Binding Mascot.FreshCommand}" Padding="8,0" Background="Transparent"
+                <Button DockPanel.Dock="Right" Content="+ New chat" Command="{Binding Mascot.FreshCommand}" Padding="8,0" Background="Transparent" Cursor="Arrow"
                         FontSize="11" IsVisible="{Binding Mascot.HasChat}"/>
-                <TextBlock Classes="dim small" VerticalAlignment="Center"
+                <TextBlock Classes="dim small" VerticalAlignment="Center" Background="Transparent" ToolTip.Tip="Drag to move · double-click to put it back"
                            Text="{Binding Mascot.Agent.StateText, StringFormat='Fettle · {0}', FallbackValue='Fettle · new chat'}"/>
               </DockPanel>
               <!-- two tabs so the chat and the notifications never show at once -->
               <StackPanel Orientation="Horizontal" Spacing="4">
                 <ToggleButton Content="Chat" Command="{Binding ShowChatTabCommand}" Click="TabClicked" IsChecked="{Binding !ShowNotifications, Mode=OneWay}"
-                              Padding="10,2" FontSize="11" Background="Transparent" AutomationProperties.Name="Fettle chat tab"/>
+                              Padding="10,2" FontSize="11" Background="Transparent" Cursor="Arrow" AutomationProperties.Name="Fettle chat tab"/>
                 <ToggleButton Command="{Binding ShowNotificationsTabCommand}" Click="TabClicked" IsChecked="{Binding ShowNotifications, Mode=OneWay}"
-                              Padding="10,2" FontSize="11" Background="Transparent"
+                              Padding="10,2" FontSize="11" Background="Transparent" Cursor="Arrow"
                               Content="{Binding Notifications.Count, StringFormat='🔔 Notifications {0}'}"
                               ToolTip.Tip="Everything agents have notified you of this run" AutomationProperties.Name="Notifications"/>
               </StackPanel>
@@ -172,9 +174,9 @@
               <Border IsVisible="{Binding !ShowNotifications}">
                 <DockPanel IsVisible="{Binding Mascot.Chats.Count}">
                   <Button DockPanel.Dock="Right" Content="×" Command="{Binding Mascot.ForgetCommand}" IsVisible="{Binding Mascot.HasChat}"
-                          Padding="6,0" Background="Transparent" ToolTip.Tip="Forget this chat" AutomationProperties.Name="Forget chat"/>
+                          Padding="6,0" Background="Transparent" Cursor="Arrow" ToolTip.Tip="Forget this chat" AutomationProperties.Name="Forget chat"/>
                   <ComboBox ItemsSource="{Binding Mascot.Chats}" SelectedItem="{Binding Mascot.SelectedChat}" HorizontalAlignment="Stretch"
-                            PlaceholderText="Earlier chats…" FontSize="12" AutomationProperties.Name="Fettle chats"/>
+                            PlaceholderText="Earlier chats…" FontSize="12" Cursor="Arrow" AutomationProperties.Name="Fettle chats"/>
                 </DockPanel>
               </Border>
             </StackPanel>
