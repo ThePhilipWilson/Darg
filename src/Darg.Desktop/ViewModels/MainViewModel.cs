@@ -511,6 +511,7 @@ public partial class ProjectViewModel : ObservableObject
             Reports!.StoryMap = Board.CardBoards;
             Reports.Reload();
             Reports!.OpenCard = id => { if (!Board.OpenById(id)) return false; Section = Section.Board; return true; };
+            Agents.OpenCard = Reports.OpenCard;
             Agents.RefreshCards();
             // a card landing in Needs Attention gets its decision report, whoever moved it (WOR-0092)
             // WOR-0102: a card entering QA gets a QA report, one reaching done has it archived and a done report written

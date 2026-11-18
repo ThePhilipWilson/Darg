@@ -32,6 +32,25 @@ public class CardWorkTests
         Assert.Equal("", app.Crashes());
     }
 
+    [AvaloniaFact] // WOR-0143: an agent's header links back to its card
+    public async Task An_agent_links_back_to_its_card()
+    {
+        using var app = DargApp.Make();
+        var card = app.Card("fix the logo aliasing", "To Do");
+        await app.Start();
+        await app.Api("work-on", new { project = "proj", card = card.Id });
+        var agent = Assert.Single(app.Agents.Agents);
+        Assert.True(agent.HasCard);
+        Assert.Contains(card.Id, agent.CardLabel);
+
+        await app.Api("show", new { project = "proj", section = "Agents" });
+        Assert.Equal(Section.Agents, app.Project.Section);
+        agent.ShowCardCommand.Execute(null);
+
+        Assert.Equal(Section.Board, app.Project.Section);
+        Assert.Equal(card.Id, app.Project.Board!.Editor?.CardId);
+    }
+
     [AvaloniaFact] // the protocol (CLAUDE.md): permission prompts and AskUserQuestion come to Darg, and the agent gets its folders
     public async Task A_card_agent_is_started_with_the_protocol_and_its_folders()
     {
