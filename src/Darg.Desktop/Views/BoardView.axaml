@@ -144,6 +144,12 @@
                           <MenuFlyout Placement="BottomEdgeAlignedRight">
                             <MenuItem Header="Wrap up into stories…" Command="{Binding WrapUpCommand}" IsVisible="{Binding IsDoneColumn}"
                                       ToolTip.Tip="An agent groups these cards into stories (a doc each and a Story card here), asks you, then moves the cards to Completed"/>
+                            <MenuItem Header="{Binding ManualText}" Command="{Binding SortManualCommand}" ToolTip.Tip="Cards in the order you dragged them"/>
+                            <MenuItem Header="{Binding TitleSortText}" Command="{Binding SortTitleCommand}" ToolTip.Tip="Sort by title, a first"/>
+                            <MenuItem Header="{Binding NewestSortText}" Command="{Binding SortNewestCommand}" ToolTip.Tip="Newest card first"/>
+                            <MenuItem Header="{Binding LongestSortText}" Command="{Binding SortLongestCommand}" ToolTip.Tip="The card that has been in this column longest first"/>
+                            <MenuItem Header="{Binding ReverseText}" Command="{Binding ReverseSortCommand}" IsVisible="{Binding IsSorted}"/>
+                            <Separator/>
                             <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" IsVisible="{Binding IsColumn}"/>
                             <MenuItem Header="Minimize" Command="{Binding ToggleMinimizedCommand}"/>
                             <MenuItem Header="Remove column…" Command="{Binding AskRemoveCommand}" IsVisible="{Binding IsColumn}"/>

@@ -7,8 +7,10 @@ namespace Darg.Core;
 
 /// <summary>A card: one markdown file in the board's items folder.</summary>
 public sealed record Card(string Id, string Title, string Status, string Priority, string Type,
-    IReadOnlyList<string> Labels, string File, string Description)
+    IReadOnlyList<string> Labels, string File, string Description, DateTime? Created = null, DateTime? Moved = null)
 {
+    /// <summary>When it entered its current column: its Moved line, else Created (a date only), else unknown (WOR-0146).</summary>
+    public DateTime? InColumnSince => Moved ?? Created;
     public int Number => int.TryParse(Id[(Id.LastIndexOf('-') + 1)..], out var n) ? n : int.MaxValue;
     /// <summary>Its type, Task when the file leaves it blank.</summary>
     public string Kind => Type.Trim() is { Length: > 0 } t ? t : CardTypes.Task;
@@ -205,7 +207,7 @@ public static class BoardStore
         order.Remove(columnId);
         if (json["minimized"] is JsonArray min) foreach (var x in min.Where(x => (string?)x == columnId).ToList()) min.Remove(x);
         WriteJson(folder, json);
-        foreach (var card in cards) RewriteFields(folder, card, t => SetField(t, "Status", "Backlog"));
+        foreach (var card in cards) RewriteFields(folder, card, t => StampMoved(SetField(t, "Status", "Backlog"), DateTime.Now));
         return cards.Count;
     }
 
@@ -269,8 +271,36 @@ public static class BoardStore
             desc = (next >= 0 ? rest[..next] : rest).Trim();
         }
         return new Card(head.Groups[1].Value, head.Groups[2].Value.Trim(), fields.GetValueOrDefault("Status", ""),
-            fields.GetValueOrDefault("Priority", ""), fields.GetValueOrDefault("Type", ""), labels, file, desc);
+            fields.GetValueOrDefault("Priority", ""), fields.GetValueOrDefault("Type", ""), labels, file, desc,
+            StampOf(fields.GetValueOrDefault("Created", "")), StampOf(fields.GetValueOrDefault("Moved", "")));
     }
+
+    static DateTime? StampOf(string text) =>
+        DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d) ? d : null;
+
+    /// <summary>The Moved line's format: a date and a time (Created is a date only).</summary>
+    public const string MovedFormat = "yyyy-MM-dd HH:mm:ss";
+
+    /// <summary>Set a card's Moved line (when it entered its column; WOR-0146), adding it after Done, else Created, else the
+    /// last field when the file has none. Tatty and Obsidian ignore a field they don't know.</summary>
+    static string StampMoved(string text, DateTime when)
+    {
+        var value = when.ToString(MovedFormat, System.Globalization.CultureInfo.InvariantCulture);
+        var line = new Regex(@"^- \*\*Moved:\*\*[^\n]*$", RegexOptions.Multiline);
+        if (line.IsMatch(text)) return line.Replace(text, $"- **Moved:** {value}", 1);
+        var desc = text.IndexOf("\n## ", StringComparison.Ordinal);
+        var head = desc < 0 ? text : text[..desc];
+        Match? after = null;
+        foreach (var name in new[] { "Done", "Created" })
+            if ((after = Regex.Match(head, $@"^- \*\*{name}:\*\*[^\n]*$", RegexOptions.Multiline)).Success) break;
+        if (after is not { Success: true }) after = Field.Matches(head).LastOrDefault();
+        if (after is null) return text;
+        return text.Insert(after.Index + after.Length, $"\n- **Moved:** {value}");
+    }
+
+    /// <summary>Stamp a card's Moved line now, for a column change made outside <see cref="Move"/> (an agent editing the file).</summary>
+    public static void MarkMoved(string folder, Card card, DateTime? when = null) =>
+        RewriteFields(folder, card, t => StampMoved(t, when ?? DateTime.Now));
 
     /// <summary>Move a card to a list (backlog, a column id or completed), before another card or at the
     /// end: sets its Status line (and Done date, going to or from completed) and its place in board.json.</summary>
@@ -295,6 +325,7 @@ public static class BoardStore
         var crlf = raw.Contains("\r\n");
         var text = raw.Replace("\r\n", "\n");
         text = SetField(text, "Status", status);
+        if (PlaceOf(card.Status, columns) != toList) text = StampMoved(text, DateTime.Now);
         if (toList == Board.Completed) text = SetField(text, "Done", DateTime.Now.ToString("yyyy-MM-dd"));
         else if (card.Status.Equals("completed", StringComparison.OrdinalIgnoreCase)) text = SetField(text, "Done", "");
         File.WriteAllText(file, crlf ? text.Replace("\n", "\r\n") : text, new UTF8Encoding(false));
@@ -455,7 +486,7 @@ public static class BoardStore
         {
             var raw = File.ReadAllText(target);
             var crlf = raw.Contains("\r\n");
-            var text = SetField(raw.Replace("\r\n", "\n"), "Status", "Backlog");
+            var text = StampMoved(SetField(raw.Replace("\r\n", "\n"), "Status", "Backlog"), DateTime.Now);
             File.WriteAllText(target, crlf ? text.Replace("\n", "\r\n") : text, new UTF8Encoding(false));
         }
 

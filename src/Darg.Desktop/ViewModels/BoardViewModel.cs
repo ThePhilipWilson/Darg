@@ -71,6 +71,20 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public Action<Card, string>? EnteredQa { get => _parent is null ? field : _parent.EnteredQa; set; }
     public Action<Card, string>? EnteredDone { get => _parent is null ? field : _parent.EnteredDone; set; }
     readonly ColumnWatch _moves = new();
+    readonly MovedWatch _stamps = new();
+    Dictionary<string, ColumnSort>? _sorts;
+
+    /// <summary>The sort picked for a list (WOR-0146), kept per project beside the shown boards, by <see cref="ListViewModel.Key"/>.</summary>
+    public ColumnSort SortOf(string key) =>
+        (Root._sorts ??= ColumnSorts.Load(_project.Id)).GetValueOrDefault(key, ColumnSort.Manual);
+
+    public void SetSort(ListViewModel list, ColumnSort sort)
+    {
+        var all = Root._sorts ??= ColumnSorts.Load(_project.Id);
+        if (sort.IsManual) all.Remove(list.Key); else all[list.Key] = sort;
+        ColumnSorts.Save(_project.Id, all);
+        Root.ApplyAll();
+    }
     /// <summary>Set by the project: the newest report written for a card (its file), or null.</summary>
     public Func<string, string?>? ReportFor { get => _parent is null ? field : _parent.ReportFor; set; }
     /// <summary>Set by the project: show a report in Reports.</summary>
@@ -688,6 +702,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             using var loading = StallWatch.Shared.Section("BoardStore.Load");
             BoardStore.EnsureAttentionColumn(Folder);
             _board = BoardStore.Load(Folder);
+            // a column change made outside Move (an agent editing the card) is stamped Moved, then read again
+            if (_stamps.Read(Folder, _board).Count > 0) _board = BoardStore.Load(Folder);
         }
         catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
         NoticeAttention();
@@ -807,7 +823,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         foreach (var (id, name) in _board.ListOrder())
         {
             if (id == Board.Completed && !root.ShowCompleted) continue;
-            var cards = _board.Lists[id].Where(Keep).Select(ViewOf).ToList();
+            var cards = SortOf(SelectedBoard + "/" + id).Apply(_board.Lists[id].Where(Keep)).Select(ViewOf).ToList();
             total += cards.Count;
             var minimized = _board.Minimized.Contains(id);
             if (oldLists.TryGetValue(id, out var list) && list.Name == name && list.IsMinimized == minimized) list.Show(cards, _board.Lists[id].Count);
@@ -817,7 +833,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         ListSync.Sync(Lists, lists);
         _picked.IntersectWith(Shown().Select(c => c.Id));
         PickedChanged();
-        foreach (var l in Lists) l.BulkChanged(); // Work All counts across two columns, so every count is read again
+        foreach (var l in Lists) { l.BulkChanged(); l.SortChanged(); } // Work All counts across two columns, so every count is read again
         Status = _notice ?? $"{total} of {_board.AllCards.Count()} cards";
     }
 
@@ -1070,6 +1086,13 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// this board first (they keep their ids). A card with a live agent stays on its board: the agent holds its file's path.</summary>
     public void Drop(IReadOnlyList<CardViewModel> cards, ListViewModel list, string? beforeId)
     {
+        // a sorted column puts its cards in its own order: a drag within it would change nothing visible, so say so (WOR-0146)
+        if (!list.Sort.IsManual && cards.All(c => c.Board == this && BoardStore.PlaceOf(c.Card.Status, _board!.Columns) == list.Id))
+        {
+            _notice = $"{list.Name} is sorted ({list.SortText}): choose Manual in its menu to drag cards into an order.";
+            Apply();
+            return;
+        }
         if (cards.All(c => c.Board == this)) { Move(cards, list.Id, beforeId); return; }
         if (Folder is null) return;
         var moved = new List<string>();
@@ -1208,6 +1231,27 @@ public sealed partial class ListViewModel(BoardViewModel board, string id, strin
         OnPropertyChanged(nameof(RemoveQuestion));
         PickedChanged();
     }
+
+    // WOR-0146: the column's sort, chosen in its menu; a view order over board.json's, which Manual brings back
+    public ColumnSort Sort => Board.SortOf(Key);
+    public string SortText => Sort.IsManual ? "Manual" : ColumnSort.Label(Sort.By) + (Sort.Reversed ? ", reversed" : "");
+    public string ManualText => Mark(Sort.IsManual, "Manual");
+    public string TitleSortText => Mark(Sort.By == SortBy.Title, "A-Z");
+    public string NewestSortText => Mark(Sort.By == SortBy.Newest, "Newest");
+    public string LongestSortText => Mark(Sort.By == SortBy.Longest, "Longest in column");
+    public string ReverseText => Mark(Sort.Reversed && !Sort.IsManual, "Reverse order");
+    public bool IsSorted => !Sort.IsManual;
+    static string Mark(bool on, string text) => on ? "✓ " + text : text;
+    public void SortChanged()
+    {
+        foreach (var n in new[] { nameof(Sort), nameof(SortText), nameof(ManualText), nameof(TitleSortText), nameof(NewestSortText),
+                     nameof(LongestSortText), nameof(ReverseText), nameof(IsSorted) }) OnPropertyChanged(n);
+    }
+    [RelayCommand] void SortManual() => Board.SetSort(this, ColumnSort.Manual);
+    [RelayCommand] void SortTitle() => Board.SetSort(this, new(SortBy.Title, Sort.By == SortBy.Title && Sort.Reversed));
+    [RelayCommand] void SortNewest() => Board.SetSort(this, new(SortBy.Newest, Sort.By == SortBy.Newest && Sort.Reversed));
+    [RelayCommand] void SortLongest() => Board.SetSort(this, new(SortBy.Longest, Sort.By == SortBy.Longest && Sort.Reversed));
+    [RelayCommand] void ReverseSort() { if (!Sort.IsManual) Board.SetSort(this, Sort with { Reversed = !Sort.Reversed }); }
 
     public string Count => Cards.Count == all ? $"{all}" : $"{Cards.Count} / {all}";
     public bool HasCards => Cards.Count > 0;
