@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:views="using:Darg.Desktop.Views"
              x:Class="Darg.Desktop.Views.BoardView"
              x:DataType="vm:BoardViewModel">
   <UserControl.Styles>
@@ -315,7 +316,8 @@
           <!-- a card in QA that isn't right: what's wrong goes into the card and to an agent that reworks it (WOR-0079) -->
           <StackPanel Spacing="6" IsVisible="{Binding CanSendBack}">
             <TextBlock Classes="dim small" TextWrapping="Wrap" Text="Tried it and it isn't right? Say what's wrong and send it back:"/>
-            <TextBox Text="{Binding SendBackNotes}" PlaceholderText="What's wrong, what you expected" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80"/>
+            <TextBox Text="{Binding SendBackNotes}" PlaceholderText="What's wrong, what you expected (Enter sends, Shift+Enter for a new line)" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80"
+                     views:EnterSends.Command="{Binding SendBackCommand}"/>
             <Button Content="↩ Send back" Command="{Binding SendBackCommand}" HorizontalAlignment="Left"
                     ToolTip.Tip="Your notes go into the card under QA notes, the card goes back to In Progress, and an agent starts on them: it reads the How to check section, fixes what you say on top of that work, and brings it back to QA"/>
           </StackPanel>
