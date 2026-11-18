@@ -60,9 +60,14 @@ public sealed partial record CardDecision(string Question, IReadOnlyList<Decisio
     /// <summary>The card's open decision, or null when it has no <c>## Decision</c> section. Check <see cref="Valid"/>.</summary>
     public static CardDecision? Read(string cardText)
     {
-        var body = DecisionReport.Section(cardText, "Decision");
+        var body = OpenBody(cardText.Replace("\r\n", "\n"));
         return body.Length == 0 ? null : Parse(body);
     }
+
+    /// <summary>The open section's body, or "". Read, Answer and WriteTo all find the section through
+    /// <see cref="OpenSectionRx"/>, so a heading one of them takes (any case) the others take too.</summary>
+    static string OpenBody(string text) =>
+        OpenSectionRx().Match(text) is { Success: true } m ? Regex.Replace(m.Value, @"^\n?##[^\n]*\n", "").Trim() : "";
 
     /// <summary>Read a decision from its section's body (or from a draft, which is the same thing without the heading).</summary>
     public static CardDecision Parse(string body)
@@ -164,7 +169,7 @@ public sealed partial record CardDecision(string Question, IReadOnlyList<Decisio
         var section = Format().TrimEnd('\n') + "\n";
         if (OpenSectionRx().Match(text) is { Success: true } open)
             text = text[..open.Index] + section + (open.Index + open.Length < text.Length ? "\n" : "") + text[(open.Index + open.Length)..].TrimStart('\n');
-        else if (Regex.Match(text, @"(?:^|\n)##[ \t]+Description[ \t]*\n") is { Success: true } d
+        else if (Regex.Match(text, @"(?:^|\n)##[ \t]+Description[ \t]*\n", RegexOptions.IgnoreCase) is { Success: true } d
                  && Regex.Match(text[(d.Index + d.Length)..], @"\n##[ \t]") is var next)
         {
             var at = next.Success ? d.Index + d.Length + next.Index + 1 : text.Length;
@@ -184,9 +189,9 @@ public sealed partial record CardDecision(string Question, IReadOnlyList<Decisio
         var crlf = raw.Contains("\r\n");
         var text = raw.Replace("\r\n", "\n");
         if (OpenSectionRx().Match(text) is not { Success: true } open) return null;
-        var decision = Parse(DecisionReport.Section(text, "Decision"));
+        var decision = Parse(OpenBody(text));
         var body = open.Value.TrimEnd('\n');
-        body = Regex.Replace(body, @"^##[ \t]+Decision[ \t]*$", $"{AnsweredHeading} {when:yyyy-MM-dd HH:mm}", RegexOptions.Multiline);
+        body = Regex.Replace(body, @"^##[ \t]+Decision[ \t]*$", $"{AnsweredHeading} {when:yyyy-MM-dd HH:mm}", RegexOptions.Multiline | RegexOptions.IgnoreCase);
         body += $"\n\n**Answer:** {answer.Trim()} ({when:yyyy-MM-dd HH:mm})";
         if (notes.Trim().Length > 0) body += $"\n**Notes:** {notes.Trim()}";
         var after = text[(open.Index + open.Length)..];
@@ -291,7 +296,7 @@ public sealed partial record CardDecision(string Question, IReadOnlyList<Decisio
     private static partial Regex RecommendedLeadRx();
     [GeneratedRegex(@"^(?:→|->|=>)\s*(send back|[a-z]+)\b", RegexOptions.IgnoreCase)]
     private static partial Regex ArrowRx();
-    [GeneratedRegex(@"(?:^|(?<=\n))##[ \t]+Decision[ \t]*\n(?:.*?)(?=\n##[ \t]|\z)", RegexOptions.Singleline)]
+    [GeneratedRegex(@"(?:^|(?<=\n))##[ \t]+Decision[ \t]*\n(?:.*?)(?=\n##[ \t]|\z)", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
     private static partial Regex OpenSectionRx();
     [GeneratedRegex(@"\bagent\s+([0-9a-f]{6,})\b", RegexOptions.IgnoreCase)]
     private static partial Regex AgentIdRx();

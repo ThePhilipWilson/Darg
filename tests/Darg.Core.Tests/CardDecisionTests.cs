@@ -87,6 +87,34 @@ public class CardDecisionTests
         Assert.Contains("## How to check\n\nClick the mic.", text);
     }
 
+    /// <summary>WOR-0124 QA: reading took any case and answering only "## Decision", so a "## decision" card was shown and
+    /// moved but its answer never written. Whatever heading Read takes, Answer and WriteTo must take too.</summary>
+    [Theory]
+    [InlineData("## decision")]
+    [InlineData("## DECISION")]
+    [InlineData("##   Decision  ")]
+    [InlineData("##\tdecision")]
+    public void Any_heading_read_as_a_decision_is_answered_and_replaced_too(string heading)
+    {
+        foreach (var crlf in new[] { false, true })
+        {
+            var file = Path.Combine(Directory.CreateTempSubdirectory("decision").FullName, "card.md");
+            var card = CardText(Section.Replace("## Decision", heading) + "\n");
+            File.WriteAllText(file, crlf ? card.Replace("\n", "\r\n") : card);
+            Assert.True(CardDecision.Read(File.ReadAllText(file))!.Valid, heading);
+
+            CardDecision.Parse("Question: Ship it?\n- **Yes** → done\n- **No** → back\n").WriteTo(file);
+            var text = File.ReadAllText(file);
+            Assert.Equal("Ship it?", CardDecision.Read(text)!.Question);
+            Assert.DoesNotContain("in a build from 5b85baa", text); // replaced, not a second section
+
+            Assert.Equal("Ship it?", CardDecision.Answer(file, "Yes", "", new DateTime(2026, 11, 18, 9, 12, 0))!.Question);
+            text = File.ReadAllText(file);
+            Assert.Null(CardDecision.Read(text));
+            Assert.Contains("**Answer:** Yes", text);
+        }
+    }
+
     [Fact]
     public void Writing_a_card_with_no_description_heading_appends_it()
     {

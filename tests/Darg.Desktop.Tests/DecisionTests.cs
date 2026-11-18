@@ -42,6 +42,24 @@ public class DecisionTests
         Assert.Equal("", app.Crashes());
     }
 
+    /// <summary>QA found a "## decision" card shown and moved to Done with its answer never written, so it came back
+    /// still asking. Written by the QA agent (.shots/qa-0124); failed before the fix.</summary>
+    [AvaloniaFact]
+    public async Task A_lowercase_decision_heading_is_answered_like_any_other()
+    {
+        using var app = DargApp.Make();
+        var card = app.Card("voice mode", BoardStore.AttentionName, Body(Decision().Replace("## Decision", "## decision")));
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board", card = card.Id });
+        Assert.True(app.Board.Editor!.ShowDecision);
+
+        await app.Api("decide", new { project = "proj", card = card.Id, answer = "Works" });
+        var text = File.ReadAllText(FileOf(app, card));
+        Assert.Equal("Done", app.Read(card.Id).Status);
+        Assert.Contains("**Answer:** Works", text);
+        Assert.Null(CardDecision.Read(text));
+    }
+
     [AvaloniaFact]
     public async Task A_card_with_no_decision_shows_the_fallback()
     {

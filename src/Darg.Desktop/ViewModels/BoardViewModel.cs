@@ -931,7 +931,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (action == DecisionAction.Back && AgentFor?.Invoke(card.Id) is not null) action = DecisionAction.Agent;
         if (action == DecisionAction.Back && recorded is null && notes.Trim().Length == 0) return "Say what's wrong first: the agent works from your notes.";
         if ((action == DecisionAction.Back && Rework is null) || (action == DecisionAction.Agent && DecisionToAgent is null)) return "This board can't start agents.";
-        try { if (recorded is not null) CardDecision.Answer(file, label, notes, DateTime.Now); }
+        // a decision shown but not answered in the file would stay open and come back with the card (WOR-0124 QA)
+        try { if (recorded is not null && CardDecision.Answer(file, label, notes, DateTime.Now) is null) return $"Couldn't find {card.Id}'s Decision section to write the answer into, so nothing moved."; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return $"Couldn't write the answer into the card: {e.Message}"; }
         switch (action)
         {
