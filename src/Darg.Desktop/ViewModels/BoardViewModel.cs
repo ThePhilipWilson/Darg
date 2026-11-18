@@ -726,6 +726,11 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             .ToList();
     }
 
+    /// <summary>How many cards each list of the board on screen holds, in display order (backlog, the columns,
+    /// completed), for the API's overview (WOR-0141). None before it loads.</summary>
+    public IReadOnlyList<(string Name, int Count)> ColumnCounts() => _board is null ? []
+        : _board.ListOrder().Select(l => (l.Name, _board.Lists.TryGetValue(l.Id, out var cards) ? cards.Count : 0)).ToList();
+
     /// <summary>The shown board's columns (none before it loads).</summary>
     public IReadOnlyList<Column> Columns => _board?.Columns ?? [];
 

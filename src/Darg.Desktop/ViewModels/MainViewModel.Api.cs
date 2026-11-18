@@ -17,6 +17,9 @@ public partial class MainViewModel
 
         Add("projects", "the projects: id, name, folder, which sections each has, saved commands, and which one is on screen.", _ => Json(ProjectList()));
         Add("where", "what Philip is looking at: project, section and what's open there.", _ => Where());
+        api.Add("overview", "what's going on in a project, in one call: {project}. Its Home page as JSON: the shown board's card count per column, " +
+                            "cards in its middle columns with the agent on each, agents needing Philip or at work, the newest artifacts, unread reports, " +
+                            "and per repo its branch, uncommitted file count and last commits.", Overview);
         Add("show", "bring something up on screen. {project, section?, card?, doc?, agent?, artifact?}: section is one of " +
                     string.Join(", ", Enum.GetNames<Section>()) + "; card an ID (opens its panel), doc a path or name in the project's docs, " +
                     "agent an agent id, artifact a file path. With only project, switches to its tab.", Show);
@@ -95,6 +98,77 @@ public partial class MainViewModel
             });
         }
         return list;
+    }
+
+    /// <summary>The overview command (WOR-0141): what Home shows, as JSON. The board and agents are read on the UI
+    /// thread, where they live; files and git (reports, artifacts, status, log) off it, as Home's own Load does.</summary>
+    async Task<string> Overview(ApiArgs a)
+    {
+        var (result, config, artifacts, reports) = await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var p = FindProject(a);
+            var o = new JsonObject { ["project"] = p.Config.Id, ["name"] = p.Name };
+            if (p.Board is { } board)
+            {
+                o["board"] = board.SelectedBoard;
+                var columns = new JsonObject();
+                foreach (var (name, count) in board.ColumnCounts()) columns[name] = count;
+                o["columns"] = columns;
+                var cards = new JsonArray();
+                foreach (var (column, card) in board.InProgress())
+                    cards.Add(new JsonObject
+                    {
+                        ["id"] = card.Id, ["title"] = card.Title, ["column"] = column,
+                        ["agent"] = p.Agents?.ForCard(card.Id) is { } on
+                            ? new JsonObject { ["id"] = on.Id, ["name"] = on.Name, ["state"] = on.State.ToString().ToLowerInvariant() }
+                            : null,
+                    });
+                o["inProgress"] = cards;
+            }
+            if (p.Agents is { } agents)
+            {
+                // as Home lists them: the ones waiting on Philip first, then the ones at work
+                var live = new JsonArray();
+                foreach (var ag in agents.Agents.Where(x => x.NeedsYou || x.Working).OrderBy(x => x.NeedsYou ? 0 : 1))
+                    live.Add(new JsonObject
+                    {
+                        ["id"] = ag.Id, ["name"] = ag.Name, ["state"] = ag.State.ToString().ToLowerInvariant(), ["needsYou"] = ag.NeedsYou,
+                        ["doing"] = ag.Activity, ["card"] = ag.CardId,
+                    });
+                o["agents"] = live;
+                o["otherAgents"] = agents.Agents.Count - live.Count;
+            }
+            return (o, p.Config, p.Artifacts is not null, p.Reports?.Folder);
+        });
+        return await Task.Run(() =>
+        {
+            if (artifacts)
+                result["artifacts"] = new JsonArray(ArtifactStore.List(config.Id).Take(5).Select(x => (JsonNode?)new JsonObject
+                {
+                    ["title"] = x.Title, ["path"] = x.Path, ["agent"] = x.Agent, ["modified"] = x.Modified.ToString("yyyy-MM-dd HH:mm"),
+                }).ToArray());
+            if (reports is not null)
+                result["unreadReports"] = new JsonArray(ReportStore.List(reports).Where(r => !r.Read).Select(r => (JsonNode?)new JsonObject
+                {
+                    ["card"] = r.Card, ["title"] = r.Title, ["kind"] = r.Kind.ToString().ToLowerInvariant(), ["date"] = r.Date, ["file"] = r.File,
+                }).ToArray());
+            var repos = new JsonArray();
+            foreach (var root in config.ExistingRepos().Where(Repo.IsGit))
+            {
+                var status = Repo.Status(root);
+                repos.Add(new JsonObject
+                {
+                    ["name"] = ProjectConfig.RepoName(root), ["path"] = root, ["branch"] = status.Branch,
+                    ["uncommitted"] = status.Changed.Count, ["ahead"] = status.Ahead, ["behind"] = status.Behind,
+                    ["commits"] = new JsonArray(Repo.Log(root, 5).Select(c => (JsonNode?)new JsonObject
+                    {
+                        ["hash"] = c.Hash, ["subject"] = c.Subject, ["author"] = c.Author, ["when"] = c.When.ToString("yyyy-MM-dd HH:mm"),
+                    }).ToArray()),
+                });
+            }
+            result["repos"] = repos;
+            return Json(result);
+        });
     }
 
     string Show(ApiArgs a)
