@@ -764,7 +764,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>The project is leaving the app (removed or changed in Setup): stop its agents and its watcher.</summary>
     public void Close()
     {
-        foreach (var a in Agents?.Agents ?? []) a.End();
+        Agents?.Close();
         Board?.Dispose();
         Mistakes?.Dispose();
         Reports?.Dispose();

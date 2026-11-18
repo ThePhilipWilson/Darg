@@ -39,6 +39,14 @@ public partial class AgentsViewModel : ObservableObject
 
     public ObservableCollection<AgentViewModel> Agents { get; } = [];
 
+    /// <summary>The project is leaving the app: end every agent and start none from now on (<see cref="AgentViewModel.Shut"/>).</summary>
+    public void Close()
+    {
+        _closed = true;
+        foreach (var a in Agents.ToList()) a.Shut();
+    }
+    bool _closed;
+
     /// <summary>The agents as the list shows them: <see cref="Agents"/> in its own order, or grouped by status.</summary>
     public ObservableCollection<AgentViewModel> Listed { get; } = [];
 
@@ -408,6 +416,15 @@ public partial class AgentsViewModel : ObservableObject
         using var timing = StallWatch.Shared.Section("Agents.Start");
         id ??= NewId();
         job ??= new AgentJob(JobKinds.Chat, prompt);
+        if (_closed)
+        {
+            // asked by work still queued when the project closed: an agent that never starts, listed nowhere
+            var gate = new TaskCompletionSource<ProfilePick?>();
+            var never = new AgentViewModel(project.WorkingFolder(), prompt, cardId, name ?? ChatTitle.Guess(prompt), id: id, profile: gate.Task) { Purpose = purpose };
+            never.Shut();
+            gate.SetResult(null);
+            return never;
+        }
         // off the UI thread: reading profiles.md, and Haiku's pick, whose process start and prompt write are
         // synchronous (one per card when several start at once, WOR-0076)
         var forJob = job with { Project = job.Project ?? project.Id };
@@ -799,8 +816,19 @@ public partial class AgentViewModel : ObservableObject
     }
 
     /// <summary>Start (or resume) the Claude session and send it a message.</summary>
+    /// <summary>Its project is closing (removed in Setup, or a test's app ending): end the session and never start
+    /// one again, whatever asks after this: a model pick coming in, a message, carrying on after a usage limit.
+    /// Without it, work queued by a closed project started agents in the next test's sandbox (WOR-0131).</summary>
+    public void Shut()
+    {
+        _shut = true;
+        End();
+    }
+    bool _shut;
+
     void Begin(string message, bool resume)
     {
+        if (_shut) { Items.Add(new NoteItem("Not started: its project has closed.", false)); return; }
         using var timing = StallWatch.Shared.Section("Agent.Begin");
         try
         {
