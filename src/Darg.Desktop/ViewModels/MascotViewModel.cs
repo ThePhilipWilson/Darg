@@ -206,7 +206,8 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         if (text.Length == 0) return;
         Compose = "";
         var sent = WithContext(text);
-        if (Agent is null || (Agent.State == AgentState.Exited && Agent.SessionId is null))
+        // no session to carry on (never began, or saved without one): a new chat, not a message into the void (WOR-0133)
+        if (Agent is null || (Agent.State is AgentState.Exited or AgentState.Saved && Agent.SessionId is null))
         {
             var home = InstanceConfig.Folder();
             Directory.CreateDirectory(home);
