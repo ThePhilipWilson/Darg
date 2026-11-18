@@ -51,7 +51,7 @@ public static class DefaultContext
     public static List<string> ClaudeFiles(string folder, string? userHome = null)
     {
         var found = new List<string>();
-        var home = userHome ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var home = userHome ?? UserHome.Folder;
         var user = Path.Combine(home, ".claude", "CLAUDE.md");
         if (File.Exists(user)) found.Add(user);
 

@@ -177,14 +177,41 @@ public sealed class DargApp : IDisposable
     }
 
     /// <summary>What the fake claude logged: each entry's kind (start, message, ask) and fields.</summary>
-    public IReadOnlyList<JsonObject> ClaudeCalls() => !File.Exists(ClaudeLog) ? []
-        : File.ReadAllLines(ClaudeLog).Where(l => l.Length > 0).Select(l => JsonNode.Parse(l)!.AsObject()).ToList();
+    public IReadOnlyList<JsonObject> ClaudeCalls()
+    {
+        var calls = new List<JsonObject>();
+        foreach (var line in ReadShared(ClaudeLog).Split('\n'))
+        {
+            if (line.Trim().Length == 0) continue;
+            try { calls.Add(JsonNode.Parse(line)!.AsObject()); }
+            catch (JsonException) { } // the last line, half written as we read: the next look gets it whole
+        }
+        return calls;
+    }
+
+    /// <summary>A file another process may have open to write (fake claude appending to its log): read with
+    /// read/write sharing, as File.ReadAllLines doesn't (it refused while python had the log open and failed a
+    /// test, WOR-0127), retrying a moment if Windows still says no.</summary>
+    static string ReadShared(string path)
+    {
+        for (var tries = 0; ; tries++)
+        {
+            try
+            {
+                if (!File.Exists(path)) return "";
+                using var f = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var r = new StreamReader(f);
+                return r.ReadToEnd();
+            }
+            catch (IOException) when (tries < 50) { Thread.Sleep(20); }
+        }
+    }
 
     /// <summary>The messages agents were sent, in order (a card agent's first is its prompt).</summary>
     public IReadOnlyList<string> Prompts() => ClaudeCalls().Where(c => (string?)c["kind"] == "message").Select(c => (string)c["text"]!).ToList();
 
     /// <summary>What went wrong in a view (crash.log in the instance), or empty.</summary>
-    public string Crashes() => File.Exists(Path.Combine(Home, "crash.log")) ? File.ReadAllText(Path.Combine(Home, "crash.log")) : "";
+    public string Crashes() => ReadShared(Path.Combine(Home, "crash.log"));
 
     /// <summary>Delete the last run's folder; git keeps its objects read-only, which Directory.Delete refuses.</summary>
     static void Wipe(string folder)
