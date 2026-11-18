@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.VisualTree;
 using Avalonia.Headless.XUnit;
@@ -110,5 +111,39 @@ public class FettleChatTests
         await PickFromList("chat-c");
         Assert.Equal("chat-c", app.Agents.Shown?.Id);
         Assert.Equal("", app.Crashes());
+    }
+
+    /// <summary>A real pointer click on an item of the open dropdown picks it first time. The header the dropdown sits in
+    /// is a drag handle, and a press on the popup's items (which aren't under the ComboBox in the visual tree) began a drag
+    /// that captured the pointer and swallowed the click (WOR-0130).</summary>
+    [AvaloniaFact]
+    public async Task Clicking_a_chat_in_the_open_dropdown_picks_it_first_click()
+    {
+        using var app = DargApp.Make();
+        Seed(app, "chat-a", "Newest chat", 1);
+        Seed(app, "chat-b", "Middle chat", 2);
+        Seed(app, "chat-c", "Oldest chat", 3);
+        await app.Start();
+        var fettle = app.Main.Mascot;
+        fettle.Open = true;
+        await DargApp.Settle();
+
+        static void Click(Avalonia.Visual c)
+        {
+            var top = Avalonia.Controls.TopLevel.GetTopLevel(c)!;
+            var at = c.TranslatePoint(new Avalonia.Point(c.Bounds.Width / 2, c.Bounds.Height / 2), top)!.Value;
+            Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, at);
+            Avalonia.Headless.HeadlessWindowExtensions.MouseDown(top, at, Avalonia.Input.MouseButton.Left);
+            Avalonia.Headless.HeadlessWindowExtensions.MouseUp(top, at, Avalonia.Input.MouseButton.Left);
+        }
+
+        var box = Dropdown(app);
+        Click(box);
+        await DargApp.Settle();
+        Assert.True(box.IsDropDownOpen);
+        Click(app.Window.GetVisualDescendants().OfType<ComboBoxItem>().First(i => i.DataContext is ChatEntry e && e.Id == "chat-b"));
+        await DargApp.Settle();
+        Assert.Equal("chat-b", fettle.Agent?.Id);
+        Assert.False(box.IsDropDownOpen);
     }
 }
