@@ -147,8 +147,8 @@ public class FettleChatTests
         Assert.False(box.IsDropDownOpen);
     }
 
-    [AvaloniaFact] // WOR-0130: the header's move cursor is inherited, by the dropdown's popup too, so it read as "drag me"
-    public async Task The_chats_dropdown_and_the_header_buttons_dont_show_the_move_cursor()
+    [AvaloniaFact] // WOR-0130: the drag handle is the part above the dropdown; the dropdown's row neither shows the move cursor nor moves the box
+    public async Task The_chats_dropdown_is_no_part_of_the_drag_handle()
     {
         using var app = DargApp.Make();
         Seed(app, "chat-a", "Newest chat", 1);
@@ -161,12 +161,38 @@ public class FettleChatTests
         box.SelectedItem = fettle.Chats.First(); // a chat open, so + New chat and × show too
         await DargApp.Settle();
 
+        app.Shot("fettle-open");
         var header = app.Window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "MascotHeader");
         var move = header.Cursor;
         Assert.NotNull(move); // the header itself still says it can be dragged
         Assert.NotSame(move, box.Cursor);
-        var buttons = header.GetVisualDescendants().OfType<Button>().Where(b => b.FindAncestorOfType<ComboBox>() is null).ToList();
-        Assert.True(buttons.Count >= 5, $"the header's buttons: {buttons.Count}");
+        Assert.DoesNotContain(header, box.GetVisualAncestors());
+        // nothing in the dropdown's row carries the move cursor: the row itself (its blank parts) or the × beside it
+        var row = box.GetVisualAncestors().OfType<Border>().First(b => b.Parent == header.Parent);
+        Assert.All(row.GetSelfAndVisualDescendants().OfType<Avalonia.Input.InputElement>(), e => Assert.NotSame(move, e.Cursor));
+        Assert.True(row.Bounds.Top >= header.Bounds.Bottom, "the dropdown's row sits below the handle");
+
+        // a drag that starts on the dropdown's row (its blank edge, left of the dropdown) leaves the box where it is
+        var bubble = app.Window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "MascotBubble");
+        void Drag(Avalonia.Point from)
+        {
+            Avalonia.Headless.HeadlessWindowExtensions.MouseMove(app.Window, from);
+            Avalonia.Headless.HeadlessWindowExtensions.MouseDown(app.Window, from, Avalonia.Input.MouseButton.Left);
+            Avalonia.Headless.HeadlessWindowExtensions.MouseMove(app.Window, from + new Avalonia.Point(-60, -40));
+            Avalonia.Headless.HeadlessWindowExtensions.MouseUp(app.Window, from + new Avalonia.Point(-60, -40), Avalonia.Input.MouseButton.Left);
+        }
+        var shift = (Avalonia.Media.TranslateTransform)bubble.RenderTransform!;
+        Drag(row.TranslatePoint(new Avalonia.Point(-6, row.Bounds.Height / 2), app.Window)!.Value);
+        await DargApp.Settle();
+        Assert.Equal((0d, 0d), (shift.X, shift.Y));
+        // and one that starts on the handle's blank part still moves it
+        Drag(header.TranslatePoint(new Avalonia.Point(header.Bounds.Width / 2, 4), app.Window)!.Value);
+        await DargApp.Settle();
+        Assert.Equal((-60d, -40d), (shift.X, shift.Y));
+        shift.X = shift.Y = 0;
+
+        var buttons = header.GetVisualDescendants().OfType<Button>().ToList();
+        Assert.True(buttons.Count >= 4, $"the header's buttons: {buttons.Count}");
         Assert.All(buttons, b => Assert.NotSame(move, b.Cursor));
         Assert.Null(ToolTip.GetTip(header)); // on the header it showed over the dropdown and the buttons as well
 
