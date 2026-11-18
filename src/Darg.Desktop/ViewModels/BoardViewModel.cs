@@ -1412,6 +1412,8 @@ public partial class CardEditor : ObservableObject
     [ObservableProperty] public partial string Priority { get; set; }
     [ObservableProperty] public partial string Error { get; set; } = "";
     public string? CardId => _card?.Id;
+    /// <summary>The card's file on disk (WOR-0142), so an agent told which card is open needn't hunt for it.</summary>
+    public string? FilePath => _card is null || _board.Folder is null ? null : Path.Combine(_board.Folder, "items", _card.Card.File).Replace('\\', '/');
     /// <summary>The card's live agent, looked up now: the panel can outlast the agent (forgotten while it's open).</summary>
     bool HasAgent => _card is not null && (_board.AgentFor?.Invoke(_card.Id) is not null);
     public bool CanWorkOn => _card is not null && !HasAgent && !_card.InDone;

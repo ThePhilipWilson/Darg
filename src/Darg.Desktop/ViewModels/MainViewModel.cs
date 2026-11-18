@@ -166,7 +166,7 @@ public partial class MainViewModel : ObservableObject
             case Section.Board when p.Board is not null:
                 s.Append($", board {p.Board.SelectedBoard} in {p.Board.Folder}");
                 if (p.Board.Filter.Length > 0) s.Append($", filtered by \"{p.Board.Filter}\"");
-                if (p.Board.Editor is { IsNew: false } card) s.Append($", card {card.Heading} ({card.Title}) open");
+                if (p.Board.Editor is { IsNew: false } card) s.Append($", card {card.Heading} ({card.Title}) open, in column {card.Status}" + (card.FilePath is { } cf ? $", file {cf}" : ""));
                 break;
             case Section.Notes when p.Notes is not null:
                 s.Append($", notes wall in {p.Notes.Folder}");
