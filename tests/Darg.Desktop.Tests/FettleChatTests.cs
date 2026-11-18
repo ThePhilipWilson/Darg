@@ -146,4 +146,34 @@ public class FettleChatTests
         Assert.Equal("chat-b", fettle.Agent?.Id);
         Assert.False(box.IsDropDownOpen);
     }
+
+    [AvaloniaFact] // WOR-0130: the header's move cursor is inherited, by the dropdown's popup too, so it read as "drag me"
+    public async Task The_chats_dropdown_and_the_header_buttons_dont_show_the_move_cursor()
+    {
+        using var app = DargApp.Make();
+        Seed(app, "chat-a", "Newest chat", 1);
+        Seed(app, "chat-b", "Middle chat", 2);
+        await app.Start();
+        var fettle = app.Main.Mascot;
+        fettle.Open = true;
+        await DargApp.Settle();
+        var box = Dropdown(app);
+        box.SelectedItem = fettle.Chats.First(); // a chat open, so + New chat and × show too
+        await DargApp.Settle();
+
+        var header = app.Window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "MascotHeader");
+        var move = header.Cursor;
+        Assert.NotNull(move); // the header itself still says it can be dragged
+        Assert.NotSame(move, box.Cursor);
+        var buttons = header.GetVisualDescendants().OfType<Button>().Where(b => b.FindAncestorOfType<ComboBox>() is null).ToList();
+        Assert.True(buttons.Count >= 5, $"the header's buttons: {buttons.Count}");
+        Assert.All(buttons, b => Assert.NotSame(move, b.Cursor));
+        Assert.Null(ToolTip.GetTip(header)); // on the header it showed over the dropdown and the buttons as well
+
+        box.IsDropDownOpen = true;
+        await DargApp.Settle();
+        var items = app.Window.GetVisualDescendants().OfType<ComboBoxItem>().ToList();
+        Assert.NotEmpty(items);
+        Assert.All(items, i => Assert.NotSame(move, i.Cursor));
+    }
 }
