@@ -234,7 +234,12 @@ public sealed class DargApp : IDisposable
     public void Dispose()
     {
         if (_window is null) return;
-        foreach (var a in Agents.Agents.ToList()) a.CloseSession("tests");
+        // close the projects, not just their agents' sessions: the window closing leaves their view models, board
+        // watchers and timers alive in the shared app, and work they had queued (a send-back's rework agent still
+        // picking its model, a QA agent due when a turn ends) started agents during the next test, logging into its
+        // FAKE_LOG (WOR-0131). Close ends every agent, those mid-pick too, stops the watchers and starts nothing after.
+        foreach (var p in Main.Projects.ToList()) p.Close();
+        foreach (var a in Main.Mascot.Live().ToList()) a.Shut();
         _window.Close();
         Dispatcher.UIThread.RunJobs();
     }

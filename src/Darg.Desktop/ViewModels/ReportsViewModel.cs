@@ -211,9 +211,20 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
         Selected = Reports.FirstOrDefault(r => r.Report.File == keep);
         Count();
         HasReports = _all.Count > 0;
+        // an action's message (Clean up, Archive, Approve, an error) stays a while: the files it wrote make the
+        // folder watcher reload 400 ms later, and that reload put this line over it before it could be read (WOR-0131)
+        if (DateTime.UtcNow < _heldUntil) return;
+        _summary = true;
         Status = _all.Count == 0 ? $"No reports yet. Card agents file them in {Folder} when they finish."
             : $"{_all.Count} {(_all.Count == 1 ? "report" : "reports")}, {Unread} unread · {Folder}";
+        _summary = false;
     }
+
+    /// <summary>How long an action's message holds the status line against reloads.</summary>
+    public static TimeSpan Hold { get; set; } = TimeSpan.FromSeconds(8);
+    DateTime _heldUntil;
+    bool _summary;
+    partial void OnStatusChanged(string value) => _heldUntil = _summary ? default : DateTime.UtcNow + Hold;
 
     /// <summary>Put each kind's count in its label, keeping the pick (replacing an item can clear the selection).</summary>
     void RelabelKinds(List<AgentReport> source)

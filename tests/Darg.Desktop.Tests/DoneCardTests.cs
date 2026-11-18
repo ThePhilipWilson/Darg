@@ -76,6 +76,10 @@ public class DoneCardTests
         var done = app.Card("finished long ago", "Done");
         var open = app.Card("still being worked on", "To Do");
         await app.Start();
+        // its QA report is still in the list, as a card done before WOR-0092 left it: Clean up archives it and
+        // writes the done report, file changes the reports folder's watcher reloads the list for
+        File.WriteAllText(Path.Combine(app.Project.Reports!.Folder, $"20261101-0900-{done.Id}-qa.md"),
+            $"---\nstatus: qa\ncard: {done.Id}\ntitle: finished long ago\ndate: 2026-11-01 09:00\nread: true\n---\n\n## Changed\n\nThe thing.\n");
         // agents left on a done card from before this change: work on the card where it is (work-on leaves Done alone)
         await app.Api("work-on", new { project = "proj", card = done.Id });
         await app.Api("work-on", new { project = "proj", card = open.Id });
@@ -90,6 +94,11 @@ public class DoneCardTests
 
         Assert.DoesNotContain(stranded, app.Agents.Agents);
         Assert.Contains(other, app.Agents.Agents); // a card that isn't done keeps its agent
+        Assert.Contains("1 agent on done cards forgotten", app.Project.Reports.Status);
+        // Clean up wrote the card's done report, so the folder watcher reloads the list 400 ms later: what Clean up
+        // said must still be there after that, not the list's own "n reports" line (QA, WOR-0131)
+        Assert.Contains("1 QA report archived, 1 done report written", app.Project.Reports.Status);
+        await DargApp.Settle(1500);
         Assert.Contains("1 agent on done cards forgotten", app.Project.Reports.Status);
     }
 }
