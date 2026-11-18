@@ -73,7 +73,9 @@ public class CardWorkTests
         var card = app.Card("fix the logo aliasing", "QA Ready", "The logo's edges are jagged." + HowToCheck);
         await app.Start();
 
+        app.Project.Section = Section.Board;
         await app.Api("send-back", new { project = "proj", card = card.Id, notes = "still jagged at 150% zoom" });
+        Assert.Equal(Section.Board, app.Project.Section); // WOR-0129: no jump to Agents
 
         var after = app.Read(card.Id);
         Assert.Equal("In Progress", after.Status);

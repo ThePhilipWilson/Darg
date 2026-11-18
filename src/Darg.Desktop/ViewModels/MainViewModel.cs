@@ -588,7 +588,7 @@ public partial class ProjectViewModel : ObservableObject
                 var id = AgentsViewModel.NewId();
                 var prompt = ReportStore.ReworkPreface(notes) + Environment.NewLine + Environment.NewLine + CardPrompt(card, file, [], id);
                 Watch(Agents.Start(prompt, CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title} (sent back)", job: CardJob(card), id: id, purpose: AgentPurposes.Rework));
-                Section = Section.Agents;
+                // stays on the board (WOR-0129): the card just moves to In Progress
             };
             // not tied to the card (no cardId): once the card is filled out, Work on is free straight away.
             // The board stays on screen (WOR-0103): improving is a background chore, and a question it asks
