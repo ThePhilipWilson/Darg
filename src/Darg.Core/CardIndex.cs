@@ -1,0 +1,83 @@
+namespace Darg.Core;
+
+/// <summary>A card as found on one of a project's boards: which board, which list (its column's name, or Backlog,
+/// Completed, Unsorted), the card file's full path, and whether that list is the board's QA, attention or done one.</summary>
+public sealed record BoardCard(Card Card, string Board, string Column, string File, bool InQa, bool InAttention, bool Done);
+
+/// <summary>Every card on a project's boards, for the API's <c>cards</c> and <c>card</c> commands (WOR-0140), so a
+/// question about the board ("which QA cards have no agent?") is one read instead of grepping card files.</summary>
+public static class CardIndex
+{
+    /// <summary>The words <c>column</c> takes besides a column's name: the board's QA, attention and done lists,
+    /// whatever each board calls them (done is the last column and Completed).</summary>
+    public static readonly IReadOnlyList<string> Kinds = ["qa", "attention", "done"];
+
+    /// <summary>Every card on every board in the boards folder, board by board in board.json's order.</summary>
+    public static List<BoardCard> Read(string? boardsFolder)
+    {
+        var all = new List<BoardCard>();
+        if (boardsFolder is null) return all;
+        foreach (var name in BoardStore.List(boardsFolder))
+        {
+            Board board;
+            try { board = BoardStore.Load(Path.Combine(boardsFolder, name)); }
+            catch (Exception e) when (e is IOException or System.Text.Json.JsonException or UnauthorizedAccessException) { continue; }
+            var qa = BoardColumns.Qa(board.Columns) is { } q ? BoardStore.PlaceOf(q, board.Columns) : null;
+            var attention = AttentionColumn.Find(board.Columns) is { } a ? BoardStore.PlaceOf(a, board.Columns) : null;
+            var last = board.Columns.LastOrDefault()?.Id;
+            foreach (var (listId, listName) in board.ListOrder())
+                foreach (var card in board.Lists.GetValueOrDefault(listId) ?? [])
+                    all.Add(new BoardCard(card, name, listName, Path.GetFullPath(Path.Combine(board.Folder, "items", card.File)),
+                        listId == qa, listId == attention, listId == Board.Completed || listId == last));
+        }
+        return all;
+    }
+
+    /// <summary>The card with this id on any of the boards (case aside), or null.</summary>
+    public static BoardCard? Find(string? boardsFolder, string id) =>
+        Read(boardsFolder).FirstOrDefault(c => c.Card.Id.Equals(id.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Whether the card sits in <paramref name="column"/>: a list's name, or one of <see cref="Kinds"/>.</summary>
+    public static bool InColumn(BoardCard c, string column)
+    {
+        column = column.Trim();
+        if (c.Column.Equals(column, StringComparison.OrdinalIgnoreCase)) return true;
+        return column.ToLowerInvariant() switch
+        {
+            "qa" => c.InQa,
+            "attention" => c.InAttention,
+            "done" => c.Done,
+            _ => false,
+        };
+    }
+
+    /// <summary>The cards that pass every filter given: a column (<see cref="InColumn"/>), a label (case aside), and text
+    /// found in the id, title or description. A null or empty filter passes everything.</summary>
+    public static IEnumerable<BoardCard> Filter(IEnumerable<BoardCard> cards, string? column, string? label, string? text) =>
+        cards.Where(c =>
+            (string.IsNullOrWhiteSpace(column) || InColumn(c, column))
+            && (string.IsNullOrWhiteSpace(label) || c.Card.Labels.Any(l => l.Equals(label.Trim(), StringComparison.OrdinalIgnoreCase)))
+            && (string.IsNullOrWhiteSpace(text) || new[] { c.Card.Id, c.Card.Title, c.Card.Description }.Any(s => s.Contains(text.Trim(), StringComparison.OrdinalIgnoreCase))));
+
+    /// <summary>The card's <c>## QA notes</c> section (<see cref="QaNotes"/>), without its heading; "" when it has none.</summary>
+    public static string QaNotesOf(string cardText)
+    {
+        var text = "\n" + cardText.Replace("\r\n", "\n");
+        var at = text.IndexOf("\n" + QaNotes.Heading + "\n", StringComparison.Ordinal);
+        if (at < 0) return "";
+        var start = at + QaNotes.Heading.Length + 2;
+        var next = text.IndexOf("\n## ", start, StringComparison.Ordinal);
+        return (next >= 0 ? text[start..next] : text[start..]).Trim();
+    }
+
+    /// <summary>The reports filed for the card, newest first: the reports folder's, then its archive's (top level and each story's).</summary>
+    public static List<AgentReport> ReportsFor(string reportsFolder, string cardId)
+    {
+        var all = ReportStore.List(reportsFolder)
+            .Concat(ReportStore.List(ReportArchive.Folder(reportsFolder)))
+            .Concat(ReportArchive.List(reportsFolder));
+        return all.Where(r => r.Card.Equals(cardId, StringComparison.OrdinalIgnoreCase))
+            .DistinctBy(r => Path.GetFullPath(r.File), StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(r => r.Date, StringComparer.Ordinal).ThenByDescending(r => r.Id, StringComparer.Ordinal).ToList();
+    }
+}
