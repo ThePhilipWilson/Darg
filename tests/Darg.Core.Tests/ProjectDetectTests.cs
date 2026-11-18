@@ -43,6 +43,24 @@ public sealed class ProjectDetectTests : IDisposable
     }
 
     [Fact]
+    public void A_repos_own_docs_win_over_the_vaults_and_its_new_board_goes_in_dot_darg_ignored_by_git()
+    {
+        var vaultCode = Dir("vault/Code");
+        Dir("vault/Code/Alpha");
+        Dir("vault/Code/Night-Market");
+        var root = Dir("studio/night-market");
+        Directory.CreateDirectory(Path.Combine(root, ".git"));
+        Dir("studio/night-market/docs");
+        var others = new List<ProjectConfig> { new() { Id = "alpha", Name = "Alpha", Docs = Path.Combine(vaultCode, "Alpha") } };
+        var (p, _) = ProjectDetect.FromFolder(root, others, [], Dir("data"));
+        Assert.Equal(Path.Combine(root, "docs").Replace('\\', '/'), p.Docs);
+        Assert.True(File.Exists(Path.Combine(root, ".darg", "tasks", "Main", "board.json")));
+        Assert.Equal(Path.Combine(root, ".darg", "tasks").Replace('\\', '/'), p.Boards);
+        Assert.Contains(".darg/", File.ReadAllLines(Path.Combine(root, ".git", "info", "exclude")));
+        Assert.False(Directory.Exists(Path.Combine(_dir, "data", "projects")));
+    }
+
+    [Fact]
     public void A_studio_folder_holding_several_repos()
     {
         var root = Dir("Studio");

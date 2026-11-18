@@ -65,7 +65,7 @@ public class CardWorkTests
         Assert.Equal("stdio", args[args.IndexOf("--permission-prompt-tool") + 1]);
         Assert.Equal("stream-json", args[args.IndexOf("--input-format") + 1]);
         var dirs = args.Select((a, i) => (a, i)).Where(x => x.a == "--add-dir").Select(x => Path.GetFullPath(args[x.i + 1])).ToList();
-        var project = Path.Combine(app.Home, "projects", "proj");
+        var project = Path.Combine(app.Repo, ".darg"); // WOR-0144: a project with a repo keeps these there
         foreach (var folder in new[] { "reports", "mistakes" })
             Assert.Contains(dirs, d => d.StartsWith(Path.Combine(project, folder), StringComparison.OrdinalIgnoreCase));
         Assert.Contains(dirs, d => d.StartsWith(Path.Combine(project, "artifacts"), StringComparison.OrdinalIgnoreCase));
