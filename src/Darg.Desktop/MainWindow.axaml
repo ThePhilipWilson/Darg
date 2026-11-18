@@ -161,9 +161,9 @@
               </DockPanel>
               <!-- two tabs so the chat and the notifications never show at once -->
               <StackPanel Orientation="Horizontal" Spacing="4">
-                <ToggleButton Content="Chat" Command="{Binding ShowChatTabCommand}" IsChecked="{Binding !ShowNotifications, Mode=OneWay}"
+                <ToggleButton Content="Chat" Command="{Binding ShowChatTabCommand}" Click="TabClicked" IsChecked="{Binding !ShowNotifications, Mode=OneWay}"
                               Padding="10,2" FontSize="11" Background="Transparent" AutomationProperties.Name="Fettle chat tab"/>
-                <ToggleButton Command="{Binding ShowNotificationsTabCommand}" IsChecked="{Binding ShowNotifications, Mode=OneWay}"
+                <ToggleButton Command="{Binding ShowNotificationsTabCommand}" Click="TabClicked" IsChecked="{Binding ShowNotifications, Mode=OneWay}"
                               Padding="10,2" FontSize="11" Background="Transparent"
                               Content="{Binding Notifications.Count, StringFormat='🔔 Notifications {0}'}"
                               ToolTip.Tip="Everything agents have notified you of this run" AutomationProperties.Name="Notifications"/>
