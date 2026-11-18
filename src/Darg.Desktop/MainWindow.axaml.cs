@@ -116,9 +116,12 @@ public partial class MainWindow : Window
             shift.Y = Math.Clamp(shift.Y, -home.Y, Math.Max(-home.Y, h - box.Bounds.Height - home.Y));
         }
 
+        // a dropdown's items live in a popup, not under the ComboBox in the visual tree, so a press on one reaches this
+        // handle by the logical tree: check for the popup's own root or a list item too (WOR-0130)
         bool OnControl(object? source) => source is Avalonia.Visual v &&
             (v as Control ?? v.FindAncestorOfType<Control>()) is { } c &&
-            (c is Button or ComboBox || c.FindAncestorOfType<Button>() is not null || c.FindAncestorOfType<ComboBox>() is not null);
+            (c is Button or ComboBox or ListBoxItem || c.FindAncestorOfType<Button>() is not null || c.FindAncestorOfType<ComboBox>() is not null
+                || c.FindAncestorOfType<ListBoxItem>() is not null || TopLevel.GetTopLevel(c) != this);
 
         bool dragging = dragFrom <= 0, moved = false;
         Avalonia.Point? pressedAt = null;
