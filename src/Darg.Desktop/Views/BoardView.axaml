@@ -286,6 +286,13 @@
             <StackPanel Spacing="6">
               <TextBlock Classes="dim small" Text="Decide"/>
               <TextBlock Text="{Binding DecisionQuestion}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+              <!-- WOR-0147: what the question is about, from the card's markdown images -->
+              <ItemsControl ItemsSource="{Binding DecisionPictures}" IsVisible="{Binding HasDecisionPictures}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate><Image Source="{Binding}" Stretch="Uniform" MaxHeight="360" HorizontalAlignment="Left"/></DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
               <ItemsControl ItemsSource="{Binding DecisionChoices}">
                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>

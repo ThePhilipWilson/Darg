@@ -1455,6 +1455,10 @@ public partial class CardEditor : ObservableObject
     public string DecisionQuestion => Decision?.Question ?? "";
     public string DecisionContext => Decision?.Context ?? "";
     public bool HasDecisionContext => DecisionContext.Length > 0;
+    /// <summary>WOR-0147: the pictures anywhere in the card file (decision, How to check, description), shown in the
+    /// decision box so a question about how something looks has the thing beside it.</summary>
+    public IReadOnlyList<Avalonia.Media.Imaging.Bitmap> DecisionPictures { get; } = [];
+    public bool HasDecisionPictures => DecisionPictures.Count > 0;
     public string DecisionAskedBy => Decision is null ? "" : Decision.Drafted ? "Drafted by Darg from the card: check it fits."
         : Decision.AskedBy.Length > 0 ? "Asked by " + Decision.AskedBy : "";
     public IReadOnlyList<DecisionChoice> DecisionChoices { get; } = [];
@@ -1492,6 +1496,12 @@ public partial class CardEditor : ObservableObject
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { text = ""; }
             Decision = CardDecision.Read(text) is { Valid: true } d ? d : null;
             WhyHere = CardDecision.WhyHere(text);
+            if (Decision is not null)
+                DecisionPictures = Darg.Core.Pictures.InDescription(Path.Combine(folder, "items"), text).Select(p =>
+                {
+                    try { using var f = File.OpenRead(p); return Avalonia.Media.Imaging.Bitmap.DecodeToWidth(f, 720); }
+                    catch (Exception) { return null; }
+                }).OfType<Avalonia.Media.Imaging.Bitmap>().ToList();
             // recommended first, as AskUserQuestion puts it
             DecisionChoices = (Decision?.Options ?? []).OrderByDescending(o => o.Recommended)
                 .Select(o => new DecisionChoice(o, new RelayCommand(() => Answer(o.Label)))).ToList();
