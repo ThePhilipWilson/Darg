@@ -140,6 +140,9 @@
               <Ellipse Classes="dot" Width="7" Height="7" VerticalAlignment="Center"/>
               <TextBlock Classes="state small" Text="{Binding StateText}" VerticalAlignment="Center"/>
             </StackPanel>
+            <Button DockPanel.Dock="Left" Margin="0,0,12,0" Padding="6,1" MinHeight="0" FontSize="11" Background="Transparent"
+                    Content="{Binding CardLabel}" IsVisible="{Binding HasCard}" Command="{Binding ShowCardCommand}"
+                    ToolTip.Tip="Show this agent's card on the board" AutomationProperties.Name="Show card"/>
             <TextBlock DockPanel.Dock="Left" Margin="0,0,12,0" Classes="dim small mono" Text="{Binding Model}" VerticalAlignment="Center"/>
             <TextBlock DockPanel.Dock="Left" Margin="0,0,12,0" Classes="dim small" Text="{Binding Billing}" VerticalAlignment="Center"/>
             <TextBlock Classes="dim small mono" Text="{Binding Cwd}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"

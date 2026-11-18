@@ -233,6 +233,7 @@ public partial class AgentsViewModel : ObservableObject
         agent.MistakeLogFile ??= MistakeLog.PathFor(project.Id);
         agent.ProjectName ??= project.Name;
         agent.CardDone = IsCardDone(agent.CardId);
+        agent.OpenCard = id => OpenCard?.Invoke(id) == true;
         agent.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AgentViewModel.CanContinueAfterReset)) AnyOutOfUsage = Agents.Any(a => a.CanContinueAfterReset);
@@ -255,6 +256,8 @@ public partial class AgentsViewModel : ObservableObject
 
     /// <summary>Whether a board card is done: set by the project (the board's view), null: no board here.</summary>
     public Func<string, bool>? CardIsDone { get; set; }
+    /// <summary>Shows a card on the board (WOR-0143); false when it isn't on the board shown.</summary>
+    public Func<string, bool>? OpenCard { get; set; }
     bool IsCardDone(string? cardId) => cardId is not null && CardIsDone?.Invoke(cardId) == true;
 
     /// <summary>Re-read every card agent's card after the boards change (a card moved to Done shows on its agent).</summary>
@@ -521,6 +524,16 @@ public partial class AgentViewModel : ObservableObject
     public string Id { get; private init; } = Guid.NewGuid().ToString("N")[..10];
     /// <summary>The board card this agent was started on, if any.</summary>
     public string? CardId { get; }
+    public bool HasCard => !string.IsNullOrEmpty(CardId);
+    public string CardLabel => $"↗ {CardId}";
+    /// <summary>Set by the agents list: shows the card; false when it isn't on the board shown.</summary>
+    public Func<string, bool>? OpenCard { get; set; }
+    [RelayCommand]
+    void ShowCard()
+    {
+        if (CardId is not { } id) return;
+        if (OpenCard?.Invoke(id) != true) Activity = $"{id} isn't on the board shown now.";
+    }
     /// <summary>What it was started for (<see cref="AgentPurposes"/>); null for one saved before agents had one.</summary>
     public string? Purpose { get; init; }
     /// <summary>A question, a permission ask, or the end of a long turn (<see cref="Decisions"/>, WOR-0078).</summary>
