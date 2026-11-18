@@ -31,7 +31,7 @@
         </DockPanel>
         <DockPanel DockPanel.Dock="Top" Margin="12,8,8,4">
           <Button DockPanel.Dock="Right" Content="Clean up" Command="{Binding CleanUpCommand}" Margin="0,0,6,0"
-                  ToolTip.Tip="Move the QA reports of done cards to the archive, and write the done report where one is missing"/>
+                  ToolTip.Tip="Move the QA reports of done cards to the archive, write the done report where one is missing, and forget the agents left on done cards"/>
           <Button DockPanel.Dock="Right" Content="Mark all read" Command="{Binding MarkAllReadCommand}" IsEnabled="{Binding HasUnread}"/>
           <CheckBox Content="Unread only" IsChecked="{Binding UnreadOnly}" VerticalAlignment="Center"/>
         </DockPanel>

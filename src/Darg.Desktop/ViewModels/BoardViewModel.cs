@@ -730,7 +730,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public IReadOnlyList<Column> Columns => _board?.Columns ?? [];
 
     /// <summary>Every card in the done (last) column of each of the project's boards, with its card file (WOR-0112).</summary>
-    public List<(Card Card, string File)> DoneCards()
+    /// <param name="completedToo">Cards whose Status is Completed count as well (they are done; IsDone says so).</param>
+    public List<(Card Card, string File)> DoneCards(bool completedToo = false)
     {
         var found = new List<(Card, string)>();
         foreach (var b in BoardStore.List(_project.Boards))
@@ -741,7 +742,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
                 var board = BoardStore.Load(folder);
                 if (board.Columns.LastOrDefault()?.Name is not { } last) continue;
                 var place = BoardStore.PlaceOf(last, board.Columns);
-                foreach (var c in board.AllCards.Where(c => BoardStore.PlaceOf(c.Status, board.Columns) == place))
+                foreach (var c in board.AllCards.Where(c => BoardStore.PlaceOf(c.Status, board.Columns) is var p && (p == place || completedToo && p == Board.Completed)))
                     found.Add((c, Path.GetFullPath(Path.Combine(folder, "items", c.File))));
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }

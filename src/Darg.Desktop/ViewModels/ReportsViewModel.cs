@@ -116,9 +116,11 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     void CleanUp()
     {
         if (CleanUpDone is null) return;
-        try { Status = CleanUpDone(); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Clean up stopped: {e.Message}"; }
+        string said;
+        try { said = CleanUpDone(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { said = $"Clean up stopped: {e.Message}"; }
         Reload();
+        Status = said; // after the reload, which sets its own line: what Clean up did stays on screen
     }
 
     [RelayCommand]
