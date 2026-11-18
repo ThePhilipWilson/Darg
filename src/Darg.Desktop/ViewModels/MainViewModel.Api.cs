@@ -39,6 +39,9 @@ public partial class MainViewModel
         Add("to-attention", "move a card to For Human Attention with the decision Philip has to make: {project, card, question, options, context?}. " +
                             "options is a list of 2 to 4 lines, each Label (recommended) → done|back|stay: what it means (one marked recommended; no arrow sends his answer to an agent). " +
                             "Refused without a question and two options.", ToAttention);
+        Add("new-card", "make a card in a project's backlog, on its inbox board (Inbox, Main or Backlog), as + Card does: {project, title, description?, " +
+                        "type?: " + string.Join("|", CardTypes.All) + " (else guessed from the words), labels? (a list, or separated by commas), priority?}. " +
+                        "Returns its id, board and file; Haiku then moves it to the story board it fits, if the project has others. Use this rather than writing card files.", NewCard);
         Add("say","send a message to a project's agent, as if Philip typed it: {id, text}. A saved agent resumes its session.", Say);
         Add("close-agents", "close agents' sessions: {ids} (a list, or ids separated by spaces). They stay listed and carry on when sent a message.", a => CloseAgents(a.List("ids")));
         Add("forget-agents", "forget agents, as the × in the Agents list does: {ids}. Each one's session ends, it leaves the list and its saved file goes " +
@@ -319,6 +322,41 @@ public partial class MainViewModel
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new ApiError($"Couldn't write the decision into {id}: {e.Message}"); }
         if (card.Board.MoveToAttention(id) is { } error) throw new ApiError(error);
         return $"Moved {id} to For Human Attention, asking: {decision.Question}";
+    }
+
+    /// <summary>A card made in one call (WOR-0139): Fettle wrote card files and board.json by hand, 4 to 6 calls a card,
+    /// and its cards skipped the story-board placement a note's ticket gets.</summary>
+    string NewCard(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (p.Board?.InboxFolder is not { } inbox) throw new ApiError($"{p.Name} has no board.");
+        var title = a.Need("title");
+        var description = a.Get("description") ?? "";
+        // labels as a list, or a string split on commas only: a label can have spaces in it
+        IReadOnlyList<string> labels = [];
+        if (a.Get("labels") is { } raw)
+        {
+            bool isList;
+            try { isList = JsonNode.Parse(raw) is JsonArray; }
+            catch (System.Text.Json.JsonException) { isList = false; }
+            labels = isList ? a.List("labels") : raw.Split([',', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+        }
+        var type = a.Get("type") is { Length: > 0 } t
+            ? CardTypes.All.FirstOrDefault(x => x.Equals(t.Trim(), StringComparison.OrdinalIgnoreCase))
+              ?? throw new ApiError($"No card type \"{t}\". Types: {string.Join(", ", CardTypes.All)}.")
+            : CardTypes.Guess(title + "\n" + description, labels);
+        Card card;
+        try { card = BoardStore.Create(inbox, title, description, labels, (a.Get("priority") ?? "").Trim(), type); }
+        catch (ArgumentException e) { throw new ApiError(e.Message); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new ApiError($"Couldn't make the card: {e.Message}"); }
+        p.Board.PlaceLater(inbox, card.Id);
+        p.Board.ReloadAll();
+        return Json(new JsonObject
+        {
+            ["id"] = card.Id, ["title"] = card.Title, ["type"] = card.Type, ["board"] = Path.GetFileName(inbox.TrimEnd('\\', '/')),
+            ["file"] = Path.GetFullPath(Path.Combine(inbox, "items", card.File)),
+            ["placing"] = p.Board.Boards.Count > 1,
+        });
     }
 
     string Say(ApiArgs a)
