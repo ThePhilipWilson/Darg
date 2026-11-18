@@ -191,6 +191,9 @@ public partial class MainViewModel : ObservableObject
             case Section.Mistakes when p.Mistakes is not null:
                 s.Append($", mistake log {p.Mistakes.File}");
                 break;
+            case Section.Context:
+                s.Append($", context page (CLAUDE.md files and memory for {p.Config.WorkingFolder()})");
+                break;
             case Section.GitHub:
                 s.Append($", repos {string.Join(", ", p.Config.Repos)}");
                 break;
@@ -422,7 +425,7 @@ public record NotificationEntry(string ProjectId, string AgentId, string Project
     public string Sub => $"{Project} · {At:HH:mm}";
 }
 
-public enum Section { Home, Board, Notes, Docs, Agents, Flows, Reports, Artifacts, Mistakes, Code, GitHub, Preview, Terminal }
+public enum Section { Home, Board, Notes, Docs, Agents, Flows, Reports, Artifacts, Mistakes, Context, Code, GitHub, Preview, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -445,6 +448,8 @@ public partial class ProjectViewModel : ObservableObject
     public ArtifactsViewModel? Artifacts { get; }
     /// <summary>The project's mistake log, read and counted (there with the agents feature, which writes it).</summary>
     public MistakesViewModel? Mistakes { get; }
+    /// <summary>The instructions, memory and added context agents start with, to read (WOR-0145; every project has it).</summary>
+    public ContextViewModel Context { get; }
     /// <summary>Where a project opens: its README and what's going on (every project has one).</summary>
     public HomeViewModel Home { get; }
     /// <summary>What card agents filed when they finished (there with the agents feature).</summary>
@@ -455,7 +460,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>A card's decision was answered (WOR-0124): its notification goes from the list.</summary>
     public event Action<string>? CardSettled;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnFlows), nameof(OnReports), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnFlows), nameof(OnReports), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnContext), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -473,6 +478,7 @@ public partial class ProjectViewModel : ObservableObject
     public bool OnFlows => Section == Section.Flows;
     public bool OnArtifacts => Section == Section.Artifacts;
     public bool OnMistakes => Section == Section.Mistakes;
+    public bool OnContext => Section == Section.Context;
     public bool OnReports => Section == Section.Reports;
     public bool OnTerminal => Section == Section.Terminal;
 
@@ -487,6 +493,7 @@ public partial class ProjectViewModel : ObservableObject
         LightBrush = new SolidColorBrush(Mix(baseColour, Colors.White, 0.35));
         DarkBrush = new SolidColorBrush(Mix(baseColour, Colors.Black, 0.25));
         ShavingBrush = new SolidColorBrush(Mix(baseColour, Colors.Black, 0.4));
+        Context = new ContextViewModel(config);
         if (config.Uses(Features.Board)) Board = new BoardViewModel(config);
         if (config.Uses(Features.Agents))
         {
@@ -757,6 +764,7 @@ public partial class ProjectViewModel : ObservableObject
         if (value == Section.GitHub) Hub?.Load();
         if (value == Section.Artifacts) Artifacts?.Refresh();
         if (value == Section.Mistakes) Mistakes?.Reload();
+        if (value == Section.Context) Context.Reload();
         if (value == Section.Reports) Reports?.Reload();
         if (value == Section.Preview) _ = Preview?.Open();
     }
@@ -772,7 +780,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>Whether this project has a section (its feature ticked and what it needs set up).</summary>
     public bool Has(Section s) => s switch
     {
-        Section.Home => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Flows => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null, Section.Reports => Reports is not null,
+        Section.Home => true, Section.Context => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Flows => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null, Section.Reports => Reports is not null,
         Section.Code => Code is not null, Section.GitHub => Hub is not null, Section.Preview => Preview is not null, _ => Consoles is not null,
     };
 

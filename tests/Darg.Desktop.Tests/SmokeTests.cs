@@ -27,6 +27,7 @@ public class SmokeTests
     [InlineData(Section.Flows)]
     [InlineData(Section.Reports)]
     [InlineData(Section.Mistakes)]
+    [InlineData(Section.Context)]
     [InlineData(Section.Code)]
     public async Task Every_section_draws(Section section)
     {
