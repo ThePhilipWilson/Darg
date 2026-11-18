@@ -31,7 +31,7 @@ public sealed class WorkTimer
     /// <summary>The timer as claude-code-timer is set up here; null when it isn't installed (no timings folder).</summary>
     public static WorkTimer? FromConfig(string? home = null)
     {
-        home ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        home ??= UserHome.Folder;
         var folder = Path.Combine(home, ".claude", "stats", "timings");
         var breakAfter = DefaultBreak;
         try

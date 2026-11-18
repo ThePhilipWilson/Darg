@@ -74,7 +74,7 @@ public static class ClaudeDraw
     /// <summary>The daemon script, wherever claude-draw is installed: as a skills folder, or as a plugin.</summary>
     public static string? DaemonScript()
     {
-        var claude = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
+        var claude = UserHome.Claude;
         var skill = Path.Combine(claude, "skills", "claude-draw", "server", "daemon.js");
         if (File.Exists(skill)) return skill;
         var plugins = Path.Combine(claude, "plugins");

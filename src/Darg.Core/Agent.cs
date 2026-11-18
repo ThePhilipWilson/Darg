@@ -66,7 +66,7 @@ public static class AgentChoices
     {
         if (Environment.GetEnvironmentVariable("ANTHROPIC_MODEL") is { Length: > 0 } env) return env;
         home ??= Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR") is { Length: > 0 } dir ? dir
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
+            : UserHome.Claude;
         var files = new List<string>();
         if (!string.IsNullOrEmpty(cwd))
         {
