@@ -39,8 +39,7 @@ public static partial class FlowStore
 
     /// <summary>One project's own flows (WOR-0077), beside its artifacts and reports; not made until a flow is written there.</summary>
     public static string ProjectFolder(string projectId, string? instanceFolder = null) =>
-        Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "projects",
-            string.Concat(projectId.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)), "flows");
+        Path.Combine(ProjectData.Root(projectId, instanceFolder), "flows");
 
     /// <summary>The flows a project can run: the shared ones and its own, by name. A project's flow with the
     /// same name as a shared one stands in for it there.</summary>

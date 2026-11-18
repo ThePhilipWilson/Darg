@@ -97,7 +97,7 @@ public static partial class ReportStore
 {
     /// <summary>In a folder of its own, so a card agent can be given that folder (--add-dir) and nothing beside it.</summary>
     public static string FolderFor(string projectId, string? instanceFolder = null) =>
-        Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "projects", Safe(projectId.Length > 0 ? projectId : "default"), "reports");
+        Path.Combine(ProjectData.Root(projectId.Length > 0 ? projectId : "default", instanceFolder), "reports");
 
     /// <summary>Every report in the folder, newest first (file names start with the date and time).</summary>
     public static List<AgentReport> List(string folder)

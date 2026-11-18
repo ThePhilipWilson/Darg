@@ -23,7 +23,7 @@ public static partial class MistakeLog
 
     /// <summary>In a folder of its own, so an agent can be given that folder (--add-dir) and not the board and notes beside it.</summary>
     public static string PathFor(string projectId, string? instanceFolder = null) =>
-        Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "projects", Safe(projectId.Length > 0 ? projectId : "default"), "mistakes", FileName);
+        Path.Combine(ProjectData.Root(projectId.Length > 0 ? projectId : "default", instanceFolder), "mistakes", FileName);
 
     /// <summary>The categories the log starts with; an agent may add one when none fits.</summary>
     public static readonly string[] Categories =

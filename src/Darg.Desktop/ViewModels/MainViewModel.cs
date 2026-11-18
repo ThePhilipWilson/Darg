@@ -22,9 +22,12 @@ public partial class MainViewModel : ObservableObject
     public IBrush FettleShaving => Selected?.ShavingBrush ?? FettleShavingDefault;
     public IBrush FettleEdge => Selected?.Brush ?? Brushes.Orange;
     const string MascotId = "~bench";
+    bool _movedShown;
 
     public MainViewModel()
     {
+        // before anything opens a path: a project's working files move into .darg in its repo (WOR-0144)
+        try { Moved = ProjectData.Migrate(); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         var config = InstanceConfig.Load();
         InstanceFile = InstanceConfig.FilePath();
         foreach (var p in config.Projects) Projects.Add(Make(p));
@@ -383,8 +386,19 @@ public partial class MainViewModel : ObservableObject
         BringToFront?.Invoke();
     }
 
+    /// <summary>What moved into .darg at start (WOR-0144), said in the status line until another project is picked.</summary>
+    [ObservableProperty] public partial string Moved { get; set; } = "";
+
+    /// <summary>The window's bottom line: what moved at start, else the project's.</summary>
+    public string FooterLine => Moved.Length > 0 ? Moved : Selected?.StatusLine ?? "";
+
+    partial void OnMovedChanged(string value) => OnPropertyChanged(nameof(FooterLine));
+
     partial void OnSelectedChanged(ProjectViewModel? value)
     {
+        if (_movedShown) Moved = ""; // the first pick is the project opened at start; the next one clears the note
+        _movedShown = true;
+        OnPropertyChanged(nameof(FooterLine));
         foreach (var p in Projects) p.IsActive = p == value;
         OnPropertyChanged(nameof(FettleLight)); OnPropertyChanged(nameof(FettleDark));
         OnPropertyChanged(nameof(FettleShaving)); OnPropertyChanged(nameof(FettleEdge));

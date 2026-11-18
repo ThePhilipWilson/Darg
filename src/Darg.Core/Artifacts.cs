@@ -21,7 +21,7 @@ public static class ArtifactStore
 {
     /// <summary>A project's artifacts folder (one subfolder per agent).</summary>
     public static string Folder(string projectId, string? instanceFolder = null) =>
-        Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "projects", Safe(projectId), "artifacts");
+        Path.Combine(ProjectData.Root(projectId, instanceFolder), "artifacts");
 
     /// <summary>The folder one agent writes its artifacts into (made if missing, so it can be --add-dir'd).</summary>
     public static string AgentFolder(string projectId, string agentId, string? instanceFolder = null)
@@ -94,11 +94,28 @@ public static class ArtifactStore
         string full;
         try { full = Path.GetFullPath(path); } catch (Exception) { return null; }
         if (!IsArtifact(full)) return null;
-        var projects = Path.GetFullPath(Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "projects")) + Path.DirectorySeparatorChar;
+        var instance = instanceFolder ?? InstanceConfig.Folder();
+        // a project with a repo keeps its artifacts in <repo>/.darg/artifacts/<agent>/<file>
+        if (InstanceConfigOrNull(instance) is { } config)
+            foreach (var p in config.Projects)
+            {
+                if (ProjectData.RepoOf(p.Id, instance) is null) continue;
+                var own = Path.GetFullPath(Folder(p.Id, instance)) + Path.DirectorySeparatorChar;
+                if (!full.StartsWith(own, StringComparison.OrdinalIgnoreCase)) continue;
+                var rest = full[own.Length..].Split(Path.DirectorySeparatorChar);
+                return rest.Length == 2 ? (p.Id, rest[0]) : null;
+            }
+        var projects = Path.GetFullPath(Path.Combine(instance, "projects")) + Path.DirectorySeparatorChar;
         if (!full.StartsWith(projects, StringComparison.OrdinalIgnoreCase)) return null;
         var parts = full[projects.Length..].Split(Path.DirectorySeparatorChar);
         // <project>/artifacts/<agent>/<file>
         return parts.Length == 4 && parts[1].Equals("artifacts", StringComparison.OrdinalIgnoreCase) ? (parts[0], parts[2]) : null;
+    }
+
+    static InstanceConfig? InstanceConfigOrNull(string instance)
+    {
+        try { return File.Exists(InstanceConfig.FilePath(instance)) ? InstanceConfig.Load(instance) : null; }
+        catch (Exception e) when (e is IOException or JsonException) { return null; }
     }
 
     /// <summary>What an agent is told about artifacts (appended to its system prompt). Free of the characters

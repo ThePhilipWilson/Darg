@@ -39,6 +39,17 @@ public static class ProjectDetect
         // boards: a folder of Tatty-style boards (subfolders with board.json) within two levels
         var boards = FindBoards(root);
         if (boards is not null) { p.Boards = Fwd(boards); found.Add($"Boards found: {p.Boards}"); }
+        else if (p.Repos.Count > 0)
+        {
+            // Darg's own working files go in .darg in the first repo, ignored by git (WOR-0144)
+            var repo = Path.GetFullPath(p.Repos[0]);
+            var isNew = !Directory.Exists(Path.Combine(repo, ProjectData.FolderName));
+            var tasks = Path.Combine(repo, ProjectData.FolderName, "tasks");
+            NewBoard(Path.Combine(tasks, "Main"), Prefix(name));
+            if (isNew) ProjectData.Exclude(repo);
+            p.Boards = Fwd(tasks);
+            found.Add($"No boards in the folder: made an empty one (Main, {Prefix(name)}-) in {ProjectData.FolderName}/tasks in the repo, which git ignores.");
+        }
         else
         {
             var tasks = Path.Combine(dataFolder, "projects", id, "tasks");
@@ -47,15 +58,17 @@ public static class ProjectDetect
             found.Add($"No boards in the folder: made an empty one (Main, {Prefix(name)}-) in Darg's own data, not in your repo.");
         }
 
-        // docs: the vault's Code/<name> beside the other projects' docs, else a docs folder in the project
+        // docs: a docs folder in the repo wins (WOR-0144); else the vault's Code/<name> beside the other projects' docs
         var vaultCode = others.Select(o => o.Docs).OfType<string>().Select(d => Path.GetDirectoryName(Path.GetFullPath(d)))
             .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).FirstOrDefault(Directory.Exists);
         var inVault = vaultCode is null ? null : SafeDirs(vaultCode).FirstOrDefault(d =>
             Path.GetFileName(d).Equals(Path.GetFileName(root), StringComparison.OrdinalIgnoreCase) ||
             Slug(Path.GetFileName(d)) == Slug(name));
-        var local = new[] { "docs", "Docs", "doc", "documentation" }.Select(d => Path.Combine(root, d)).FirstOrDefault(Directory.Exists);
-        if (inVault is not null) { p.Docs = Fwd(inVault); found.Add($"Docs in the vault: {p.Docs}"); }
-        else if (local is not null) { p.Docs = Fwd(local); found.Add($"Docs: {p.Docs}"); }
+        var local = p.Repos.Select(Path.GetFullPath).Append(root)
+            .SelectMany(r => new[] { "docs", "Docs", "doc", "documentation" }.Select(d => Path.Combine(r, d)))
+            .FirstOrDefault(Directory.Exists);
+        if (local is not null) { p.Docs = Fwd(local); found.Add($"Docs: {p.Docs}"); }
+        else if (inVault is not null) { p.Docs = Fwd(inVault); found.Add($"Docs in the vault: {p.Docs}"); }
         else found.Add("No docs folder found; set one if the project has docs.");
 
         // GitHub account: the repo's owner, when gh is logged in as them
