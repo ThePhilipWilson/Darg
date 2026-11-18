@@ -148,10 +148,12 @@
       <Border x:Name="MascotBubble" Width="400" IsVisible="{Binding Mascot.Open}" Background="{DynamicResource Panel}" BorderBrush="{Binding FettleEdge}"
               BorderThickness="1" CornerRadius="14" BoxShadow="0 14 40 0 #90000000" HorizontalAlignment="Right">
         <DockPanel>
-          <Border x:Name="MascotHeader" DockPanel.Dock="Top" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="12,8"
-                  Background="Transparent" Cursor="SizeAll">
-            <!-- the move cursor is inherited, by a dropdown's popup too, so each control here sets its own; the tip sits on
-                 the title, or it would show over the dropdown and the buttons as well (WOR-0130) -->
+          <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
+            <StackPanel>
+            <!-- the drag handle is the title and the tabs, the part above the chats dropdown: the dropdown's row is no part of
+                 it, so it neither moves the box nor shows the move cursor (WOR-0130). The cursor is inherited, so the buttons
+                 here set their own, and the tip sits on the title or it would show over them too -->
+            <Border x:Name="MascotHeader" Background="Transparent" Cursor="SizeAll" Padding="12,8,12,6">
             <StackPanel Spacing="6">
               <DockPanel>
                 <Button DockPanel.Dock="Right" Content="–" Command="{Binding Mascot.ToggleCommand}" Padding="8,0" Background="Transparent" Cursor="Arrow"
@@ -170,8 +172,10 @@
                               Content="{Binding Notifications.Count, StringFormat='🔔 Notifications {0}'}"
                               ToolTip.Tip="Everything agents have notified you of this run" AutomationProperties.Name="Notifications"/>
               </StackPanel>
+            </StackPanel>
+            </Border>
               <!-- earlier chats: pick one to carry on with it -->
-              <Border IsVisible="{Binding !ShowNotifications}">
+              <Border IsVisible="{Binding !ShowNotifications}" Margin="12,0,12,8">
                 <DockPanel IsVisible="{Binding Mascot.Chats.Count}">
                   <Button DockPanel.Dock="Right" Content="×" Command="{Binding Mascot.ForgetCommand}" IsVisible="{Binding Mascot.HasChat}"
                           Padding="6,0" Background="Transparent" Cursor="Arrow" ToolTip.Tip="Forget this chat" AutomationProperties.Name="Forget chat"/>
