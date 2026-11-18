@@ -848,7 +848,7 @@ public partial class AgentViewModel : ObservableObject
             List<string> args = resume && SessionId is not null ? ["--resume", SessionId, .. _args] : [.. _args];
             args.AddRange(AgentChoices.LaunchArgs(_model, _effort, _mode));
             AgentSession session;
-            using (StallWatch.Shared.Section("AgentSession.Start")) session = AgentSession.Start(Cwd, extraArgs: args);
+            using (StallWatch.Shared.Section("AgentSession.Start")) session = AgentSession.Start(Cwd, extraArgs: args, apiUrl: ArtifactHost.Server?.ApiUrl);
             _session = session;
             // a session closed on request still reports its last events and its exit: they're not news
             session.Event += e => Dispatcher.UIThread.Post(() => { if (_session == session) On(e); });

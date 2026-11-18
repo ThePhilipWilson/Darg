@@ -228,8 +228,13 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
                 .Concat(p.Repos.Cast<string?>()))
             .OfType<string>().Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (var d in dirs) { yield return "--add-dir"; yield return d; }
-        yield return "--append-system-prompt";
-        yield return Briefing();
+        // WOR-0138: the briefing, with the whole command list, is far past what a .cmd shim's command line takes
+        // (8191 characters), so it goes in a file; claude reads it whole
+        var file = Path.Combine(InstanceConfig.Folder(), "fettle-briefing.md");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, Briefing());
+        yield return "--append-system-prompt-file";
+        yield return file;
     }
 
     string Briefing()
@@ -270,7 +275,9 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         else sb.AppendLine("Never commit or push.");
         if (ArtifactHost.Server is { } server)
             sb.AppendLine($$"""
-                Darg API: for anything that isn't a file edit (showing Philip a card, doc, section or agent, questions about the board (cards lists cards by column, label or text with the agent on each; card reads one whole, so don't grep card files for that), listing agents and reading their transcripts, starting an agent or putting one on a card, sending an agent a message, closing agents, running a flow or a saved command), use the API with curl. TOKEN is the text of the file artifact-token in your working folder. GET {{server.Root}}api/TOKEN lists the commands and what each takes; read it before your first call in a chat. Run one with POST {{server.Root}}api/TOKEN/NAME and its arguments as a JSON object in the body (curl -s -X POST URL -d '{"project":"x"}'). A 400 answer says what was wrong; correct it and try again.
+                Darg API: for anything that isn't a file edit (showing Philip a card, doc, section or agent, questions about the board (cards lists cards by column, label or text with the agent on each; card reads one whole, so don't grep card files for that), listing agents and reading their transcripts, starting an agent or putting one on a card, sending an agent a message, closing agents, running a flow or a saved command), use the API with curl. The environment variable DARG_API is the API's address with its token in it: run a command with POST $DARG_API/NAME and its arguments as a JSON object in the body (curl -s -X POST "$DARG_API/NAME" -d '{"project":"x"}'). Don't read the token file or fetch a list first; the commands are below, and only these exist. A 400 answer says what was wrong; correct it and try again.
+                The commands, each as name: what it does and takes:
+                {{server.Api.Help().TrimEnd()}}
                 When he asks for a change while looking at an agent ("X should also do Y", "make it handle Z", "and fix the colours"), don't send it to that agent and don't make a card yet: first ask with AskUserQuestion whether it's a new ticket or an amendment to that agent's task, with options "New ticket" (a card on that project's board, saying what he asked) and "Amend the agent's task" (send his words to the agent with say). Never pick one yourself, even when one looks obvious. Skip the question only when his words already say which ("tell the agent...", "make a ticket for...").
                 Starting agents and flows costs Philip sessions: do it only when he asks. Closing an agent that is working or needs him stops what it was doing: unless he named it, ask with AskUserQuestion first. Prefer show to telling him where something is.
                 """);

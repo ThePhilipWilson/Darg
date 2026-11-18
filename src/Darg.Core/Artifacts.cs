@@ -161,6 +161,8 @@ public sealed class ArtifactServer : IDisposable
 
     public int Port { get; }
     public string Root => $"http://localhost:{Port}/";
+    /// <summary>The Darg API's address, token included: POST to this plus /&lt;command&gt; runs one. Agents get it as DARG_API.</summary>
+    public string ApiUrl => $"{Root}api/{_token}";
     public event Action<ArtifactReply>? Reply;
     /// <summary>Set by the app: the agents it runs, as JSON (GET /agents/&lt;token&gt;). Fettle reads it.</summary>
     public Func<Task<string>>? ListAgents { get; set; }

@@ -29,6 +29,31 @@ public class FettleChatTests
         await app.Until(() => app.Prompts().Any(p => p.Contains("hello there")), "the message to reach claude");
     }
 
+    [AvaloniaFact] // WOR-0138: Fettle starts with DARG_API set and every command in its briefing, so it reads no token first
+    public async Task A_new_chat_gets_DARG_API_and_the_commands_in_its_briefing()
+    {
+        using var app = DargApp.Make();
+        await app.Start();
+        var mascot = app.Main.Mascot;
+        mascot.Compose = "hello there";
+        mascot.SendCommand.Execute(null);
+        await app.Until(() => app.ClaudeCalls().Any(c => (string?)c["kind"] == "start"), "Fettle's process to start");
+
+        var start = app.ClaudeCalls().First(c => (string?)c["kind"] == "start");
+        var api = (string?)start["darg_api"];
+        Assert.NotNull(api);
+        Assert.Matches(@"^http://localhost:\d+/api/[0-9a-f]{32}$", api);
+        var args = start["args"]!.AsArray().Select(a => (string)a!).ToList();
+        var briefing = File.ReadAllText(args[args.IndexOf("--append-system-prompt-file") + 1]); // a file: a .cmd shim takes 8191 characters of command line
+        Assert.Contains("$DARG_API", briefing);
+        Assert.DoesNotContain("read it before your first call", briefing);
+        Assert.DoesNotContain("artifact-token", briefing);
+        Assert.DoesNotContain(api, briefing); // the token goes in the environment, not the prompt
+        var names = ArtifactHost.Server!.Api.Commands.Select(c => c.Name).ToList();
+        Assert.NotEmpty(names);
+        foreach (var n in names) Assert.Contains($"{n}: ", briefing);
+    }
+
     static void Seed(DargApp app, string id, string name, int minutesAgo)
     {
         var folder = AgentStore.Folder("~bench", app.Home);
