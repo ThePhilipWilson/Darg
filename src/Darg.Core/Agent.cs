@@ -263,7 +263,9 @@ public sealed class AgentSession : IAsyncDisposable
         return File.Exists(local) ? local : null;
     }
 
-    public static AgentSession Start(string cwd, string? model = null, IEnumerable<string>? extraArgs = null)
+    /// <param name="apiUrl">The Darg API's address with the token (<see cref="ArtifactServer.ApiUrl"/>), set as DARG_API
+    /// so an agent calls a command with no token to find (WOR-0138).</param>
+    public static AgentSession Start(string cwd, string? model = null, IEnumerable<string>? extraArgs = null, string? apiUrl = null)
     {
         var claude = FindClaude() ?? throw new FileNotFoundException("Couldn't find claude. Set CLAUDE_PATH or put it on PATH.");
         var psi = new ProcessStartInfo(claude)
@@ -277,6 +279,7 @@ public sealed class AgentSession : IAsyncDisposable
             psi.ArgumentList.Add(a);
         if (model is not null) { psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model); }
         foreach (var a in extraArgs ?? []) psi.ArgumentList.Add(a);
+        if (apiUrl is not null) psi.Environment["DARG_API"] = apiUrl;
         return Run(psi);
     }
 

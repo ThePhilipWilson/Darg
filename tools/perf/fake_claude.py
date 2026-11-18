@@ -39,7 +39,7 @@ if "--output-format" in args and args[args.index("--output-format") + 1] == "tex
     print("Standard | ordinary work")
     sys.exit(0)
 
-log("start", args=args, cwd=os.getcwd())
+log("start", args=args, cwd=os.getcwd(), darg_api=os.environ.get("DARG_API"))
 
 rate = float(os.environ.get("FAKE_RATE", "5"))
 seconds = float(os.environ.get("FAKE_SECONDS", "60"))
