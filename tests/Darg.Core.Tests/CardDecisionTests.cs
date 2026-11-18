@@ -174,6 +174,7 @@ public class CardDecisionTests
         var rules = CardDecision.Rules("For Human Attention");
         Assert.Contains("## Decision", rules);
         Assert.Contains("(recommended)", rules);
+        Assert.Contains("screenshot", rules);
         Assert.DoesNotContain("\"", rules);
         Assert.DoesNotContain("<", rules);
         Assert.DoesNotContain(">", rules);

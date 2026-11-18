@@ -209,6 +209,7 @@ public sealed partial record CardDecision(string Question, IReadOnlyList<Decisio
         "- **Label** (recommended) → done: what it means. Mark exactly one (recommended). After the arrow say what picking it does: done (the card goes to done), " +
         "back (it is sent back for more work with my notes), stay (it stays for now), or leave the arrow out and my answer comes back to you as a message to act on. " +
         "Last, a line **Context:** with only what I need to answer, in a sentence or two (the detail stays in How to check). " +
+        "If the question is about how something looks, put a screenshot of it in the card as a markdown image with its full path, e.g. ![the panel](C:/path/shot.png): Darg shows it above the options, and a look okay question with nothing to look at is no use to me. " +
         "A card that lands there without one gets you a message asking for it.";
 
     /// <summary>The message to the agent that moved a card to the attention column without a decision.</summary>

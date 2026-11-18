@@ -42,6 +42,25 @@ public class DecisionTests
         Assert.Equal("", app.Crashes());
     }
 
+    /// <summary>WOR-0147: "does this look okay" with nothing to look at is no use: a picture in the card file shows in the decision box.</summary>
+    [AvaloniaFact]
+    public async Task The_decision_box_shows_a_screenshot_from_the_card()
+    {
+        using var app = DargApp.Make();
+        var png = Path.Combine(app.BoardFolder, "shot.png");
+        File.WriteAllBytes(png, Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="));
+        var withShot = Body(Decision()) + $"\n![the panel]({png.Replace('\\', '/')})\n";
+        var card = app.Card("looks", BoardStore.AttentionName, withShot);
+        var plain = app.Card("no shot", BoardStore.AttentionName, Body(Decision()));
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board", card = card.Id });
+        Assert.True(app.Board.Editor!.HasDecisionPictures);
+        Assert.Single(app.Board.Editor.DecisionPictures);
+        await app.Api("show", new { project = "proj", section = "Board", card = plain.Id });
+        Assert.False(app.Board.Editor!.HasDecisionPictures);
+        Assert.Equal("", app.Crashes());
+    }
+
     /// <summary>QA found a "## decision" card shown and moved to Done with its answer never written, so it came back
     /// still asking. Written by the QA agent (.shots/qa-0124); failed before the fix.</summary>
     [AvaloniaFact]
