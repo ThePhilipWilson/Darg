@@ -280,7 +280,58 @@
             <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" Classes="mono" FontSize="13"/>
           </DockPanel>
           <TextBox Text="{Binding Title}" PlaceholderText="Title" FontSize="15" TextWrapping="Wrap"/>
-          <TextBox Text="{Binding Description}" PlaceholderText="Description (markdown)" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="220"/>
+          <!-- WOR-0124: what the card waits on, drawn as an AskUserQuestion is: pick an option and it's done -->
+          <Border IsVisible="{Binding ShowDecision}" BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="8"
+                  Background="{DynamicResource AccentWash}" Padding="12,10">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="dim small" Text="Decide"/>
+              <TextBlock Text="{Binding DecisionQuestion}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+              <ItemsControl ItemsSource="{Binding DecisionChoices}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DecisionChoice">
+                    <Button Command="{Binding Command}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            AutomationProperties.Name="{Binding Label}">
+                      <StackPanel Spacing="2">
+                        <DockPanel>
+                          <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding ActionText}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            <TextBlock Text="Recommended" Classes="small" Foreground="{DynamicResource Ok}" IsVisible="{Binding Recommended}" VerticalAlignment="Center"/>
+                          </StackPanel>
+                        </DockPanel>
+                        <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasDescription}"/>
+                      </StackPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <TextBox Text="{Binding DecisionNotes}" PlaceholderText="Notes to go with your pick, or your own answer…" AcceptsReturn="True"
+                         TextWrapping="Wrap" MinHeight="48" MaxHeight="200"/>
+                <Button Grid.Column="1" Content="Send" VerticalAlignment="Bottom" Command="{Binding AnswerOwnCommand}"
+                        ToolTip.Tip="Send what's typed as your answer: it goes to the agent that asked (or a new one), and the card goes back to In Progress"/>
+              </Grid>
+              <TextBlock Classes="dim small" Text="{Binding DecisionContext}" TextWrapping="Wrap" IsVisible="{Binding HasDecisionContext}"/>
+              <TextBlock Classes="dim small" Text="{Binding DecisionAskedBy}" TextWrapping="Wrap"
+                         IsVisible="{Binding DecisionAskedBy, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            </StackPanel>
+          </Border>
+          <!-- in For Human Attention with nothing to pick: the fallback, Approve or Send back below -->
+          <Border IsVisible="{Binding MissingDecision}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8"
+                  Background="{DynamicResource Panel2}" Padding="12,10">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="small" Foreground="{DynamicResource Accent}" Text="No decision recorded"/>
+              <TextBlock Text="Is it right as it stands? Approve it, or say what's wrong and send it back, below." TextWrapping="Wrap" FontWeight="SemiBold"/>
+              <TextBlock Classes="dim small" Text="{Binding WhyHere, StringFormat='Why it is here: {0}'}" TextWrapping="Wrap" IsVisible="{Binding HasWhyHere}"/>
+              <TextBlock Classes="dim small" TextWrapping="Wrap"
+                         Text="Darg asks the agent that moved it for a decision, or drafts one from the card when no agent is around; open the card again to see it."/>
+            </StackPanel>
+          </Border>
+          <TextBox Text="{Binding Description}" PlaceholderText="Description (markdown)" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="220"
+                   IsVisible="{Binding DescriptionOpen}"/>
+          <Button Content="▸ Description" IsVisible="{Binding !DescriptionOpen}" Command="{Binding OpenDescriptionCommand}" HorizontalAlignment="Left"
+                  Background="Transparent" ToolTip.Tip="Folded while the decision is open: show the card's description"/>
           <ItemsControl ItemsSource="{Binding Pictures}" IsVisible="{Binding HasPictures}">
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>

@@ -30,6 +30,12 @@ public partial class MainViewModel
         Add("improve-card", "start an agent that fills a thin card out (what's wanted, where in the code, done when), asking Philip first if its words are unclear; the card's Improve button: {project, card}, or an agent each on several at once as ✦ Improve N does: {project, cards} (a list, or ids separated by spaces). Only when Philip asks.", ImproveCard);
         Add("send-back", "send a card in the QA column back with what's wrong, as its panel's Send back does: {project, card, notes}. The notes go into the card " +
                          "under QA notes, it returns to In Progress and an agent reworks it from them. Only when Philip asks, with his words as the notes.", SendBack);
+        Add("decide", "answer the decision a card in For Human Attention waits on, as picking an option on its panel does: {project, card, answer, notes?}. " +
+                      "answer is an option's label (its action runs: done, send back or stay) or Philip's own words (they go to the agent that asked, or a new one). " +
+                      "A card with no decision answers Approve or Send back. Only with Philip's answer.", Decide);
+        Add("to-attention", "move a card to For Human Attention with the decision Philip has to make: {project, card, question, options, context?}. " +
+                            "options is a list of 2 to 4 lines, each Label (recommended) → done|back|stay: what it means (one marked recommended; no arrow sends his answer to an agent). " +
+                            "Refused without a question and two options.", ToAttention);
         Add("say","send a message to a project's agent, as if Philip typed it: {id, text}. A saved agent resumes its session.", Say);
         Add("close-agents", "close agents' sessions: {ids} (a list, or ids separated by spaces). They stay listed and carry on when sent a message.", a => CloseAgents(a.List("ids")));
         Add("forget-agents", "forget agents, as the × in the Agents list does: {ids}. Each one's session ends, it leaves the list and its saved file goes " +
@@ -207,6 +213,38 @@ public partial class MainViewModel
         if (!p.Board.InQa(card.Card) && !p.Board.InAttention(card.Card)) throw new ApiError($"{id} isn't in the QA or needs-attention column ({card.Card.Status}); only a card there is sent back.");
         if (p.Board.SendBack(card, a.Need("notes")) is { } error) throw new ApiError(error);
         return p.Agents.ForCard(id) is { } started ? $"Sent {id} back; \"{started.Name}\" (id {started.Id}) is on it." : $"Sent {id} back.";
+    }
+
+    string Decide(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (p.Board is null) throw new ApiError($"{p.Name} has no board.");
+        var id = a.Need("card");
+        if (p.Board.Show(id) is null) throw new ApiError($"No card {id} on {p.Name}'s boards.");
+        if (p.Board.Decide(id, a.Need("answer"), a.Get("notes") ?? "") is { } error) throw new ApiError(error);
+        return $"Answered {id}: {a.Need("answer")}.";
+    }
+
+    string ToAttention(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (p.Board is null) throw new ApiError($"{p.Name} has no board.");
+        var id = a.Need("card");
+        if (p.Board.Show(id) is not { } card) throw new ApiError($"No card {id} on {p.Name}'s boards.");
+        // each option as the card writes it: a JSON list of lines, or lines in one string
+        var raw = a.Get("options") ?? throw new ApiError("Missing \"options\".");
+        IEnumerable<string> lines;
+        try { lines = JsonNode.Parse(raw) is JsonArray list ? list.Select(x => x?.ToString() ?? "") : raw.Split('\n'); }
+        catch (System.Text.Json.JsonException) { lines = raw.Split('\n'); }
+        var text = $"Question: {a.Need("question")}\n" + string.Join("\n", lines.Select(l => l.Trim()).Where(l => l.Length > 0).Select(l => l.StartsWith('-') ? l : "- " + l));
+        var decision = CardDecision.Parse(text);
+        if (!decision.Valid || decision.Options.Count > 4) throw new ApiError("A decision needs a question and two to four options, each a line like: Label (recommended) → done: what it means.");
+        decision = decision with { Context = a.Get("context") ?? "", AskedBy = $"Fettle, {DateTime.Now:yyyy-MM-dd HH:mm}" };
+        if (p.Board.Folder is null) throw new ApiError($"{p.Name}'s board isn't loaded.");
+        try { decision.WriteTo(Path.GetFullPath(Path.Combine(card.Board.Folder!, "items", card.Card.File))); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new ApiError($"Couldn't write the decision into {id}: {e.Message}"); }
+        if (card.Board.MoveToAttention(id) is { } error) throw new ApiError(error);
+        return $"Moved {id} to For Human Attention, asking: {decision.Question}";
     }
 
     string Say(ApiArgs a)

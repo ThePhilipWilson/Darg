@@ -876,6 +876,84 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         return $"{cardId} isn't on a board that's showing; open its board first.";
     }
 
+    /// <summary>Set by the project (WOR-0124): a decision was answered with no done, back or stay action (or sent back
+    /// while an agent is at work on the card), so the answer goes to the agent that asked, else to a new card agent.
+    /// Passed the card, its file, the decision, the answer and the notes.</summary>
+    public Action<Card, string, CardDecision, string, string>? DecisionToAgent { get => _parent is null ? field : _parent.DecisionToAgent; set; }
+
+    /// <summary>Set by the project (WOR-0124): a card's decision was settled from the board (the card, the decision
+    /// report's new state, the notes), so its report and its notification follow.</summary>
+    public Action<string, string, string>? DecisionSettled { get => _parent is null ? field : _parent.DecisionSettled; set; }
+
+    /// <summary>The card's open decision (WOR-0124), read from its file now; null when it has none it could be answered by.</summary>
+    public CardDecision? DecisionOf(Card card)
+    {
+        if (Folder is null) return null;
+        try { return CardDecision.Read(File.ReadAllText(Path.GetFullPath(Path.Combine(Folder, "items", card.File)))) is { Valid: true } d ? d : null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    /// <summary>What a card in For Human Attention with no decision recorded asks (WOR-0124): is it right as it stands?</summary>
+    public static CardDecision Fallback(Card card) => new($"Is {card.Id} right as it stands?",
+        [new("Approve", "Move it to done.", DecisionAction.Done, false), new("Send back", "Say what's wrong in the notes.", DecisionAction.Back, false)], "", "");
+
+    /// <summary>Answer a card's decision (WOR-0124), by id, on whichever row shows it: the answer goes into the card,
+    /// then the picked option's action runs (done, send back, stay), or with none the answer goes to the agent.
+    /// A card with no decision recorded answers the fallback, Approve or Send back. Returns what went wrong, or null.</summary>
+    public string? Decide(string cardId, string answer, string notes)
+    {
+        foreach (var row in Root.Rows)
+            if (row._board?.AllCards.FirstOrDefault(c => c.Id == cardId) is { } card && row.Folder is { } folder)
+                return row.DecideOn(card, Path.GetFullPath(Path.Combine(folder, "items", card.File)), answer, notes);
+        return $"No card {cardId} on the boards showing.";
+    }
+
+    string? DecideOn(Card card, string file, string answer, string notes)
+    {
+        if (_board is null) return "The board isn't loaded.";
+        if (!InAttention(card)) return $"{card.Id} isn't in {AttentionColumn.Find(_board.Columns) ?? BoardStore.AttentionName} ({card.Status}).";
+        if (answer.Trim().Length == 0) return "Pick an option or type an answer.";
+        var recorded = DecisionOf(card);
+        var decision = recorded ?? Fallback(card);
+        var option = decision.OptionFor(answer);
+        var label = option?.Label ?? answer.Trim();
+        var action = option?.Action ?? DecisionAction.Agent;
+        // no decision recorded and an answer in my own words: all the fallback can do with it is send the card back
+        if (recorded is null && option is null) { action = DecisionAction.Back; notes = (answer.Trim() + Environment.NewLine + notes).Trim(); label = "Send back"; }
+        if (action == DecisionAction.Stay)
+        {
+            _notice = $"{card.Id} stays in {card.Status}: {label}";
+            Apply();
+            return null;
+        }
+        // an agent at work on the card holds it: sending back goes to that agent rather than starting another
+        if (action == DecisionAction.Back && AgentFor?.Invoke(card.Id) is not null) action = DecisionAction.Agent;
+        if (action == DecisionAction.Back && recorded is null && notes.Trim().Length == 0) return "Say what's wrong first: the agent works from your notes.";
+        if ((action == DecisionAction.Back && Rework is null) || (action == DecisionAction.Agent && DecisionToAgent is null)) return "This board can't start agents.";
+        try { if (recorded is not null) CardDecision.Answer(file, label, notes, DateTime.Now); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return $"Couldn't write the answer into the card: {e.Message}"; }
+        switch (action)
+        {
+            case DecisionAction.Done:
+                if (Approve(card.Id) is { } error) return error;
+                DecisionSettled?.Invoke(card.Id, DecisionReport.Approved, notes);
+                return null;
+            case DecisionAction.Back:
+                var why = recorded is null ? notes : $"{decision.Question} I picked: {label}." + (notes.Trim().Length > 0 ? " " + notes.Trim() : "");
+                if (SendBackCard(card, why) is { } sendError) return sendError;
+                DecisionSettled?.Invoke(card.Id, DecisionReport.SentBack, why);
+                return null;
+            default:
+                DecisionToAgent!(card, file, decision, label, notes);
+                DecisionSettled?.Invoke(card.Id, DecisionReport.Answered, (label + ". " + notes.Trim()).Trim());
+                _notice = $"{card.Id}: you picked {label}";
+                var working = _board.Columns.FirstOrDefault(c => c.Name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) ?? _board.Columns.FirstOrDefault();
+                if (working is not null && BoardStore.PlaceOf(card.Status, _board.Columns) != working.Id) Move(card.Id, working.Id);
+                else Reload();
+                return null;
+        }
+    }
+
     /// <summary>Whether a card sits in the board's QA column: Work on then gets the work running to try (WOR-0075),
     /// and it can be sent back with notes (WOR-0079).</summary>
     public bool InQa(Card card) =>
@@ -889,20 +967,26 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public bool CardInQa(string cardId) =>
         Root.Rows.Any(r => r._board?.AllCards.FirstOrDefault(c => c.Id == cardId) is { } c && r.InQa(c));
 
+    /// <summary>Whether the card with this id is in its board's attention column now, on whichever row shows it.</summary>
+    public bool CardInAttention(string cardId) =>
+        Root.Rows.Any(r => r._board?.AllCards.FirstOrDefault(c => c.Id == cardId) is { } c && r.InAttention(c));
+
     /// <summary>Send a card in QA back (WOR-0079): the notes go into the card under QA notes, an agent starts on
     /// them, and the card goes back to the working column. Returns what went wrong, or null.</summary>
-    public string? SendBack(CardViewModel card, string notes)
+    public string? SendBack(CardViewModel card, string notes) => SendBackCard(card.Card, notes);
+
+    string? SendBackCard(Card card, string notes)
     {
         if (Folder is null || _board is null || Rework is null) return "This board can't start agents.";
         if (notes.Trim().Length == 0) return "Say what's wrong first: the agent works from your notes.";
         if (AgentFor?.Invoke(card.Id) is not null) return $"{card.Id} already has an agent.";
-        var file = Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File));
+        var file = Path.GetFullPath(Path.Combine(Folder, "items", card.File));
         try { QaNotes.Add(file, notes, DateTime.Now); }
         catch (Exception e) { return $"Couldn't write the notes into the card: {e.Message}"; }
-        Rework(card.Card, file, notes);
+        Rework(card, file, notes);
         _notice = $"Sent {card.Id} back with your notes";
         var working = _board.Columns.FirstOrDefault(c => c.Name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) ?? _board.Columns.FirstOrDefault();
-        if (working is not null && BoardStore.PlaceOf(card.Card.Status, _board.Columns) != working.Id) Move(card.Card.Id, working.Id);
+        if (working is not null && BoardStore.PlaceOf(card.Status, _board.Columns) != working.Id) Move(card.Id, working.Id);
         else Reload();
         return null;
     }
@@ -1245,6 +1329,16 @@ public sealed partial class CardViewModel : ObservableObject
 
 public sealed record MoveTarget(string Label, IRelayCommand Command);
 
+/// <summary>One option of a card's decision (WOR-0124), as a button: its label, what it means, what picking it does.</summary>
+public sealed record DecisionChoice(DecisionOption Option, IRelayCommand Command)
+{
+    public string Label => Option.Label;
+    public string Description => Option.Description;
+    public bool HasDescription => Option.Description.Length > 0;
+    public bool Recommended => Option.Recommended;
+    public string ActionText => Option.ActionText;
+}
+
 /// <summary>One of the project's other boards, with a tick for showing it as a row beside the picked one.</summary>
 public sealed partial class BoardChoice(BoardViewModel board, string name, bool shown) : ObservableObject
 {
@@ -1330,7 +1424,7 @@ public partial class CardEditor : ObservableObject
         _board.Root.Editor = null;
         _board.StartQa(_card);
     }
-    public bool CanSendBack => (InQa || InAttention) && CanWorkOn;
+    public bool CanSendBack => (InQa || InAttention) && CanWorkOn && !ShowDecision;
     /// <summary>A report for this card exists (its decision report, once it has landed in needs attention).</summary>
     public bool HasReport => _card is not null && _board.ReportFor?.Invoke(_card.Id) is not null;
     [RelayCommand]
@@ -1343,9 +1437,57 @@ public partial class CardEditor : ObservableObject
     /// <summary>A button per flow, to run it on this card.</summary>
     public IReadOnlyList<MoveTarget> FlowTargets { get; private set; } = [];
 
+    /// <summary>The decision the card waits on (WOR-0124), read when the panel opened: shown at the top in place of
+    /// the description while the card is in For Human Attention.</summary>
+    public CardDecision? Decision { get; }
+    public bool ShowDecision => Decision is not null && InAttention;
+    /// <summary>In For Human Attention with no decision recorded: the fallback question, and word that Darg is asking for one.</summary>
+    public bool MissingDecision => _card is not null && Decision is null && InAttention;
+    public string DecisionQuestion => Decision?.Question ?? "";
+    public string DecisionContext => Decision?.Context ?? "";
+    public bool HasDecisionContext => DecisionContext.Length > 0;
+    public string DecisionAskedBy => Decision is null ? "" : Decision.Drafted ? "Drafted by Darg from the card: check it fits."
+        : Decision.AskedBy.Length > 0 ? "Asked by " + Decision.AskedBy : "";
+    public IReadOnlyList<DecisionChoice> DecisionChoices { get; } = [];
+    /// <summary>Notes to go with a pick, or an answer in my own words (it goes to the agent).</summary>
+    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(AnswerOwnCommand))] public partial string DecisionNotes { get; set; } = "";
+    /// <summary>Why the card is there, for the no-decision box: its newest reason, else the start of How to check.</summary>
+    public string WhyHere { get; } = "";
+    public bool HasWhyHere => WhyHere.Length > 0;
+    /// <summary>The description box is folded under the decision, and opens on a click.</summary>
+    [ObservableProperty] public partial bool DescriptionOpen { get; set; } = true;
+    [RelayCommand] void OpenDescription() => DescriptionOpen = true;
+
+    void Answer(string answer)
+    {
+        if (_card is null) return;
+        if (_board.Decide(_card.Id, answer, DecisionNotes) is { } error) { Error = error; return; }
+        _board.Root.Editor = null;
+    }
+    bool CanAnswerOwn => DecisionNotes.Trim().Length > 0;
+    [RelayCommand(CanExecute = nameof(CanAnswerOwn))]
+    void AnswerOwn()
+    {
+        var own = DecisionNotes.Trim();
+        DecisionNotes = "";
+        Answer(own);
+    }
+
     public CardEditor(BoardViewModel board, CardViewModel? card)
     {
         _board = board; _card = card;
+        if (card is not null && board.InAttention(card.Card) && board.Folder is { } folder)
+        {
+            string text;
+            try { text = File.ReadAllText(Path.GetFullPath(Path.Combine(folder, "items", card.Card.File))); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { text = ""; }
+            Decision = CardDecision.Read(text) is { Valid: true } d ? d : null;
+            WhyHere = CardDecision.WhyHere(text);
+            // recommended first, as AskUserQuestion puts it
+            DecisionChoices = (Decision?.Options ?? []).OrderByDescending(o => o.Recommended)
+                .Select(o => new DecisionChoice(o, new RelayCommand(() => Answer(o.Label)))).ToList();
+            DescriptionOpen = Decision is null;
+        }
         Title = card?.Title ?? "";
         Description = card?.Description ?? "";
         LabelsText = card is null ? "" : string.Join(", ", card.Labels);
@@ -1429,7 +1571,8 @@ public partial class CardEditor : ObservableObject
 
     /// <summary>The QA verdict buttons (WOR-0095): a card in QA with no agent running can be sent to For Human Attention
     /// (its decision report is written by the board's reload), approved to done, or sent back with notes below.</summary>
-    public bool CanQaVerdict => (InQa || InAttention) && CanWorkOn;
+    // a card with a decision (WOR-0124) is answered by its options instead
+    public bool CanQaVerdict => (InQa || InAttention) && CanWorkOn && !ShowDecision;
     public bool CanToAttention => InQa && HasAttentionColumn;
     public bool HasAttentionColumn => _board.HasAttentionColumn;
     [RelayCommand]
