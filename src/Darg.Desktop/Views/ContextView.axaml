@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:core="using:Darg.Core"
+             xmlns:views="using:Darg.Desktop.Views"
+             x:Class="Darg.Desktop.Views.ContextView"
+             x:DataType="vm:ContextViewModel">
+  <Grid ColumnDefinitions="300,*" RowDefinitions="*,Auto">
+    <!-- instructions, memory and what Darg adds, each with its group underneath -->
+    <Border Grid.RowSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="What agents start with" Classes="dim small" Margin="12,10,12,4"/>
+        <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Context files">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="core:ContextItem">
+              <StackPanel AutomationProperties.Name="{Binding Name}" ToolTip.Tip="{Binding Path}">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding Group}" Classes="dim small"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Border>
+
+    <DockPanel Grid.Column="1">
+      <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
+        <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Open" Command="{Binding OpenCommand}" IsEnabled="{Binding CanOpen}"
+                  AutomationProperties.Name="Open file"/>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="{Binding Selected.Name, FallbackValue=Context}" FontWeight="SemiBold"/>
+            <TextBlock Classes="dim small" Text="{Binding Selected.Path}" TextTrimming="CharacterEllipsis"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+      <ScrollViewer>
+        <views:MarkdownView Markdown="{Binding Text}" Margin="18,14" MaxWidth="980" HorizontalAlignment="Left"/>
+      </ScrollViewer>
+    </DockPanel>
+
+    <Border Grid.Row="1" Grid.Column="1" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+      <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}"/>
+    </Border>
+  </Grid>
+</UserControl>

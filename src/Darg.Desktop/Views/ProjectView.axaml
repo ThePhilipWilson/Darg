@@ -56,6 +56,10 @@
                       Command="{Binding OpenCommand}" CommandParameter="Mistakes" ToolTip.Tip="Mistakes: what agents got wrong here, counted by kind">
           <StackPanel><TextBlock Text="✗" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Mistakes" FontSize="9" HorizontalAlignment="Center" Margin="-8,0"/></StackPanel>
         </ToggleButton>
+        <ToggleButton Classes="rail" IsChecked="{Binding OnContext, Mode=OneWay}"
+                      Command="{Binding OpenCommand}" CommandParameter="Context" ToolTip.Tip="Context: the instructions, memory and extras agents here start with">
+          <StackPanel><TextBlock Text="☰" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Context" FontSize="9" HorizontalAlignment="Center" Margin="-8,0"/></StackPanel>
+        </ToggleButton>
         <ToggleButton Classes="rail" IsChecked="{Binding OnCode, Mode=OneWay}" IsVisible="{Binding Code, Converter={x:Static ObjectConverters.IsNotNull}}"
                       Command="{Binding OpenCommand}" CommandParameter="Code" ToolTip.Tip="Code">
           <StackPanel><TextBlock Text="{}{ }" FontSize="15" HorizontalAlignment="Center"/><TextBlock Text="Code" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
@@ -87,6 +91,7 @@
       <views:ReportsView DataContext="{Binding Reports}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnReports}"/>
       <views:ArtifactsView DataContext="{Binding Artifacts}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnArtifacts}"/>
       <views:MistakesView DataContext="{Binding Mistakes}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnMistakes}"/>
+      <views:ContextView DataContext="{Binding Context}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnContext}"/>
       <views:PreviewView DataContext="{Binding Preview}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnPreview}"/>
       <views:ConsolesView DataContext="{Binding Consoles}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnTerminal}"/>
     </Panel>
