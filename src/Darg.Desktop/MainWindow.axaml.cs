@@ -65,6 +65,13 @@ public partial class MainWindow : Window
     /// (tools/live.ps1, WOR-0126): HotAvalonia makes the parts anew when it reloads MainWindow.axaml and then
     /// calls a method of this name, while the constructor never runs again. Wiring that hangs on the window
     /// itself or on the view model stays in the constructor, so it isn't doubled.</summary>
+    // a ToggleButton flips itself on click and its one-way binding doesn't push again when the tab is already
+    // the shown one, so a click on the open tab cleared its highlight (WOR-0134): a tab is never unchecked by a click
+    void TabClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (sender is Avalonia.Controls.Primitives.ToggleButton t) t.IsChecked = true;
+    }
+
     void InitializeComponentState()
     {
         var vm = _vm;
