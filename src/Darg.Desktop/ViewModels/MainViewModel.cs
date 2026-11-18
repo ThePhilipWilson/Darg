@@ -518,7 +518,7 @@ public partial class ProjectViewModel : ObservableObject
             // a card agent at work wins over a QA agent: it is the one that writes its own report
             string? AtWork(Card card) => Agents.Agents.Where(a => a.CardId == card.Id && a.State is AgentState.Starting or AgentState.Working)
                 .Select(a => a.Purpose ?? "").OrderBy(p => p == AgentPurposes.Qa).Cast<string?>().FirstOrDefault();
-            void InBackground(Action write) => _ = Task.Run(() => { try { write(); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
+            Task InBackground(Action write) => Task.Run(() => { try { write(); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } });
             Board.NeedsAttention = (card, file) =>
             {
                 var folder = Reports!.Folder; var repo = CardFolder(card);
@@ -607,7 +607,9 @@ public partial class ProjectViewModel : ObservableObject
             Board.EnteredDone = (card, file) =>
             {
                 var folder = Reports!.Folder; var repo = CardFolder(card); var agent = AtWork(card);
-                InBackground(() => ReportFlow.EnteredDone(folder, card, file, repo, DateTime.Now, agent));
+                // then (WOR-0131) the card's agents close and go: settled ones now, ones mid-turn once their turn ends well
+                InBackground(() => ReportFlow.EnteredDone(folder, card, file, repo, DateTime.Now, agent))
+                    .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() => Agents.CardFinished(card.Id)), TaskScheduler.Default);
             };
             Board.ReportFor = id => Reports!.LatestFor(id);
             Board.OpenReport = file => { Reports!.Show(file); Section = Section.Reports; };
@@ -615,8 +617,11 @@ public partial class ProjectViewModel : ObservableObject
             Reports.CleanUpDone = () =>
             {
                 var (archived, written) = DecisionReport.CleanUp(Reports.Folder, Board.DoneCards(), CardFolder, DateTime.Now);
-                return archived == 0 && written == 0 ? "Nothing to clean up: no done card has a QA report left in the list or a missing done report."
-                    : $"Cleaned up: {archived} QA {(archived == 1 ? "report" : "reports")} archived, {written} done {(written == 1 ? "report" : "reports")} written.";
+                // and the agents left on done cards close and go (WOR-0131), after their reports are in
+                var forgotten = Agents.ClearDoneCards(Board.DoneCards(completedToo: true).Select(d => d.Card.Id));
+                return archived == 0 && written == 0 && forgotten == 0 ? "Nothing to clean up: no done card has a QA report left in the list, a missing done report or an agent."
+                    : $"Cleaned up: {archived} QA {(archived == 1 ? "report" : "reports")} archived, {written} done {(written == 1 ? "report" : "reports")} written, " +
+                      $"{forgotten} {(forgotten == 1 ? "agent" : "agents")} on done cards forgotten.";
             };
             Board.Approved = Reports.ApprovedFromBoard;
             Reports.SendCardBack = Board.SendBackById;

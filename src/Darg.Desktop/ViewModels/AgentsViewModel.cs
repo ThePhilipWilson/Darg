@@ -158,7 +158,8 @@ public partial class AgentsViewModel : ObservableObject
 
     // ---- Finished agent reports (WOR-0061): an agent that filed a report is forgotten once its turn ends well.
 
-    readonly HashSet<string> _reported = [];
+    /// <summary>Agents that go once their turn ends well: they filed a report, or their card reached done mid-turn.</summary>
+    readonly HashSet<string> _goWhenFinished = [];
 
     /// <summary>The reports in the project's folder: every agent that wrote one is forgotten when it's finished, at once if it
     /// is already, else when its turn ends well (one that fails or asks something stays, for the person to see).
@@ -169,10 +170,33 @@ public partial class AgentsViewModel : ObservableObject
         foreach (var r in reports.Where(r => !r.Qa))
             foreach (var a in Agents.Where(a => Wrote(a, r)).ToList())
             {
-                _reported.Add(a.Id);
+                _goWhenFinished.Add(a.Id);
                 if (Finished(a)) Forget(a);
             }
     }
+
+    // ---- A card reaching done (WOR-0131): its agents close and leave the list, so done cards don't keep them.
+
+    /// <summary>A card has reached done (after its done report): every agent on it that has settled goes now, its session
+    /// closed and off the list as the × does. One still at it (working, waiting on the person, or set to carry on after a
+    /// usage reset; a QA or card agent that moved the card itself is mid-turn) goes once its turn ends well; if that turn
+    /// fails it stays, for the person to see. Returns how many went now.</summary>
+    public int CardFinished(string cardId)
+    {
+        var gone = 0;
+        foreach (var a in Agents.Where(a => a.CardId == cardId).ToList())
+        {
+            if (a.IsLiveOnCard) { _goWhenFinished.Add(a.Id); continue; }
+            Forget(a);
+            gone++;
+        }
+        return gone;
+    }
+
+    /// <summary>The one-off clean-up (WOR-0131): every settled agent on a done card goes, as <see cref="CardFinished"/>
+    /// does for each; ones still at it go when their turn ends. Returns how many went now.</summary>
+    public int ClearDoneCards(IEnumerable<string> doneCardIds) =>
+        doneCardIds.Distinct().Sum(CardFinished);
 
     static bool Wrote(AgentViewModel a, AgentReport r)
     {
@@ -206,8 +230,8 @@ public partial class AgentsViewModel : ObservableObject
             if (e.PropertyName == nameof(AgentViewModel.CanContinueAfterReset)) AnyOutOfUsage = Agents.Any(a => a.CanContinueAfterReset);
             if (e.PropertyName is nameof(AgentViewModel.State) or nameof(AgentViewModel.TurnFailed) && SortByStatus) Resort();
             if (e.PropertyName != nameof(AgentViewModel.State)) return;
-            // it filed a report and its turn has now ended well: it goes (after this change has been handled)
-            if (_reported.Contains(agent.Id) && Finished(agent)) Dispatcher.UIThread.Post(() => { if (Agents.Contains(agent) && Finished(agent)) Forget(agent); });
+            // it filed a report, or its card reached done, and its turn has now ended well: it goes (after this change has been handled)
+            if (_goWhenFinished.Contains(agent.Id) && Finished(agent)) Dispatcher.UIThread.Post(() => { if (Agents.Contains(agent) && Finished(agent)) Forget(agent); });
             NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
             if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
             // news from an agent that isn't the one open here stays marked in the list until it's looked at
