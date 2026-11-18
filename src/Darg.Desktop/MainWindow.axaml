@@ -9,7 +9,7 @@
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- project tabs -->
     <Border Grid.Row="0" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">
-      <DockPanel Height="40" chrome:WindowDecorationProperties.ElementRole="TitleBar">
+      <DockPanel Height="40" Background="Transparent" chrome:WindowDecorationProperties.ElementRole="TitleBar">
         <DockPanel.Styles>
           <Style Selector="Button, ListBox"><Setter Property="chrome:WindowDecorationProperties.ElementRole" Value="User"/></Style>
           <Style Selector="Button.caption"><Setter Property="Width" Value="46"/><Setter Property="Height" Value="40"/><Setter Property="CornerRadius" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="FontSize" Value="14"/></Style>
@@ -94,7 +94,7 @@
           <TextBlock Classes="dim small" Text="{Binding Usage.Today}" VerticalAlignment="Center"/>
         </Border>
         <ListBox x:Name="ProjectTabs" ItemsSource="{Binding Projects}" SelectedItem="{Binding Selected}" Background="Transparent"
-                 VerticalAlignment="Bottom">
+                 VerticalAlignment="Bottom" HorizontalAlignment="Left">
           <ListBox.ItemsPanel>
             <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
           </ListBox.ItemsPanel>
