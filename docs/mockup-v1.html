@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workbench mockup</title>
+<style>
+:root{
+  --bg:#14161a; --panel:#1b1e24; --panel2:#22262e; --line:#2e333d; --text:#e6e8ec; --dim:#8b93a1;
+  --accent:#e0a84a; --ok:#5fbf7f; --warn:#e0a84a; --bad:#e06464; --info:#6aa5e8; --vio:#a784e0;
+  --pY:#f2dd7a; --pP:#f2a7c3; --pB:#9fd0f2; --pG:#b6e3a0; --pO:#f5bf86; --pInk:#2a2620;
+  --radius:8px; --mono:ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:14px/1.4 system-ui,Segoe UI,sans-serif;overflow:hidden}
+button{font:inherit;color:inherit}
+.app{display:grid;grid-template-rows:38px 1fr 26px;height:100vh}
+
+/* project tabs */
+.tabs{display:flex;align-items:stretch;background:#0f1114;border-bottom:1px solid var(--line);padding-left:8px;gap:2px}
+.logo{display:flex;align-items:center;padding:0 12px 0 4px;font-weight:700;color:var(--accent);letter-spacing:.02em}
+.ptab{display:flex;align-items:center;gap:8px;padding:0 14px;border:0;background:transparent;color:var(--dim);cursor:pointer;border-radius:8px 8px 0 0;margin-top:5px}
+.ptab.on{background:var(--panel);color:var(--text)}
+.ptab .dot{width:8px;height:8px;border-radius:50%}
+.ptab .n{font-size:11px;background:var(--panel2);border-radius:9px;padding:0 6px;color:var(--text)}
+.ptab .n.live{background:var(--ok);color:#0b1a10}
+.tabs .sp{flex:1}
+.tabs .right{display:flex;align-items:center;gap:10px;padding-right:12px;color:var(--dim);font-size:12px}
+.pill{border:1px solid var(--line);border-radius:12px;padding:2px 8px}
+.pill.ok{border-color:#2f5e3f;color:var(--ok)}
+
+.main{display:grid;grid-template-columns:56px 1fr;min-height:0}
+.rail{background:#111317;border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:8px;gap:4px}
+.rb{width:44px;height:44px;border:0;border-radius:10px;background:transparent;color:var(--dim);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:17px;position:relative}
+.rb small{font-size:9px;margin-top:1px}
+.rb.on{background:var(--panel2);color:var(--text)}
+.rb .badge{position:absolute;top:3px;right:3px;background:var(--bad);color:#fff;font-size:9px;border-radius:7px;padding:0 4px}
+.rail .sp{flex:1}
+
+.view{display:none;min-height:0;height:100%}
+.view.on{display:grid}
+.head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+.head h2{margin:0;font-size:15px}
+.head .sp{flex:1}
+.chip{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);color:var(--dim);cursor:pointer;white-space:nowrap}
+.chip.on{background:#3a3020;border-color:var(--accent);color:var(--accent)}
+.field{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 9px;color:var(--text);min-width:200px}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#1a1408;font-weight:600}
+.src{font-size:10px;padding:1px 6px;border-radius:4px;font-family:var(--mono)}
+.src.local{background:#263a2c;color:var(--ok)}
+.src.jira{background:#1f3047;color:var(--info)}
+.src.gh{background:#2c2c3a;color:#c9c9e8}
+.src.gl{background:#3a2a20;color:#f0a070}
+
+/* board */
+#v-board{grid-template-rows:auto auto 1fr}
+.filters{display:flex;gap:6px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line)}
+.filters .lbl{color:var(--dim);font-size:11px;align-self:center;margin-right:2px}
+.cols{display:grid;grid-template-columns:repeat(5,minmax(220px,1fr));gap:10px;padding:12px 14px;overflow:auto;min-height:0}
+.col{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);display:flex;flex-direction:column;min-height:0}
+.col h3{margin:0;padding:8px 10px;font-size:12px;color:var(--dim);display:flex;justify-content:space-between;border-bottom:1px solid var(--line)}
+.cards{padding:8px;display:flex;flex-direction:column;gap:7px;overflow:auto}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px;cursor:grab}
+.card .top{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--dim);font-family:var(--mono)}
+.card .t{margin:4px 0 6px}
+.lbls{display:flex;gap:4px;flex-wrap:wrap}
+.lb{font-size:10px;padding:0 6px;border-radius:8px;background:#2a2f39;color:#c6ccd6}
+.lb.bimbo{background:#4a2238;color:#f2a7c3}.lb.cat{background:#3d3420;color:#f2c97a}
+.card .agent{margin-top:6px;font-size:11px;color:var(--ok);display:flex;align-items:center;gap:5px}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(95,191,127,.6);animation:p 1.6s infinite}
+@keyframes p{70%{box-shadow:0 0 0 7px rgba(95,191,127,0)}100%{box-shadow:0 0 0 0 rgba(95,191,127,0)}}
+
+/* post-its */
+#v-notes{grid-template-rows:auto auto 1fr}
+.wall{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:16px;overflow:auto;background:radial-gradient(#1d2026 1px,transparent 1px) 0 0/18px 18px}
+.wcol h3{font-size:12px;color:var(--dim);margin:0 0 8px;text-transform:uppercase;letter-spacing:.06em}
+.postit{color:var(--pInk);padding:12px 12px 10px;margin-bottom:12px;border-radius:2px;box-shadow:0 6px 14px rgba(0,0,0,.35);font:15px/1.3 "Segoe Print","Comic Sans MS",cursive;min-height:96px;position:relative}
+.postit:nth-child(odd){transform:rotate(-1.4deg)}.postit:nth-child(even){transform:rotate(1.1deg)}
+.postit .meta{font:10px/1 system-ui;opacity:.65;margin-top:8px;display:flex;justify-content:space-between}
+.y{background:var(--pY)}.pk{background:var(--pP)}.bl{background:var(--pB)}.gr{background:var(--pG)}.or{background:var(--pO)}
+
+/* agents */
+#v-agents{grid-template-columns:270px 1fr 360px}
+.alist{border-right:1px solid var(--line);overflow:auto;background:var(--panel)}
+.alist h4{margin:12px 12px 6px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.ag{display:grid;grid-template-columns:10px 1fr auto;gap:8px;align-items:center;padding:8px 12px;cursor:pointer;border-left:3px solid transparent}
+.ag.on{background:var(--panel2);border-left-color:var(--accent)}
+.ag .s{width:9px;height:9px;border-radius:50%}
+.ag .nm{font-size:13px}.ag .sub{font-size:11px;color:var(--dim)}
+.ag .q{font-size:10px;background:var(--warn);color:#1a1408;border-radius:8px;padding:0 6px}
+.chat{display:grid;grid-template-rows:auto 1fr auto;min-height:0}
+.log{overflow:auto;padding:14px 18px;display:flex;flex-direction:column;gap:12px}
+.msg.user{align-self:flex-end;background:#2b2a22;border:1px solid #4a4330;border-radius:10px;padding:8px 12px;max-width:70%}
+.msg.ai{max-width:92%}
+.tool{font-family:var(--mono);font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 9px;color:var(--dim)}
+.tool b{color:var(--info);font-weight:600}
+.prev{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel);margin-top:6px}
+.prev .ph{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);padding:5px 9px;border-bottom:1px solid var(--line);font-family:var(--mono)}
+.imgrow{display:flex;gap:8px;padding:8px}
+.fakeimg{flex:1;aspect-ratio:3/4;border-radius:5px;background:linear-gradient(160deg,#6b3a5c,#e9a2c1 55%,#f7d9a8);position:relative}
+.fakeimg.b{background:linear-gradient(160deg,#3a4b6b,#9fc0e9 55%,#d9e8f7)}
+.fakeimg span{position:absolute;bottom:5px;left:6px;font-size:10px;background:rgba(0,0,0,.55);padding:1px 5px;border-radius:3px;color:#fff}
+pre.code{margin:0;padding:8px 10px;font:12px/1.5 var(--mono);overflow:auto;color:#cdd3de}
+.del{background:#3a1f22;color:#f0a0a0;display:block}.add{background:#1f3a27;color:#a8e6b8;display:block}
+.ask{border:1px solid var(--warn);border-radius:8px;padding:10px;background:#2a2416}
+.ask .opts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.compose{border-top:1px solid var(--line);padding:10px 14px;display:flex;gap:8px;background:var(--panel)}
+.compose input{flex:1}
+.side{border-left:1px solid var(--line);background:var(--panel);display:grid;grid-template-rows:auto 1fr;min-height:0}
+.side .tabsm{display:flex;border-bottom:1px solid var(--line)}
+.side .tabsm button{flex:1;border:0;background:transparent;padding:8px;color:var(--dim);cursor:pointer;font-size:12px}
+.side .tabsm button.on{color:var(--text);box-shadow:inset 0 -2px 0 var(--accent)}
+.artifact{margin:10px;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fbf7ef;color:#2a2620}
+.artifact .bar{background:#e9e1d1;font-size:11px;padding:5px 9px;display:flex;justify-content:space-between}
+.artifact .body{padding:12px}
+.minicard{display:inline-block;width:72px;height:100px;border-radius:6px;margin:4px;background:linear-gradient(170deg,#c95f8f,#f4c1d6);border:2px solid #8a3a5f;vertical-align:top;font-size:9px;color:#fff;padding:4px}
+.minicard.c{background:linear-gradient(170deg,#b8873a,#f2d99a);border-color:#7a5a20}
+
+/* code */
+#v-code{grid-template-columns:250px 1fr}
+.tree{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:8px 0;font-size:13px}
+.tree .repo{padding:6px 12px;color:var(--accent);font-weight:600;display:flex;justify-content:space-between}
+.tree .f{padding:3px 12px 3px 26px;color:var(--dim);cursor:pointer;font-family:var(--mono);font-size:12px}
+.tree .f.on{background:var(--panel2);color:var(--text)}
+.editor{display:grid;grid-template-rows:auto 1fr auto;min-height:0}
+.etabs{display:flex;border-bottom:1px solid var(--line);background:var(--panel)}
+.etabs span{padding:7px 14px;font-size:12px;font-family:var(--mono);color:var(--dim);border-right:1px solid var(--line)}
+.etabs span.on{color:var(--text);background:var(--bg)}
+.ecode{overflow:auto;font:13px/1.6 var(--mono);padding:10px 0;counter-reset:l}
+.ecode div{padding:0 14px 0 54px;position:relative;white-space:pre}
+.ecode div::before{counter-increment:l;content:counter(l);position:absolute;left:0;width:40px;text-align:right;color:#4b5260}
+.k{color:#c792ea}.s{color:#c3e88d}.c{color:#6b7385}.ty{color:#ffcb6b}
+.git{border-top:1px solid var(--line);display:flex;gap:14px;padding:6px 14px;font-size:12px;color:var(--dim);background:var(--panel)}
+
+/* consoles */
+#v-run{grid-template-rows:auto 1fr}
+.grid4{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:10px;padding:12px;min-height:0}
+.term{background:#0b0c0e;border:1px solid var(--line);border-radius:8px;display:grid;grid-template-rows:auto 1fr;min-height:0;overflow:hidden}
+.term .th{display:flex;justify-content:space-between;align-items:center;padding:5px 10px;font-size:12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.term pre{margin:0;padding:8px 10px;font:12px/1.5 var(--mono);color:#b9c0cc;overflow:auto}
+.g{color:var(--ok)}.w{color:var(--warn)}.r{color:var(--bad)}.i{color:var(--info)}
+.comfy{background:#1a1c20;position:relative;overflow:hidden}
+.node{position:absolute;background:#2a2d33;border:1px solid #444a55;border-radius:6px;font-size:11px;width:120px}
+.node b{display:block;background:#3a3f4a;padding:3px 7px;border-radius:6px 6px 0 0;font-weight:500}
+.node i{display:block;padding:3px 7px;color:var(--dim);font-style:normal}
+
+/* docs */
+#v-docs{grid-template-columns:240px 1fr 300px}
+.doc{overflow:auto;padding:22px 40px;max-width:820px}
+.doc h1{font-size:24px;margin:0 0 4px}.doc h2{font-size:17px;margin:22px 0 6px;color:var(--accent)}
+.doc p{color:#cfd4dc}
+.callout{border-left:3px solid var(--info);background:#1a2230;padding:8px 12px;border-radius:0 6px 6px 0;font-size:13px}
+.backl{padding:12px;font-size:12px;overflow:auto}
+.backl h4{margin:6px 0;font-size:11px;color:var(--dim);text-transform:uppercase}
+.backl .ln{padding:6px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:6px;background:var(--panel2)}
+
+/* tools */
+#v-tools{grid-template-rows:auto 1fr}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;padding:14px;align-content:start;overflow:auto}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+.tile h4{margin:0 0 4px;display:flex;justify-content:space-between;align-items:center}
+.tile p{margin:0 0 10px;color:var(--dim);font-size:12px}
+
+.ck{display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13px;cursor:pointer}
+.ck input{accent-color:var(--accent)}
+
+/* phone */
+#v-phone{place-items:center;gap:40px;grid-auto-flow:column;padding:20px;overflow:auto;background:#0e0f12}
+.phone{width:300px;height:620px;border:10px solid #000;border-radius:36px;background:var(--bg);overflow:hidden;display:grid;grid-template-rows:auto auto 1fr auto;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.tablet{width:640px;height:440px;border:12px solid #000;border-radius:26px;background:var(--bg);overflow:hidden;display:grid;grid-template-columns:200px 1fr;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+.ph-top{padding:10px 12px 6px;display:flex;justify-content:space-between;font-size:12px;color:var(--dim)}
+.ph-tabs{display:flex;gap:6px;padding:0 10px 8px;overflow:auto}
+.ph-body{overflow:auto;padding:8px 10px;display:flex;flex-direction:column;gap:8px}
+.ph-nav{display:flex;justify-content:space-around;border-top:1px solid var(--line);padding:8px 0 12px;font-size:18px;color:var(--dim)}
+.ph-nav .on{color:var(--accent)}
+.caption{text-align:center;color:var(--dim);font-size:12px;margin-top:10px}
+
+/* mascot */
+.mascot{position:fixed;right:22px;bottom:40px;z-index:20;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.bubble{width:340px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.5);overflow:hidden}
+.bubble .bh{padding:8px 12px;font-size:12px;color:var(--dim);border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+.bubble .bb{padding:10px 12px;font-size:13px;display:flex;flex-direction:column;gap:8px;max-height:230px;overflow:auto}
+.bubble .me{align-self:flex-end;background:#2b2a22;border-radius:10px;padding:6px 10px}
+.bubble .it{background:var(--panel2);border-radius:10px;padding:6px 10px}
+.bubble input{width:100%;border:0;border-top:1px solid var(--line);background:var(--bg);color:var(--text);padding:9px 12px;font:inherit}
+.critter{width:58px;height:58px;border-radius:50% 50% 46% 46%;background:radial-gradient(circle at 35% 30%,#f5c56b,#d08a2e);position:relative;cursor:pointer;box-shadow:0 8px 18px rgba(0,0,0,.45);animation:bob 2.6s ease-in-out infinite}
+.critter::before,.critter::after{content:"";position:absolute;top:21px;width:8px;height:10px;border-radius:50%;background:#2a1a08}
+.critter::before{left:17px}.critter::after{right:17px}
+.critter i{position:absolute;left:50%;bottom:14px;width:14px;height:6px;border-radius:0 0 8px 8px;background:#2a1a08;transform:translateX(-50%)}
+@keyframes bob{50%{transform:translateY(-4px)}}
+
+/* toast */
+.toast{position:fixed;right:22px;top:50px;z-index:30;width:360px;background:#2b2d31;border:1px solid #444;border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:10px 12px;display:none;cursor:pointer}
+.toast.on{display:block;animation:slide .3s ease-out}
+@keyframes slide{from{transform:translateX(30px);opacity:0}}
+.toast .tt{font-size:11px;color:var(--dim);display:flex;justify-content:space-between}
+.toast b{display:block;margin:4px 0 2px}
+.toast .hint{font-size:11px;color:var(--accent);margin-top:6px}
+
+.status{display:flex;gap:16px;align-items:center;padding:0 12px;font-size:11px;color:var(--dim);background:#0f1114;border-top:1px solid var(--line)}
+.status .sp{flex:1}
+.note{position:fixed;left:70px;bottom:34px;z-index:15;background:#3a3020;border:1px solid var(--accent);color:var(--accent);font-size:11px;padding:4px 9px;border-radius:6px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="tabs">
+    <div class="logo">◆ Workbench</div>
+    <button class="ptab on"><span class="dot" style="background:#e0a84a"></span>Alpha <span class="n live">3</span></button>
+    <button class="ptab"><span class="dot" style="background:#6aa5e8"></span>Beta <span class="n">1</span></button>
+    <button class="ptab"><span class="dot" style="background:#a784e0"></span>Project C</button>
+    <button class="ptab"><span class="dot" style="background:#5fbf7f"></span>Work · Jira <span class="n">2</span></button>
+    <button class="ptab" title="Add a project">＋</button>
+    <span class="sp"></span>
+    <div class="right">
+      <span class="pill ok">● LAN on · phone + tablet tuned in</span>
+      <span class="pill">Ollama ●</span><span class="pill">Forge ●</span><span class="pill">ComfyUI ○</span>
+      <button class="btn" id="fire">Simulate agent alert</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <nav class="rail">
+      <button class="rb on" data-v="board">▦<small>Board</small></button>
+      <button class="rb" data-v="notes">▤<small>Notes</small></button>
+      <button class="rb" data-v="agents">✦<small>Agents</small><span class="badge">1</span></button>
+      <button class="rb" data-v="docs">❏<small>Docs</small></button>
+      <button class="rb" data-v="code">{ }<small>Code</small></button>
+      <button class="rb" data-v="run">▶<small>Run</small></button>
+      <button class="rb" data-v="tools">⚙<small>Tools</small></button>
+      <span class="sp"></span>
+      <button class="rb" data-v="setup">☑<small>Setup</small></button>
+      <button class="rb" data-v="phone">▯<small>Phone</small></button>
+    </nav>
+
+    <div style="min-height:0;position:relative">
+
+    <!-- BOARD -->
+    <section class="view on" id="v-board">
+      <div class="head">
+        <h2>Alpha · Boards</h2>
+        <span class="chip on">Main</span><span class="chip">Art</span><span class="chip">Engine</span><span class="chip">+ board</span>
+        <span class="sp"></span>
+        <input class="field" placeholder="Filter: label:cat  agent:running  text…" value="label:art-cards">
+        <button class="btn">Pull Jira</button><button class="btn pri">+ Ticket</button>
+      </div>
+      <div class="filters">
+        <span class="lbl">Labels</span>
+        <span class="chip on">art-cards</span><span class="chip">art-enemies</span><span class="chip">engine</span><span class="chip">content</span><span class="chip">tooling</span>
+        <span class="lbl" style="margin-left:10px">Deity</span>
+        <span class="chip">bimbo</span><span class="chip">cat</span><span class="chip">bondage</span><span class="chip">rivals</span>
+        <span class="lbl" style="margin-left:10px">Source</span>
+        <span class="chip on">local</span><span class="chip">GitHub issues</span>
+      </div>
+      <div class="cols">
+        <div class="col"><h3>Backlog <span>41</span></h3><div class="cards">
+          <div class="card"><div class="top">VOT-0003 <span class="src local">local</span></div><div class="t">Fix bras on pliant-l and make-me-l</div><div class="lbls"><span class="lb">art-cards</span><span class="lb bimbo">bimbo</span></div></div>
+          <div class="card"><div class="top">VOT-0005 <span class="src local">local</span></div><div class="t">Fix eyes on catwalk, make-me and plaything</div><div class="lbls"><span class="lb">art-cards</span><span class="lb bimbo">bimbo</span></div></div>
+          <div class="card"><div class="top">VOT-0007</div><div class="t">Pick the next deity and run its uncommons/rares layered</div><div class="lbls"><span class="lb">art-cards</span></div></div>
+          <div class="card"><div class="top">VOT-0010</div><div class="t">Fix gloves, garbled lettering and toe-length stocking masks</div><div class="lbls"><span class="lb">art-cards</span></div></div>
+          <div class="card"><div class="top">VOT-0011</div><div class="t">Remake card art to overlap guidelines (breaking-out figures)</div><div class="lbls"><span class="lb">art-cards</span><span class="lb">ui</span></div></div>
+        </div></div>
+        <div class="col"><h3>To Do <span>3</span></h3><div class="cards">
+          <div class="card"><div class="top">VOT-0008</div><div class="t">Redo Bimbo uncommons/rares layered, plus relic art</div><div class="lbls"><span class="lb">art-cards</span><span class="lb bimbo">bimbo</span></div></div>
+          <div class="card"><div class="top">VOT-0059</div><div class="t">Redo Cat uncommons/rares layered, plus relic art</div><div class="lbls"><span class="lb">art-cards</span><span class="lb cat">cat</span></div></div>
+          <div class="card"><div class="top">VOT-0012</div><div class="t">Draw Bimbo's final figure (decide flatter, inked style)</div><div class="lbls"><span class="lb">art-cards</span><span class="lb">ui</span><span class="lb bimbo">bimbo</span></div></div>
+        </div></div>
+        <div class="col"><h3>In Progress <span>2</span></h3><div class="cards">
+          <div class="card"><div class="top">VOT-0004</div><div class="t">Fix hands on catwalk, giggle-fit and pliant (3 variants)</div><div class="lbls"><span class="lb">art-cards</span><span class="lb bimbo">bimbo</span></div><div class="agent"><span class="pulse"></span>agent “hands” · inpainting 2/3</div></div>
+          <div class="card"><div class="top">VOT-0006</div><div class="t">Differentiate empty-headed from empty-stare art</div><div class="lbls"><span class="lb">art-cards</span><span class="lb bimbo">bimbo</span></div><div class="agent" style="color:var(--warn)">● agent waiting on you: pick a seed</div></div>
+        </div></div>
+        <div class="col"><h3>Review <span>1</span></h3><div class="cards">
+          <div class="card"><div class="top">VOT-0009 <span class="src gh">PR #41</span></div><div class="t">Split art/layers into delivered vs work files</div><div class="lbls"><span class="lb">art-cards</span><span class="lb">tooling</span></div></div>
+        </div></div>
+        <div class="col"><h3>Done <span>12</span></h3><div class="cards">
+          <div class="card" style="opacity:.6"><div class="top">VOT-0002</div><div class="t">Outpaint Cat uncommons/rares; holo masks</div><div class="lbls"><span class="lb">art-cards</span><span class="lb cat">cat</span></div></div>
+        </div></div>
+      </div>
+    </section>
+
+    <!-- NOTES -->
+    <section class="view" id="v-notes">
+      <div class="head"><h2>Alpha · Notes wall</h2><span class="sp"></span><input class="field" placeholder="Filter notes…" value="#ideas"><button class="btn pri">+ Post-it</button></div>
+      <div class="filters"><span class="lbl">Tags</span><span class="chip on">#ideas</span><span class="chip">#art</span><span class="chip">#design</span><span class="chip">#bugs-seen</span><span class="chip">#for-tim</span><span class="lbl" style="margin-left:10px">Colour</span><span class="chip">yellow</span><span class="chip">pink</span><span class="chip">blue</span></div>
+      <div class="wall">
+        <div class="wcol"><h3>Loose</h3>
+          <div class="postit y">Homewrecker as its own deity, mirror of Rivals<div class="meta"><span>#ideas #design</span><span>2d</span></div></div>
+          <div class="postit pk">Hypnosis pendulum must be turn-based, not rhythm<div class="meta"><span>#design</span><span>5d</span></div></div>
+          <div class="postit bl">Limb library: hang a limb from one rig on another<div class="meta"><span>#art</span><span>1w</span></div></div>
+        </div>
+        <div class="wcol"><h3>Thinking about</h3>
+          <div class="postit or">Conquered backdrops = swapped layers, not whole pictures?<div class="meta"><span>#art #ideas</span><span>3d</span></div></div>
+          <div class="postit gr">Cow: the pail fills across the run, banked between fights<div class="meta"><span>#design</span><span>2w</span></div></div>
+        </div>
+        <div class="wcol"><h3>Make it a ticket →</h3>
+          <div class="postit y">Zoom in before calling a stride "good"<div class="meta"><span>#art</span><span>→ VOT-0021</span></div></div>
+        </div>
+        <div class="wcol"><h3>Parked</h3>
+          <div class="postit bl">Daily leaderboard needs a server<div class="meta"><span>#ideas</span><span>1mo</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AGENTS -->
+    <section class="view" id="v-agents">
+      <div class="alist">
+        <h4>Alpha</h4>
+        <div class="ag on"><span class="s" style="background:var(--ok)"></span><div><div class="nm">hands</div><div class="sub">VOT-0004 · inpainting</div></div><span></span></div>
+        <div class="ag"><span class="s" style="background:var(--warn)"></span><div><div class="nm">empty-stare</div><div class="sub">VOT-0006 · needs you</div></div><span class="q">ask</span></div>
+        <div class="ag"><span class="s" style="background:var(--ok)"></span><div><div class="nm">fight-stage</div><div class="sub">engine · running tests</div></div><span></span></div>
+        <h4>Beta</h4>
+        <div class="ag"><span class="s" style="background:var(--info)"></span><div><div class="nm">soak D</div><div class="sub">overnight · 2h 10m</div></div><span></span></div>
+        <h4>Work · Jira</h4>
+        <div class="ag"><span class="s" style="background:var(--dim)"></span><div><div class="nm">PROJ-1182</div><div class="sub">idle · done 14:02</div></div><span></span></div>
+        <div class="ag"><span class="s" style="background:var(--ok)"></span><div><div class="nm">docs-site</div><div class="sub">building · localhost:4321</div></div><span></span></div>
+        <div style="padding:12px"><button class="btn pri" style="width:100%">+ New agent</button></div>
+      </div>
+      <div class="chat">
+        <div class="head"><h2>hands</h2><span class="src local">VOT-0004</span><span class="chip">Opus · high</span><span class="chip">D:\GitHub\example-studio\Alpha</span><span class="sp"></span><button class="btn">Open in terminal</button><button class="btn">Stop</button></div>
+        <div class="log">
+          <div class="msg user">Fix the hands on catwalk, giggle-fit and pliant. Three variants each, I'll pick.</div>
+          <div class="msg ai">
+            <div class="tool"><b>Read</b> art/cards/bimbo/catwalk-l.png</div>
+            <div class="prev"><div class="ph"><span>catwalk-l.png · before</span><span>1024×1400</span></div>
+              <div class="imgrow"><div class="fakeimg"><span>catwalk-l (current)</span></div></div></div>
+          </div>
+          <div class="msg ai">Left hand has six fingers on the hip. Masking the hand and running three inpaints with the hands LoRA.
+            <div class="tool" style="margin-top:6px"><b>forge_inpaint</b> mask=hand-left · seeds 4417, 4418, 4419</div>
+            <div class="prev"><div class="ph"><span>3 variants · click to pick</span><span>Forge</span></div>
+              <div class="imgrow"><div class="fakeimg"><span>4417</span></div><div class="fakeimg"><span>4418</span></div><div class="fakeimg b"><span>4419</span></div></div></div>
+          </div>
+          <div class="msg ai">
+            <div class="tool"><b>Edit</b> content/art/rework.json</div>
+            <div class="prev"><div class="ph"><span>content/art/rework.json</span><span>+1 −1</span></div>
+<pre class="code"><span class="del">-  "catwalk-l": { "fix": "hands", "status": "queued" },</span><span class="add">+  "catwalk-l": { "fix": "hands", "status": "picking" },</span></pre></div>
+          </div>
+          <div class="ask">Which variant for catwalk-l?<div class="opts"><button class="btn">4417</button><button class="btn">4418</button><button class="btn pri">4419 (recommended: fingers read cleanly)</button><button class="btn">Re-roll</button></div></div>
+        </div>
+        <div class="compose"><input class="field" placeholder="Message hands…  (/ for skills, @ for files, drop an image)"><button class="btn">✎ Draw</button><button class="btn pri">Send</button></div>
+      </div>
+      <div class="side">
+        <div class="tabsm"><button class="on">Artifact</button><button>Files</button><button>Diff</button><button>Ticket</button></div>
+        <div style="overflow:auto">
+          <div class="artifact"><div class="bar"><span>hand-fixes.html · local</span><span>localhost:7410/a/31</span></div>
+            <div class="body"><b>Bimbo hand fixes</b><div style="font-size:11px;margin:4px 0 8px;color:#6a6050">Runs on this machine. Nothing leaves the network.</div>
+              <span class="minicard">catwalk ✓</span><span class="minicard">giggle-fit …</span><span class="minicard c">pliant …</span></div></div>
+          <div style="padding:0 12px 12px;font-size:12px;color:var(--dim)">Images, code, diffs and HTML that the agent makes or opens show here and inline, without opening Claude Code. Artifacts are served by Workbench on your LAN, never the cloud.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DOCS -->
+    <section class="view" id="v-docs">
+      <div class="tree">
+        <div class="repo">vault · Alpha <span>Obsidian</span></div>
+        <div class="f">DESIGN-NOTES.md</div><div class="f on">Card Roguelike.md</div><div class="f">ART-PIPELINE.md</div><div class="f">ART-LAYERED.md</div><div class="f">UI-FIGHT.md</div><div class="f">FIGHT-STAGE-STANDARD.md</div>
+        <div class="repo" style="margin-top:8px">Work · docs site <span>local</span></div>
+        <div class="f">architecture/</div><div class="f">runbooks/</div>
+      </div>
+      <div style="overflow:auto"><div class="doc">
+        <h1>Card Roguelike</h1><div style="color:var(--dim);font-size:12px">vault/Code/Alpha · edited in Obsidian 2h ago · read-write here too</div>
+        <h2>Persistence model</h2>
+        <p>Completion by persistence: every run earns alignment, and each death at a capital wears that capital down. New game+ sets those dials to 0 to make completion a skill check.</p>
+        <div class="callout">Docs stay pure documentation. Tickets that came from this page link back to the heading, so "where did this card come from" is one click.</div>
+        <h2>Regions</h2>
+        <p>The Heartlands, the elven Court, the dwarven Citadel. Free Ports and the Athenaeum are planned with alternate slots.</p>
+      </div></div>
+      <div class="backl"><h4>Tickets from this doc</h4>
+        <div class="ln">VOT-0037 Tune progress and store placeholder numbers</div>
+        <div class="ln">VOT-0033 Add the Free Ports and Athenaeum regions</div>
+        <h4 style="margin-top:14px">Ask about this doc</h4>
+        <input class="field" style="width:100%" placeholder="Draft tickets from the open threads…">
+      </div>
+    </section>
+
+    <!-- CODE -->
+    <section class="view" id="v-code">
+      <div class="tree">
+        <div class="repo">Alpha <span class="src gh">GitHub</span></div>
+        <div class="f">core/Battle/Battle.cs</div><div class="f on">core/App/FightHud.cs</div><div class="f">content/deities/cat.json</div>
+        <div class="repo" style="margin-top:8px">Gamma <span class="src gh">GitHub</span></div>
+        <div class="f">Assets/Scripts/SaveMigrator.cs</div>
+        <div class="repo" style="margin-top:8px">work-service <span class="src gl">GitLab</span></div>
+        <div class="f">src/api/handlers.ts</div><div class="f">MR !212 · 3 threads</div>
+      </div>
+      <div class="editor">
+        <div class="etabs"><span class="on">FightHud.cs</span><span>cat.json</span><span>handlers.ts</span></div>
+        <div class="ecode">
+<div><span class="k">public sealed record</span> <span class="ty">FightHud</span>(<span class="ty">Bars</span> You, <span class="ty">Bars</span> Foe, <span class="ty">int</span> Round)</div>
+<div>{</div>
+<div>    <span class="c">// What the HUD shows: both sides' bars, block and statuses.</span></div>
+<div>    <span class="k">public static</span> <span class="ty">FightHud</span> Of(<span class="ty">Battle</span> fight, <span class="ty">Words</span> words)</div>
+<div>    {</div>
+<div>        <span class="k">var</span> you = <span class="ty">Bars</span>.From(fight.Player, words);</div>
+<div>        <span class="k">var</span> foe = <span class="ty">Bars</span>.From(fight.Enemy, words);</div>
+<div>        <span class="k">return new</span>(you, foe, fight.Round);</div>
+<div>    }</div>
+<div>}</div>
+        </div>
+        <div class="git"><span>⎇ main</span><span>↑0 ↓0</span><span>2 changed</span><span class="sp" style="flex:1"></span><span>Ask an agent about this file</span></div>
+      </div>
+    </section>
+
+    <!-- RUN -->
+    <section class="view" id="v-run">
+      <div class="head"><h2>Alpha · Run</h2><span class="chip on">web build</span><span class="chip">sim sweep</span><span class="chip">Tilt (work)</span><span class="sp"></span><button class="btn pri">+ Console</button></div>
+      <div class="grid4">
+        <div class="term"><div class="th"><span>dotnet watch · Alpha.Web</span><span class="g">● :5170</span></div><pre><span class="i">info</span>: Now listening on http://0.0.0.0:5170
+<span class="g">dotnet watch</span> 🔥 Hot reload enabled
+<span class="i">info</span>: content changed: cards/bimbo.json
+<span class="g">dotnet watch</span> ✔ reloaded in 412ms</pre></div>
+        <div class="term"><div class="th"><span>Sim curve 200 30</span><span class="w">● 61%</span></div><pre>bimbo  normal  runs to incarnate: 14.2
+bimbo  weak    runs to incarnate: 22.8
+cat    normal  <span class="w">…</span></pre></div>
+        <div class="term"><div class="th"><span>tilt up · work stack</span><span class="g">● 6/6 green</span></div><pre><span class="g">✔</span> postgres     ready
+<span class="g">✔</span> api          ready  :8080
+<span class="g">✔</span> worker       ready
+<span class="g">✔</span> docs-site    ready  :4321
+<span class="r">✖</span> e2e          1 failed → <u>open agent on it</u></pre></div>
+        <div class="term comfy"><div class="th"><span>ComfyUI · views.py graph</span><span class="i">embedded</span></div>
+          <div class="node" style="left:20px;top:44px"><b>Load Image</b><i>thug-tpose.png</i></div>
+          <div class="node" style="left:170px;top:30px"><b>Qwen-Image-Edit</b><i>angles LoRA</i></div>
+          <div class="node" style="left:170px;top:110px"><b>KSampler</b><i>seed 991 · 28 steps</i></div>
+          <div class="node" style="left:320px;top:70px"><b>Save</b><i>views/3q.png</i></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TOOLS -->
+    <section class="view" id="v-tools">
+      <div class="head"><h2>Tools · this machine</h2><span class="sp"></span><span style="color:var(--dim);font-size:12px">Everything here is local. Agents can use them too.</span></div>
+      <div class="tiles">
+        <div class="tile"><h4>Forge <span class="g">● running</span></h4><p>SD WebUI Forge via Pinokio · :7860</p><button class="btn">Open UI</button> <button class="btn">Queue</button></div>
+        <div class="tile"><h4>ComfyUI <span style="color:var(--dim)">○ stopped</span></h4><p>Krita AI server and views.py graphs</p><button class="btn pri">Start</button></div>
+        <div class="tile"><h4>Ollama <span class="g">● running</span></h4><p>nemo, laya-0.3.7 · for quick local judging</p><button class="btn">Chat</button> <button class="btn">Models</button></div>
+        <div class="tile"><h4>Pinokio <span class="g">● running</span></h4><p>Launch and stop apps without leaving here</p><button class="btn">Apps</button></div>
+        <div class="tile"><h4>claude-draw <span class="g">● plugin</span></h4><p>Sketch or annotate, hand the drawing to an agent</p><button class="btn">New canvas</button></div>
+        <div class="tile"><h4>Jira <span class="i">● linked (work)</span></h4><p>Pull issues to the board, push status and comments back</p><button class="btn">Sync now</button></div>
+        <div class="tile"><h4>GitHub <span class="g">● 4 repos</span></h4><p>PRs, issues, checks on cards. This project signs in as <b style="color:var(--text)">example-studio</b> (game profile)</p><button class="btn">PRs</button> <button class="btn">Switch profile</button></div>
+        <div class="tile"><h4>GitLab <span class="i">● work</span></h4><p>MRs, pipelines. Work projects sign in with the <b style="color:var(--text)">work</b> profile</p><button class="btn">MRs</button></div>
+        <div class="tile" style="grid-column:1/-1"><h4>Accounts, per project</h4><p>Each project names which profile it uses for each service; a repo inside it can override. Tokens stay in the OS keychain, never in project files.</p>
+          <table style="width:100%;font-size:12px;border-collapse:collapse;color:var(--dim)">
+            <tr style="color:var(--text)"><td>Project</td><td>GitHub</td><td>GitLab</td><td>Jira</td></tr>
+            <tr><td>Alpha, Beta, Project C</td><td>game (example-studio)</td><td>–</td><td>–</td></tr>
+            <tr><td>Site, claude-draw</td><td>home (ThePhilipWilson)</td><td>–</td><td>–</td></tr>
+            <tr><td>Work</td><td>work</td><td>work</td><td>work</td></tr>
+          </table></div>
+      </div>
+    </section>
+
+    <!-- SETUP -->
+    <section class="view" id="v-setup" style="grid-template-columns:1fr 1.4fr;gap:14px;padding:14px;overflow:auto;align-content:start">
+      <div class="tile">
+        <h4>This instance <span class="chip">home PC</span></h4>
+        <p>Its own data folder. Other instances (the work PC) can't see anything here.</p>
+        <div style="font-size:12px;color:var(--dim);margin:8px 0 4px">Projects it includes</div>
+        <label class="ck"><input type="checkbox" checked> Alpha</label>
+        <label class="ck"><input type="checkbox" checked> Beta</label>
+        <label class="ck"><input type="checkbox" checked> Project C</label>
+        <label class="ck"><input type="checkbox"> Delta</label>
+        <label class="ck"><input type="checkbox"> Site</label>
+        <div style="font-size:12px;color:var(--dim);margin:12px 0 4px">Locked off for every project here</div>
+        <label class="ck"><input type="checkbox"> Phone and tablet access</label>
+        <label class="ck"><input type="checkbox"> Jira</label>
+      </div>
+      <div class="tile">
+        <h4>Alpha features <span style="font-size:11px;color:var(--dim)">unticked = not started, not shown</span></h4>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px 12px;margin-top:8px">
+          <label class="ck"><input type="checkbox" checked> Board</label>
+          <label class="ck"><input type="checkbox" checked> Notes wall</label>
+          <label class="ck"><input type="checkbox" checked> Docs (vault)</label>
+          <label class="ck"><input type="checkbox"> WIP pages</label>
+          <label class="ck"><input type="checkbox"> Doc sites</label>
+          <label class="ck"><input type="checkbox" checked> Code</label>
+          <label class="ck"><input type="checkbox" checked> Agents</label>
+          <label class="ck"><input type="checkbox" checked> Consoles</label>
+          <label class="ck"><input type="checkbox" checked> Phone and tablet</label>
+          <label class="ck"><input type="checkbox" checked> Forge</label>
+          <label class="ck"><input type="checkbox" checked> ComfyUI</label>
+          <label class="ck"><input type="checkbox" checked> Pinokio</label>
+          <label class="ck"><input type="checkbox" checked> Ollama</label>
+          <label class="ck"><input type="checkbox" checked> claude-draw</label>
+          <label class="ck"><input type="checkbox" checked> GitHub (game)</label>
+          <label class="ck"><input type="checkbox"> GitLab</label>
+          <label class="ck"><input type="checkbox"> Jira</label>
+          <label class="ck"><input type="checkbox" checked> Mascot</label>
+        </div>
+        <p style="margin-top:12px">A work project on the work PC's instance would tick Board, Docs, WIP pages, Doc sites, Code, Agents, Consoles, GitLab (work), Jira and Mascot, and nothing else.</p>
+      </div>
+    </section>
+
+    <!-- PHONE -->
+    <section class="view" id="v-phone">
+      <div>
+        <div class="phone">
+          <div class="ph-top"><span>Workbench</span><span class="g">● home LAN</span></div>
+          <div class="ph-tabs"><span class="chip on">Alpha 3</span><span class="chip">Beta</span><span class="chip">Proj C</span><span class="chip">Work 2</span></div>
+          <div class="ph-body">
+            <div class="ask" style="font-size:13px"><b>empty-stare</b> needs you<br>Which seed reads apart from empty-headed?<div class="imgrow" style="padding:6px 0"><div class="fakeimg"><span>a</span></div><div class="fakeimg b"><span>b</span></div></div><div class="opts"><button class="btn">a</button><button class="btn pri">b</button></div></div>
+            <div class="card"><div class="top">VOT-0004</div><div class="t">Fix hands on catwalk…</div><div class="agent"><span class="pulse"></span>inpainting 2/3</div></div>
+            <div class="postit y" style="min-height:60px;font-size:13px">Cow: the pail, banked between fights</div>
+          </div>
+          <div class="ph-nav"><span>▦</span><span>▤</span><span class="on">✦</span><span>❏</span><span>◉</span></div>
+        </div>
+        <div class="caption">Phone, portrait: agents first, answer from here</div>
+      </div>
+      <div>
+        <div class="tablet">
+          <div style="border-right:1px solid var(--line);padding:10px;font-size:12px">
+            <div class="chip on" style="display:block;margin-bottom:6px">Alpha</div><div class="chip" style="display:block;margin-bottom:6px">Beta</div><div class="chip" style="display:block">Work</div>
+            <div style="margin-top:14px;color:var(--dim)">Agents</div><div style="margin-top:4px">● hands</div><div style="color:var(--warn)">● empty-stare</div><div>● fight-stage</div>
+          </div>
+          <div style="padding:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-content:start">
+            <div class="col"><h3>To Do</h3><div class="cards"><div class="card"><div class="t" style="font-size:12px">Redo Bimbo layered</div></div><div class="card"><div class="t" style="font-size:12px">Redo Cat layered</div></div></div></div>
+            <div class="col"><h3>Doing</h3><div class="cards"><div class="card"><div class="t" style="font-size:12px">Fix hands</div><div class="agent"><span class="pulse"></span>2/3</div></div></div></div>
+            <div class="col"><h3>Review</h3><div class="cards"><div class="card"><div class="t" style="font-size:12px">Split art/layers</div></div></div></div>
+          </div>
+        </div>
+        <div class="caption">Tablet, landscape: the board with agents beside it</div>
+      </div>
+    </section>
+
+    </div>
+  </div>
+
+  <div class="status"><span>Alpha · ⎇ main</span><span>3 agents running · 1 waiting</span><span>Jira last sync 14:02</span><span class="sp"></span><span>Served on 192.168.1.20:7410 · token paired: Pixel, iPad</span></div>
+</div>
+
+<div class="toast" id="toast"><div class="tt"><span>Workbench · Alpha</span><span>now</span></div><b>empty-stare needs you</b>Which seed reads apart from empty-headed?<div class="hint">Click → opens this agent at the question, not the agent list</div></div>
+
+<div class="mascot">
+  <div class="bubble" id="bubble">
+    <div class="bh"><span>Bench · anywhere, any project</span><span style="cursor:pointer" id="hide">–</span></div>
+    <div class="bb">
+      <div class="me">split every deity card into one per deity and tag them</div>
+      <div class="it">Done on Alpha: 7 tagged, 5 split into 20 new cards. Filter <b>label:cat</b> to see Cat's.</div>
+      <div class="me">what's waiting on me?</div>
+      <div class="it">One: <b>empty-stare</b> wants a seed pick. Open it?</div>
+    </div>
+    <input placeholder="Ask, or tell me to do something…">
+  </div>
+  <div class="critter" id="critter" title="Click to talk"><i></i></div>
+</div>
+
+<div class="note">Mockup v1 · click the rail on the left, the mascot, and “Simulate agent alert”</div>
+
+<script>
+document.querySelectorAll('.rb').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.rb').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+b.dataset.v));
+}));
+document.querySelectorAll('.ptab').forEach(b=>b.addEventListener('click',()=>{
+  if(b.textContent.trim()==='＋')return;
+  document.querySelectorAll('.ptab').forEach(x=>x.classList.toggle('on',x===b));
+}));
+document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>c.classList.toggle('on')));
+const bubble=document.getElementById('bubble');
+document.getElementById('critter').onclick=()=>{bubble.style.display=bubble.style.display==='none'?'':'none'};
+document.getElementById('hide').onclick=()=>{bubble.style.display='none'};
+const toast=document.getElementById('toast');
+document.getElementById('fire').onclick=()=>{toast.classList.add('on')};
+toast.onclick=()=>{
+  toast.classList.remove('on');
+  document.querySelector('.rb[data-v="agents"]').click();
+  document.querySelectorAll('.ag').forEach(a=>a.classList.toggle('on',a.querySelector('.nm').textContent==='empty-stare'));
+};
+document.querySelectorAll('.ag').forEach(a=>a.addEventListener('click',()=>document.querySelectorAll('.ag').forEach(x=>x.classList.toggle('on',x===a))));
+</script>
+</body>
+</html>
