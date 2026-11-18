@@ -1,6 +1,6 @@
 # Darg
 
-Philip's one app for everything: per-project boards, notes, docs, code, agents, consoles and tools. Native Avalonia (C#, .NET 10), one codebase for Windows, Mac and mobile. The plan and decisions live in Philip's Obsidian vault under `Code/Darg/` (PLAN.md, the mockup, MORNING.md, PHONE-PLAN.md); the folder on this machine is in `CLAUDE.local.md` (not committed).
+Philip's one app for everything: per-project boards, notes, docs, code, agents, consoles and tools. Native Avalonia (C#, .NET 10), one codebase for Windows, Mac and mobile. The plan and decisions live in `docs/` (PLAN.md, the mockup, MORNING.md, PHONE-PLAN.md), which is the Docs section for this project; they moved there from the Obsidian vault on 2026-11-18 (WOR-0123), and the studio's name stays out of them as it does out of everything else here. A project's docs live in its own repo's `docs/` by default.
 
 ## Layout
 
