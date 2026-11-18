@@ -25,6 +25,8 @@ public partial class MainViewModel
                     "agent an agent id, artifact a file path. With only project, switches to its tab.", Show);
         Add("agents", "a project's agents: {project}, or {} for every project's (only when Philip asks about all of them). Each: project, id, name, state, " +
                       "what it's doing, open (session running), card, flow.", a => ListAgents(a.Get("project") is null ? null : FindProject(a)));
+        Add("cards", CardsUsage, Cards);
+        Add("card", CardUsage, OneCard);
         Add("agent", "one agent: {id, last?}. Its details and transcript, the last n entries (default 20).", OneAgent);
         Add("start-agent", "start an agent in a project with a prompt: {project, prompt, cwd?, name?}. Returns its id. It costs a session: only when Philip asks.", StartAgent);
         Add("work-on", "start an agent on a board card, as the card's Work on button does (moves it to In Progress): {project, card}, or on several at once as ▶ Work on N does: {project, cards} (a list, or ids separated by spaces). Only when Philip asks.", WorkOn);
