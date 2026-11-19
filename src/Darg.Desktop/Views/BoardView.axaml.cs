@@ -41,6 +41,12 @@ public partial class BoardView : UserControl
             Fit();
         };
         ChipDoubleClicks(this);
+        // a board tab pressed with Ctrl adds or removes it (WOR-0149); the button's click reads the flag
+        AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (_, e) =>
+        {
+            if (DataContext is BoardViewModel b && (e.Source as Avalonia.Visual)?.GetSelfAndVisualAncestors().OfType<Button>().Any(x => x.DataContext is BoardTab) == true)
+                b.TabCtrl = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control);
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
         // a column's name: double-click to rename; in the box, Enter saves and Esc leaves it as it was
         AddHandler(DoubleTappedEvent, (_, e) =>
         {

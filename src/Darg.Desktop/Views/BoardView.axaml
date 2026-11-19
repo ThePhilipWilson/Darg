@@ -44,30 +44,18 @@
   <Grid RowDefinitions="Auto,Auto,*">
     <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
       <DockPanel>
-        <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding Boards}" SelectedItem="{Binding SelectedBoard}" MinWidth="140" Margin="0,0,6,0"/>
         <Button DockPanel.Dock="Left" Content="+ Board" Command="{Binding NewBoardCommand}" Margin="0,0,12,0"
                 ToolTip.Tip="Make a new board, or have an agent sort the cards into a board per story"/>
-        <Button DockPanel.Dock="Left" Content="{Binding ShowBoardsText}" Margin="0,0,12,0" IsVisible="{Binding !!Choices.Count}"
-                ToolTip.Tip="Show other boards with this one, a row each">
-          <Button.Flyout>
-            <Flyout Placement="BottomEdgeAlignedLeft">
-              <StackPanel Spacing="6" MinWidth="200">
-                <TextBlock Classes="dim small" Text="Show with this board, a row each:"/>
-                <ItemsControl ItemsSource="{Binding Choices}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:BoardChoice">
-                      <CheckBox Content="{Binding Name}" IsChecked="{Binding IsShown}"/>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="All boards" Command="{Binding ShowAllBoardsCommand}"/>
-                  <Button Content="Just this one" Command="{Binding ShowOneBoardCommand}"/>
-                </StackPanel>
-              </StackPanel>
-            </Flyout>
-          </Button.Flyout>
-        </Button>
+        <ItemsControl DockPanel.Dock="Left" x:Name="BoardTabs" ItemsSource="{Binding Tabs}" Margin="0,0,12,0">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:BoardTab">
+              <Button Classes="chip boardtab" Classes.all="{Binding IsShown}" Content="{Binding Name}" Command="{Binding PickCommand}"
+                      Margin="0" Padding="12,4" FontSize="13" AutomationProperties.Name="{Binding Name}"
+                      ToolTip.Tip="Click: show only this board. Ctrl+click: add it to the boards showing, or take it off."/>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
         <Button DockPanel.Dock="Right" Classes="primary" Content="+ Card" Command="{Binding NewCardCommand}" Margin="12,0,0,0"/>
         <CheckBox DockPanel.Dock="Right" Content="Show completed" IsChecked="{Binding ShowCompleted}" Margin="12,0,0,0"/>
         <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="260"/>

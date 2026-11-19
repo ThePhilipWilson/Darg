@@ -24,14 +24,15 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public ObservableCollection<BoardViewModel> Rows { get; } = [];
     /// <summary>The others shown with the picked one (kept in the instance, <see cref="ShownBoards"/>).</summary>
     readonly HashSet<string> _also = new(StringComparer.OrdinalIgnoreCase);
-    /// <summary>The other boards, each with a tick for showing it as a row too.</summary>
-    public ObservableCollection<BoardChoice> Choices { get; } = [];
+    /// <summary>A tab per board (WOR-0149): lit for each board showing, the picked one and those shown with it.</summary>
+    public ObservableCollection<BoardTab> Tabs { get; } = [];
+    /// <summary>Set by the view as a tab is pressed: whether Ctrl was down, which the click that follows reads.</summary>
+    public bool TabCtrl { get; set; }
     /// <summary>A row's header (its board's name) shows once there is more than one row.</summary>
     [ObservableProperty] public partial bool ShowsHeader { get; set; }
     public bool IsExtraRow => _parent is not null;
     /// <summary>Set by the view: a row's height, so several share the screen.</summary>
     [ObservableProperty] public partial double RowHeight { get; set; } = double.NaN;
-    public string ShowBoardsText => Rows.Count > 1 ? $"⧉ {Rows.Count} boards" : "⧉ Boards";
 
     /// <summary>Set by the project: the live agent working on a card, if any.</summary>
     public Func<string, AgentViewModel?>? AgentFor { get => _parent is null ? field : _parent.AgentFor; set; }
@@ -220,11 +221,12 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     {
         if (_parent is not null) return;
         var others = Boards.Where(b => b != SelectedBoard).ToList();
-        if (!others.SequenceEqual(Choices.Select(c => c.Name)) || Choices.Any(c => c.IsShown != _also.Contains(c.Name)))
+        if (!Boards.SequenceEqual(Tabs.Select(t => t.Name)))
         {
-            Choices.Clear();
-            foreach (var b in others) Choices.Add(new BoardChoice(this, b, _also.Contains(b)));
+            Tabs.Clear();
+            foreach (var b in Boards) Tabs.Add(new BoardTab(this, b));
         }
+        foreach (var t in Tabs) t.IsShown = t.Name == SelectedBoard || _also.Contains(t.Name);
         var want = others.Where(_also.Contains).ToList();
         foreach (var row in Rows.Skip(1).Where(r => !want.Contains(r.SelectedBoard!)).ToList()) { Rows.Remove(row); row.Dispose(); }
         for (var i = 0; i < want.Count; i++)
@@ -235,7 +237,6 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             else Rows.Insert(i + 1, new BoardViewModel(this, want[i]));
         }
         foreach (var r in Rows) r.ShowsHeader = Rows.Count > 1;
-        OnPropertyChanged(nameof(ShowBoardsText));
         RowsChanged?.Invoke();
         SyncLabels();
         ApplyAll();
@@ -253,6 +254,30 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (shown ? !_also.Add(board) : !_also.Remove(board)) return;
         ShownBoards.Save(_project.Id, _also.Order(StringComparer.OrdinalIgnoreCase));
         SyncRows();
+    }
+
+    /// <summary>A tab's click (WOR-0149): plain shows only that board; Ctrl adds it to those showing, or takes it off
+    /// (never the last one showing). The picked board is the first row, so taking it off promotes the next.</summary>
+    public void PickBoard(string board, bool additive)
+    {
+        if (!additive)
+        {
+            _also.Clear();
+            ShownBoards.Save(_project.Id, []);
+            if (SelectedBoard == board) SyncRows(); else SelectedBoard = board; // the change syncs
+            return;
+        }
+        if (board == SelectedBoard)
+        {
+            var next = _also.Order(StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+            if (next is null) return;
+            _also.Remove(next);
+            ShownBoards.Save(_project.Id, _also.Order(StringComparer.OrdinalIgnoreCase));
+            SelectedBoard = next;
+
+            return;
+        }
+        SetShown(board, !_also.Contains(board));
     }
 
     /// <summary>Show every board at once.</summary>
@@ -1390,12 +1415,13 @@ public sealed record DecisionChoice(DecisionOption Option, IRelayCommand Command
     public string ActionText => Option.ActionText;
 }
 
-/// <summary>One of the project's other boards, with a tick for showing it as a row beside the picked one.</summary>
-public sealed partial class BoardChoice(BoardViewModel board, string name, bool shown) : ObservableObject
+/// <summary>A board's tab above the board; a plain click picks it alone, Ctrl+click adds it or takes it off.</summary>
+public sealed partial class BoardTab(BoardViewModel board, string name) : ObservableObject
 {
     public string Name { get; } = name;
-    [ObservableProperty] public partial bool IsShown { get; set; } = shown;
-    partial void OnIsShownChanged(bool value) => board.SetShown(Name, value);
+    [ObservableProperty] public partial bool IsShown { get; set; }
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    void Pick() { var ctrl = board.TabCtrl; board.TabCtrl = false; board.PickBoard(Name, ctrl); }
 }
 
 /// <summary>The side panel for making boards: a new one by hand, or an agent sorting the cards into several.</summary>
