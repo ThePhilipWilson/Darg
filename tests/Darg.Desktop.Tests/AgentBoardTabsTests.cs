@@ -62,7 +62,7 @@ public class AgentBoardTabsTests
 
             Assert.Equal("", app.Crashes());
         }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", null); }
+        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); } // the Sandbox default: unset, fake claude turns run 60 s
     }
 
     [AvaloniaFact]
@@ -84,6 +84,6 @@ public class AgentBoardTabsTests
             Assert.Equal(3, tabs.Count);
             app.Shot("agent-board-tabs");
         }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", null); }
+        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); } // the Sandbox default: unset, fake claude turns run 60 s
     }
 }
