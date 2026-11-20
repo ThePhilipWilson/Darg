@@ -45,7 +45,8 @@ public partial class MainViewModel
                       "what it's doing, open (session running), card, flow.", a => ListAgents(a.Get("project") is null ? null : FindProject(a)));
         Add("cards", CardsUsage, Cards);
         Add("card", CardUsage, OneCard);
-        Add("agent", "one agent: {id, last?}. Its details and transcript, the last n entries (default 20).", OneAgent);
+        Add("agent", "one agent: {id, last?, since?}. Its details and transcript: the last n entries (default 20), or with since every entry from that index on " +
+                     $"(at most {AgentPage}; next says where to carry on, total how many there are), each with its index i, so a reader can poll for what's new.", OneAgent);
         Add("start-agent", "start an agent in a project with a prompt: {project, prompt, cwd?, name?}. Returns its id. It costs a session: only when Philip asks.", StartAgent);
         Add("work-on", "start an agent on a board card, as the card's Work on button does (moves it to In Progress): {project, card}, or on several at once as ▶ Work on N does: {project, cards} (a list, or ids separated by spaces). A card blocked by one not yet in QA or done is refused (left out of several) unless force: true. Only when Philip asks.", WorkOn);
         Add("work-all", "start an agent on every card in the shown board's backlog and In Progress with none on it, as that column's ▶ Work All does (backlog cards move to In Progress; no asking first): {project}. Cards blocked by one not yet in QA or done are left out and named unless force: true. Only when Philip asks.", a => BulkApi(a, BulkStart.Kind.Work));
@@ -78,7 +79,8 @@ public partial class MainViewModel
                       "blockedBy: the cards it waits on with found, cleared and cycle, blocked: any still open, blocks: the cards waiting on it).", BoardsLayout);
         Add("move-card", "move a card to another column of its board, as dragging it on the board does: {project, card, column, before?}. column is a column's name, " +
                          "or backlog, qa, attention, rework, done or completed; before a card in that column to land above (else the end). Only when Philip asks.", MoveCard);
-        Add("say","send a message to a project's agent, as if Philip typed it: {id, text}. A saved agent resumes its session.", Say);
+        Add("say","send a message to a project's agent, as if Philip typed it: {id, text, queue?}. A saved agent resumes its session. Refused mid-turn " +
+                  "unless queue is true: then it goes in as the agent's Send box does, for the agent to read mid-turn (the phone's nudge).", Say);
         Add("close-agents", "close agents' sessions: {ids} (a list, or ids separated by spaces). They stay listed and carry on when sent a message.", a => CloseAgents(a.List("ids")));
         Add("forget-agents", "forget agents, as the × in the Agents list does: {ids}. Each one's session ends, it leaves the list and its saved file goes " +
                              "(Claude Code keeps its history). Not one mid-turn. Only when Philip asks, or for agents whose card is done.", a => ForgetAgents(a.List("ids")));
@@ -290,23 +292,53 @@ public partial class MainViewModel
     string OneAgent(ApiArgs a)
     {
         var (p, agent) = FindAgent(a.Need("id"));
-        var last = int.TryParse(a.Get("last"), out var n) && n > 0 ? n : 20;
+        var total = agent.Items.Count;
+        int from, count;
+        if (a.Get("since") is { } since)
+        {
+            if (!int.TryParse(since, out from) || from < 0) throw new ApiError($"since is an entry index (0 or more), not \"{since}\".");
+            from = Math.Min(from, total);
+            count = Math.Min(AgentPage, total - from);
+        }
+        else
+        {
+            var last = int.TryParse(a.Get("last"), out var n) && n > 0 ? n : 20;
+            count = Math.Min(last, total);
+            from = total - count;
+        }
         var items = new JsonArray();
-        foreach (var item in agent.Items.TakeLast(last))
-            items.Add(item switch
-            {
-                UserItem u => new JsonObject { ["kind"] = "user", ["text"] = u.Text },
-                TextItem t => new JsonObject { ["kind"] = "agent", ["text"] = t.Text },
-                NoteItem note => new JsonObject { ["kind"] = "note", ["text"] = note.Text },
-                ToolItem tool => new JsonObject { ["kind"] = "tool", ["text"] = tool.Summary },
-                _ => new JsonObject { ["kind"] = item.GetType().Name.Replace("Item", "").ToLowerInvariant() },
-            });
+        for (var i = from; i < from + count; i++) items.Add(Entry(i, agent.Items[i]));
         return Json(new JsonObject
         {
-            ["project"] = p.Config.Id, ["id"] = agent.Id, ["name"] = agent.Name, ["state"] = agent.StateText, ["activity"] = agent.Activity,
-            ["open"] = agent.Open, ["card"] = agent.CardId, ["cwd"] = agent.Cwd, ["flow"] = agent.Flow?.Status, ["items"] = items,
+            ["project"] = p.Config.Id, ["id"] = agent.Id, ["name"] = agent.Name, ["state"] = agent.StateText, ["status"] = agent.State.ToString().ToLowerInvariant(),
+            ["activity"] = agent.Activity, ["open"] = agent.Open, ["card"] = agent.CardId, ["cwd"] = agent.Cwd, ["flow"] = agent.Flow?.Status,
+            ["total"] = total, ["next"] = from + count, ["items"] = items,
         });
     }
+
+    /// <summary>The most entries one agent call with since returns (AND-0005): a phone catching up on a long transcript pages through it.</summary>
+    const int AgentPage = 200;
+
+    /// <summary>One transcript entry as JSON: its index, kind and full text; a step also its tool, result, diff and whether it failed,
+    /// an ask whether it still waits. Kinds: user, agent, note, tool, permission, question.</summary>
+    static JsonObject Entry(int i, TranscriptItem item) => item switch
+    {
+        UserItem u => new JsonObject { ["i"] = i, ["kind"] = "user", ["text"] = u.Text },
+        TextItem t => new JsonObject { ["i"] = i, ["kind"] = "agent", ["text"] = t.Text },
+        NoteItem note => new JsonObject { ["i"] = i, ["kind"] = "note", ["text"] = note.Text, ["error"] = note.Bad },
+        ToolItem tool => new JsonObject
+        {
+            ["i"] = i, ["kind"] = "tool", ["text"] = tool.Summary, ["tool"] = tool.Name, ["result"] = tool.Result, ["done"] = tool.Done, ["error"] = tool.IsError,
+            ["removed"] = tool.Removed, ["added"] = tool.Added, ["preview"] = tool.Preview,
+        },
+        PermissionItem ask => new JsonObject { ["i"] = i, ["kind"] = "permission", ["text"] = ask.Summary, ["tool"] = ask.Tool, ["pending"] = ask.Pending, ["result"] = ask.Decision },
+        QuestionItem q => new JsonObject
+        {
+            ["i"] = i, ["kind"] = "question", ["pending"] = q.Pending,
+            ["text"] = string.Join("\n", q.Questions.Select(g => g.Chosen is null ? g.Question : $"{g.Question} → {g.Chosen}")),
+        },
+        _ => new JsonObject { ["i"] = i, ["kind"] = item.GetType().Name.Replace("Item", "").ToLowerInvariant() },
+    };
 
     string StartAgent(ApiArgs a)
     {
@@ -552,8 +584,8 @@ public partial class MainViewModel
     {
         var (_, agent) = FindAgent(a.Need("id"));
         var text = a.Need("text");
-        if (agent.State is AgentState.Starting or AgentState.Working)
-            throw new ApiError($"\"{agent.Name}\" is mid-turn ({agent.StateText}); send when it's done.");
+        if (agent.State is AgentState.Starting or AgentState.Working && !string.Equals(a.Get("queue"), "true", StringComparison.OrdinalIgnoreCase))
+            throw new ApiError($"\"{agent.Name}\" is mid-turn ({agent.StateText}); send when it's done, or with queue true for it to read mid-turn.");
         agent.Say(text, text);
         return $"Sent to \"{agent.Name}\".";
     }
