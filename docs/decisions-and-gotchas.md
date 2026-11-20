@@ -41,7 +41,7 @@ Harvested from the finished-agent reports (2026-11-16 to 2026-11-20). Each item 
 
 **UI**
 - A `ToggleButton` bound one-way to a state doesn't re-push an unchanged value, so Fettle's Chat tab unchecked itself on click; `TabClicked` in `MainWindow.axaml.cs` re-checks it (`FettleTabTests`, WOR-0134).
-- Fettle's chats dropdown needed several clicks because its popup sat inside the drag-handle header; dragging is now only from the title and tabs rows (WOR-0130). Hot reload doesn't rewire handlers set at startup: ⟳ Restart after a Pull in.
+- Fettle's chats dropdown needed several clicks because its popup sat inside the drag-handle header; dragging is now only from the title and tabs rows (WOR-0130). Hot reload doesn't rewire handlers set at startup: Restart (in the ⟳ menu) after a Pull in.
 - Clipping a pip: `Button.critter` has Padding 6,6,6,0 and CornerRadius 0 so badges aren't cut off; the button is also the drag handle (WOR-0068).
 - The drag lift is a snapshot of the card's bounds, so a polaroid's tape can clip mid-drag (WOR-0080).
 - A status message that a file watcher reload overwrites (Reports → Clean up): the reload has a 400 ms debounce, so the message now holds 8 s (WOR-0131).

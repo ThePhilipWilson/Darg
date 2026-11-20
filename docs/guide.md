@@ -16,7 +16,7 @@ Jira-style boards in markdown. **Each board is a story**; one is the inbox (name
 - **Column ⋯ menu**: rename, minimize (stored as `"minimized"` in `board.json`), remove (the cards go to the first column), sort: Manual, A-Z, Newest or Longest in column, plus Reverse (WOR-0146). The sort is a view order kept in `column-sorts`; a drag inside a sorted column is refused with a reason. A card gets a `Moved:` line whenever its column changes (also stamped when a Status is edited outside Darg).
 - **Default columns** include **For Human Attention** (renamed from "Needs Phil Attention", WOR-0120); boards without one gain one before Done, once (`attentionColumn: true` in `board.json`, so a deleted column stays deleted).
 - **Done column ⋯ → Wrap up into stories…**: an agent groups Done cards into stories and asks first. Each story gets a doc under `Stories/` and a Story card in Done; the members go to Completed (hidden unless Show completed is ticked, files kept) (WOR-0074).
-- **Card panel** (click a card): edit title, description and labels; ▶ Work on this, ✦ Improve this card, 🧪 Run QA, ↩ Send back, Done, 🔔 Needs my attention, 📋 Report. A card in Done offers none of the agent actions. A `## Decision` shows at the top with its options. The ✕ top left closes without saving.
+- **Card panel** (click a card): edit title, description and labels; ▶ Work on this, ✦ Improve this card, 🧪 Run QA, ↩ Send back, ✓ Done and 🔔 For human attention (on a card in QA), ✓ Mark done (moves any open card to the last column), 📋 Report. A card in Done offers none of the agent actions. A `## Decision` shows at the top with its options. The ✕ top left closes without saving.
 - **Bulk**: ▶ Work on N / ✦ Improve N on picked cards; ▶ Work All (n) at the top of the backlog, a To Do column and the working column; 🧪 QA Run All (n) on QA. Above 3 agents the column asks "Start n agents?" first. A card that fails to start is named in the status line and the rest start.
 
 See [cards-and-qa.md](cards-and-qa.md) for what those buttons do together.
@@ -39,7 +39,7 @@ Multi-agent pipelines, one markdown file each: `# Name`, `Max rounds: n`, a `## 
 
 ## Reports
 
-Finished-agent reports, newest first, unread dotted and counted on the rail. Tabs: All, Finished, Investigations (including CNR), QA reports. Mark unread, Mark all read, Unread only, Show card, commits link to GitHub. **Clean up** archives QA reports of Done cards and writes any missing done report. **Story** dropdown + Archive story moves finished reports to `reports/archive/<story>/`; Archive (n) browses them, Restore brings them back (QA and undecided decision reports are never archived). A pending decision report offers ✓ Approve and ↩ Send back. Reports show markdown pictures and links.
+Finished-agent reports, newest first, unread dotted and counted on the rail. A kind filter, shown as tabs, each with its count: All reports, Finished tasks, Investigations (including CNR), QA reports. Mark unread, Mark all read, Unread only, Show card, commits link to GitHub. **Clean up** archives QA reports of Done cards and writes any missing done report. **Story** dropdown + Archive story moves finished reports to `reports/archive/<story>/`; Archive (n) browses them, Restore brings them back (QA and undecided decision reports are never archived). A pending decision report offers ✓ Approve and ↩ Send back. Reports show markdown pictures and links.
 
 ## Artifacts
 

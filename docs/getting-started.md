@@ -26,7 +26,7 @@ Instances cannot see each other, by design (the work PC and home PC each run the
 
 ## Environment variables
 
-Every `DARG_*` name also works as `WORKBENCH_*` (the app was renamed).
+`DARG_HOME` and `DARG_INSTANCE` also work under their old names, `WORKBENCH_HOME` and `WORKBENCH_INSTANCE` (the app was renamed; `InstanceConfig.Env`). The others answer to their `DARG_` name only.
 
 | Variable | Effect |
 |---|---|

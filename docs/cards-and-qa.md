@@ -27,7 +27,7 @@ A card in QA with work to look at:
 - **Work on** a card already in QA starts an agent that builds and launches the work to try, changing no code (`ReportStore.CheckPrompt`).
 - **🧪 Run QA** starts an agent that builds and checks the card from its How to check section, preferring automation and saying in the card why anything couldn't be. The card stays in QA; it writes no report (Darg writes the done report if it moves the card to Done). Run QA shows unless a QA agent is already on the card (purpose `qa`). **QA Run All** does it for every QA card with none.
 - **↩ Send back** (panel, Reports, or API `send-back`): you write what's wrong; it goes into the card as a dated entry under `## QA notes`, the card goes back to In Progress and a rework agent starts (`ReportStore.ReworkPreface`: build on How to check, fix the notes, replace How to check, write a fresh QA report). When a reworked card re-enters QA, Darg waits for that agent's turn to end (merge and report done) and starts Run QA by itself. Work on in a needs-more-work column does the same. Ordinary work to QA gets no automatic QA.
-- **Done / Needs my attention** on a QA card with no live agent: Done moves it (and marks its newest unsettled report approved); Needs my attention moves it to For Human Attention and an optional "why" is written under a dated `## Why it needs attention`.
+- **✓ Done / 🔔 For human attention** on a QA card with no live agent: ✓ Done moves it (and marks its newest unsettled report approved); 🔔 For human attention moves it to For Human Attention and an optional "why" is written under a dated `## Why it needs attention`.
 
 ## 4. For Human Attention and decisions
 
