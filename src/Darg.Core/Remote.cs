@@ -38,6 +38,7 @@ public static class RemoteAccess
         "projects", "overview", "agents", "agent", "cards", "card", "flows",
         "notes", "docs", "doc", "reports", "report", // AND-0008's read-only views
         "boards", "move-card", // AND-0004's board
+        "fettle-say", "fettle", "fettle-answer", "fettle-chats", // AND-0007's Fettle from the phone
         "say", "decide", "send-back", "new-card", "work-on", "close-agents",
     };
 
