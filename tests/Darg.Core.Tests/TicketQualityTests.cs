@@ -18,8 +18,9 @@ public class TicketQualityTests
         {
             var s = Parse(bare).Quality;
             Assert.Equal(0, s.Stars);
-            Assert.True(s.Red);
-            Assert.Equal("red", s.Colour);
+            Assert.True(s.Zero);
+            Assert.False(s.Red);
+            Assert.Equal("black", s.Colour);
             Assert.Equal([TicketQuality.Wanted, TicketQuality.Where, TicketQuality.Done], s.Missing);
         }
     }
@@ -29,6 +30,7 @@ public class TicketQualityTests
     {
         Assert.Equal(1, Parse(Words).Quality.Stars);
         Assert.True(Parse(Words).Quality.Red);
+        Assert.Equal("red", Parse(Words).Quality.Colour);
 
         var two = Parse(Words + "\n\n**Where:** the Board section, `BoardView.axaml`.").Quality;
         Assert.Equal(2, two.Stars);
@@ -39,8 +41,9 @@ public class TicketQualityTests
         Assert.Equal(3, three.Stars);
         Assert.True(three.Green);
         Assert.Empty(three.Missing);
-        Assert.Equal("★3", three.Text);
-        Assert.Equal("★ 3/3", three.Long);
+        Assert.Equal("★", three.Text);
+        Assert.Equal("★", three.Long);
+        Assert.Contains("Ticket quality 3/3", three.Tip);
     }
 
     [Theory]
@@ -104,7 +107,7 @@ public class TicketQualityTests
     public void The_Improve_prompt_carries_the_score_and_asks_for_the_labels_the_score_reads()
     {
         var bare = CardImprover.Prompt("Workbench", Parse("fix logo aliasing"), "x.md");
-        Assert.Contains("ticket quality score is 0/3 (red)", bare);
+        Assert.Contains("ticket quality score is 0/3 (black)", bare);
         Assert.Contains("doesn't say what's wanted or where it lives or when it's done", bare);
         Assert.Contains("**Where:**", bare);
         Assert.Contains("**Done when:**", bare);
@@ -112,5 +115,23 @@ public class TicketQualityTests
         var green = CardImprover.Prompt("Workbench", Parse(Words + "\n\n**Where:** `Board.cs`\n\nDone when: folded stays folded."), "x.md");
         Assert.Contains("ticket quality score is 3/3 (green)", green);
         Assert.Contains("change only what isn't, or nothing", green);
+    }
+
+    static double Lum(string hex)
+    {
+        double C(int i) { var v = Convert.ToInt32(hex.Substring(1 + i * 2, 2), 16) / 255.0; return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4); }
+        return 0.2126 * C(0) + 0.7152 * C(1) + 0.0722 * C(2);
+    }
+
+    static double Ratio(string a, string b) { var (x, y) = (Lum(a), Lum(b)); return (Math.Max(x, y) + 0.05) / (Math.Min(x, y) + 0.05); }
+
+    [Fact] // WOR-0181: the 0 star is black on the light themes and still 3:1 on every surface it sits on
+    public void The_zero_star_is_black_and_visible_in_every_theme()
+    {
+        Assert.Equal("#000000", Themes.Light.Colours["Zero"]);
+        Assert.Equal("#000000", Themes.Girlypop.Colours["Zero"]);
+        foreach (var t in Themes.All)
+            foreach (var surface in new[] { "Bg", "Panel", "Panel2" })
+                Assert.True(Ratio(t.Colours["Zero"], t.Colours[surface]) >= 3, $"{t.Name}: Zero on {surface}");
     }
 }

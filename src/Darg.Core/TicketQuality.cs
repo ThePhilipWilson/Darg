@@ -5,18 +5,19 @@ namespace Darg.Core;
 /// <summary>How ready a card is to be picked up cold (WOR-0156): a star out of 3 beside its id, a point each for
 /// saying what's wanted, where it lives and when it's done, the three things Improve (<see cref="CardImprover"/>)
 /// writes. Read from the card's text every time it's shown, so it follows the file: an Improve agent's rewrite
-/// rescores the card as the board reloads. Red at 0 or 1, amber at 2, green at 3.</summary>
+/// rescores the card as the board reloads. Black at 0, red at 1, amber at 2, green at 3; the colour says it, so the star carries no digit (the tooltip does).</summary>
 public sealed record TicketScore(int Stars, IReadOnlyList<string> Has, IReadOnlyList<string> Missing)
 {
     public const int Max = 3;
-    public bool Red => Stars <= 1;
+    public bool Zero => Stars <= 0;
+    public bool Red => Stars == 1;
     public bool Amber => Stars == 2;
     public bool Green => Stars >= Max;
-    public string Colour => Green ? "green" : Amber ? "amber" : "red";
-    /// <summary>"★2": what the card's tile shows.</summary>
-    public string Text => $"★{Stars}";
-    /// <summary>"★ 2/3": what the card's panel shows.</summary>
-    public string Long => $"★ {Stars}/{Max}";
+    public string Colour => Green ? "green" : Amber ? "amber" : Red ? "red" : "black";
+    /// <summary>"★": what the card's tile shows; the colour is the score.</summary>
+    public string Text => "★";
+    /// <summary>What the card's panel shows: the same star, no digit.</summary>
+    public string Long => "★";
     /// <summary>The tooltip: the score, what the card says and what it's missing.</summary>
     public string Tip =>
         $"Ticket quality {Stars}/{Max}" +

@@ -28,22 +28,23 @@ public class TicketQualityTests
 
         var star = Star(app, card.Id);
         Assert.NotNull(star);
-        Assert.Equal("★0", star.Text);
-        Assert.Equal(Colour(new TextBlock { Foreground = Theme("Bad") }), Colour(star));
+        Assert.Equal("★", star.Text);
+        Assert.Contains("zero", star.Classes);
+        Assert.Equal(Colour(new TextBlock { Foreground = Theme("Zero") }), Colour(star));
         Assert.Contains("Ticket quality 0/3", ToolTip.GetTip(star) as string);
 
         // Improve is told the score and what's missing
         await app.Api("improve-card", new { project = "proj", card = card.Id });
         await app.Until(() => app.ClaudeCalls().Any(c => (string?)c["kind"] == "message"), "the Improve agent's prompt");
         var prompt = app.Prompts().Single(p => p.Contains("Improve this card"));
-        Assert.Contains("ticket quality score is 0/3 (red)", prompt);
+        Assert.Contains("ticket quality score is 0/3 (black)", prompt);
 
         // the Improve agent rewrites the card: the board reloads it and the star goes green
         var file = Path.Combine(app.BoardFolder, "items", card.File);
         File.WriteAllText(file, File.ReadAllText(file).Replace("## Description\n",
             "## Description\n\n> fix logo aliasing\n\nThe Darg logo in the header has jagged edges at 100% scale; draw it smoothly at every scale so it looks crisp.\n\n" +
             "**Where:** the header, `src/Darg.Desktop/Views/MainWindow.axaml`.\n\n**Done when:**\n- the logo's edges are smooth at 100%, 150% and 200%\n"));
-        await app.Until(() => Star(app, card.Id)?.Text == "★3", "the star to read ★3 after the rewrite");
+        await app.Until(() => Star(app, card.Id)?.Classes.Contains("green") == true, "the star to go green after the rewrite");
         star = Star(app, card.Id)!;
         Assert.Contains("green", star.Classes);
         Assert.Equal(Colour(new TextBlock { Foreground = Theme("Ok") }), Colour(star));
@@ -53,11 +54,12 @@ public class TicketQualityTests
         app.Board.Open(vm);
         await DargApp.Settle();
         var editor = app.Board.Editor!;
-        Assert.Equal("★ 3/3", editor.Quality.Long);
+        Assert.Equal("★", editor.Quality.Long);
+        Assert.Equal(3, editor.Quality.Stars);
         editor.Description = "fix logo aliasing";
         Assert.Equal(0, editor.Quality.Stars);
         await DargApp.Settle();
-        Assert.Contains(app.Window.GetVisualDescendants().OfType<TextBlock>(), t => t.Classes.Contains("quality") && t.Text == "★ 0/3");
+        Assert.Contains(app.Window.GetVisualDescendants().OfType<TextBlock>(), t => t.Classes.Contains("quality") && t.Text == "★" && t.Classes.Contains("zero") && t.FontSize == 13);
         app.Shot("panel-red");
     }
 
@@ -71,7 +73,7 @@ public class TicketQualityTests
         await app.Start();
         await app.Api("show", new { project = "proj", section = "Board" });
         var star = Star(app, card.Id)!;
-        Assert.Equal("★2", star.Text);
+        Assert.Equal("★", star.Text);
         Assert.Contains("amber", star.Classes);
         Assert.Equal(Colour(new TextBlock { Foreground = Theme("Warn") }), Colour(star));
         app.Shot("board-amber");
@@ -94,9 +96,9 @@ public class TicketQualityTests
         await app.Api("show", new { project = "proj", section = "Board" });
         await DargApp.Settle();
 
-        Assert.Equal("★3", Star(app, full.Id)!.Text);
+        Assert.Contains("green", Star(app, full.Id)!.Classes);
         Assert.Null(ImproveButton(app, full.Id));
-        Assert.Equal("★2", Star(app, thin.Id)!.Text);
+        Assert.Contains("amber", Star(app, thin.Id)!.Classes);
         var button = ImproveButton(app, thin.Id);
         Assert.NotNull(button);
         app.Shot("improve-beside-score");

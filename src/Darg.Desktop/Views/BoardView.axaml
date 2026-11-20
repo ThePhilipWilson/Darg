@@ -52,6 +52,7 @@
     <Style Selector="Border.kind.bug TextBlock"><Setter Property="Foreground" Value="{DynamicResource BugInk}"/></Style>
     <!-- WOR-0156: the ticket quality star beside a card's id -->
     <Style Selector="TextBlock.quality"><Setter Property="Foreground" Value="{DynamicResource Bad}"/></Style>
+    <Style Selector="TextBlock.quality.zero"><Setter Property="Foreground" Value="{DynamicResource Zero}"/></Style>
     <Style Selector="TextBlock.quality.amber"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
     <Style Selector="TextBlock.quality.green"><Setter Property="Foreground" Value="{DynamicResource Ok}"/></Style>
     <!-- WOR-0172: a blocker still open on a tile, outlined in the Warn colour -->
@@ -248,7 +249,7 @@
                             <Grid ColumnDefinitions="*,Auto">
                               <WrapPanel VerticalAlignment="Center">
                                 <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}" Margin="0,1,6,1" VerticalAlignment="Center"/>
-                                <TextBlock Classes="quality" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
+                                <TextBlock Classes="quality" Classes.zero="{Binding Quality.Zero}" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
                                            FontSize="11" Text="{Binding Quality.Text}" Margin="0,1,8,1" VerticalAlignment="Center"
                                            ToolTip.Tip="{Binding Quality.Tip}" AutomationProperties.Name="{Binding Quality.Tip}"/>
                                 <Button Classes="workon" Margin="0,1,6,1" VerticalAlignment="Center" Content="✦ Improve" Command="{Binding ImproveCommand}" IsVisible="{Binding ShowImprove}"
@@ -339,7 +340,7 @@
             <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding Status}" VerticalAlignment="Center"/>
             <StackPanel Orientation="Horizontal" Spacing="8">
               <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" Classes="mono" FontSize="13"/>
-              <TextBlock Classes="quality" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
+              <TextBlock Classes="quality" Classes.zero="{Binding Quality.Zero}" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
                          FontSize="13" VerticalAlignment="Center" Text="{Binding Quality.Long}"
                          ToolTip.Tip="{Binding Quality.Tip}" AutomationProperties.Name="{Binding Quality.Tip}"/>
               <Button Classes="workon" Margin="0,1,6,1" VerticalAlignment="Center" Content="✦ Improve" Command="{Binding ImproveCommand}" IsVisible="{Binding ShowImprove}"
