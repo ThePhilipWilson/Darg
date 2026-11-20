@@ -27,6 +27,17 @@ public class PhoneAgentsTests
         }
     }
 
+    /// <summary>Wait until the agent is idle and its transcript has had nothing new for 1.5 s.</summary>
+    internal static async Task Quiet(DargApp app, AgentViewModel agent)
+    {
+        var (seen, at) = (-1, DateTime.UtcNow);
+        await app.Until(() =>
+        {
+            if (agent.Items.Count != seen) (seen, at) = (agent.Items.Count, DateTime.UtcNow);
+            return agent.State == AgentState.Idle && DateTime.UtcNow - at > TimeSpan.FromSeconds(1.5);
+        }, "the agent to finish and go quiet", 60);
+    }
+
     [AvaloniaFact]
     public async Task An_agent_is_watched_from_where_it_was_read_and_nudged_mid_turn()
     {
@@ -59,8 +70,8 @@ public class PhoneAgentsTests
             await feed.Send("use the teal logo");
             await app.Until(() => app.Prompts().Contains("use the teal logo"), "the nudge to reach the agent");
 
-            await app.Until(() => agent.State == AgentState.Idle, "the turn to end", 60);
-            await DargApp.Settle(300);
+            // the fake works on the nudge in a second turn overlapping the first: wait until it's idle and nothing more comes
+            await Quiet(app, agent);
             var before = feed.Entries.Count;
             await feed.Refresh();
             Assert.Equal(agent.Items.Count, feed.Entries.Count);
