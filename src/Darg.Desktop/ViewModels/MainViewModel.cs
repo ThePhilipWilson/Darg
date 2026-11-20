@@ -721,7 +721,12 @@ public partial class ProjectViewModel : ObservableObject
                 var commits = Core.Commits.For(Config, folder) is { } rule ? Core.Commits.Describe(rule, folder) : null;
                 // done and a report when it's sure, the board's QA column when I should look (WOR-0061)
                 var finish = ReportStore.Rules(Reports!.Folder, card, BoardColumns.Qa(Board.Columns), agentId, AttentionColumn.Find(Board.Columns));
-                return AgentsViewModel.CardPrompt(Name, card, file, others, repo, commits, finish);
+                // what it waits on, where that is and its newest report, so it builds on their work (WOR-0173)
+                var reports = Reports.Folder;
+                var blockers = card.BlockedBy.Count == 0 ? [] : BlockedStart.PromptLines(
+                    Blockers.Of(card, Blockers.Index(CardIndex.Read(Config.Boards))),
+                    id => CardIndex.ReportsFor(reports, id).FirstOrDefault()?.File is { } f ? Path.GetFullPath(f).Replace('\\', '/') : null);
+                return AgentsViewModel.CardPrompt(Name, card, file, others, repo, commits, finish, blockers);
             }
             // what picks a card agent's model profile: the card's words, type and labels, not the house rules around them
             static AgentJob CardJob(Card card) => new(JobKinds.Card, $"{card.Title}\n\n{card.Description}".Trim(), card.Type, card.Labels);

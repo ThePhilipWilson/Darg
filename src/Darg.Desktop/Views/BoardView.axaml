@@ -282,6 +282,15 @@
                                 </DataTemplate>
                               </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <!-- WOR-0173: Work on a blocked card asks first -->
+                            <StackPanel Spacing="4" IsVisible="{Binding AskingBlocked}">
+                              <TextBlock Text="{Binding BlockedAsk}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Warn}"/>
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Classes="workon" Content="Start anyway" Command="{Binding StartAnywayCommand}"
+                                        ToolTip.Tip="Start an agent on it now; it is told what it waits on and where those cards' reports are"/>
+                                <Button Classes="workon" Content="Cancel" Command="{Binding CancelBlockedCommand}"/>
+                              </StackPanel>
+                            </StackPanel>
                             <ItemsControl ItemsSource="{Binding Labels}">
                               <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                               <ItemsControl.ItemTemplate>
@@ -461,6 +470,15 @@
             <Button Content="{Binding WorkOnText}" Command="{Binding WorkOnCommand}" IsVisible="{Binding CanWorkOn}"/>
             <Button Content="🧪 Run QA" Command="{Binding RunQaCommand}" IsVisible="{Binding CanRunQa}" ToolTip.Tip="An agent builds and checks the card from its How to check section and tells you what passed and what didn't. It changes no code and the card stays in QA"/>
             <Button Content="📋 Report" Command="{Binding OpenReportCommand}" IsVisible="{Binding HasReport}" ToolTip.Tip="Open the report written for this card (its decision report, when it's in Needs Attention)"/>
+          </StackPanel>
+          <!-- WOR-0173: Work on a blocked card asks first -->
+          <StackPanel Spacing="6" IsVisible="{Binding AskingBlocked}">
+            <TextBlock Text="{Binding BlockedAsk}" TextWrapping="Wrap" Foreground="{DynamicResource Warn}"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Classes="primary" Content="Start anyway" Command="{Binding StartAnywayCommand}"
+                      ToolTip.Tip="Start an agent on it now; it is told what it waits on and where those cards' reports are"/>
+              <Button Content="Cancel" Command="{Binding CancelBlockedCommand}"/>
+            </StackPanel>
           </StackPanel>
           <!-- WOR-0095: start the QA verdict on a card in QA whose agent is done -->
           <StackPanel Spacing="6" IsVisible="{Binding CanQaVerdict}">

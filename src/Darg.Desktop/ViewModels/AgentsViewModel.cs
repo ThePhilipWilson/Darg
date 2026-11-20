@@ -533,8 +533,9 @@ public partial class AgentsViewModel : ObservableObject
     /// (<see cref="CardBranch"/>) and how to decide on, and use, a worktree of its own.</param>
     /// <param name="finish">What to do when the work is finished (<see cref="ReportStore.Rules"/>: QA or done and a report);
     /// null: move the card to done.</param>
+    /// <param name="blockers">Lines naming the cards it waits on, their columns and newest reports (<see cref="BlockedStart.PromptLines"/>).</param>
     public static string CardPrompt(string projectName, Card card, string file, IReadOnlyList<string>? alongside = null, string? repo = null, string? commits = null,
-        string? finish = null)
+        string? finish = null, IReadOnlyList<string>? blockers = null)
     {
         var lines = new List<string> { $"Work on this card from the {projectName} board.", "", $"{card.Id}: {card.Title}" };
         if (card.IsBug) lines.Add("Type: Bug. First check it still happens (if it doesn't, see CNR below). Find the cause before changing anything, and add a test that fails without the fix where one can be written.");
@@ -543,6 +544,7 @@ public partial class AgentsViewModel : ObservableObject
         if (card.Priority.Length > 0) lines.Add($"Priority: {card.Priority}");
         lines.Add($"Card file: {file}");
         if (card.Description.Length > 0) { lines.Add(""); lines.Add(card.Description); }
+        if (blockers is { Count: > 0 }) { lines.Add(""); lines.AddRange(blockers); }
         lines.Add("");
         lines.Add("Read the project's CLAUDE.md first. Use AskUserQuestion when a choice is mine to make. " +
                   "When you stop, say what is done and what is left. " + (finish ??

@@ -47,8 +47,8 @@ public partial class MainViewModel
         Add("card", CardUsage, OneCard);
         Add("agent", "one agent: {id, last?}. Its details and transcript, the last n entries (default 20).", OneAgent);
         Add("start-agent", "start an agent in a project with a prompt: {project, prompt, cwd?, name?}. Returns its id. It costs a session: only when Philip asks.", StartAgent);
-        Add("work-on", "start an agent on a board card, as the card's Work on button does (moves it to In Progress): {project, card}, or on several at once as ▶ Work on N does: {project, cards} (a list, or ids separated by spaces). Only when Philip asks.", WorkOn);
-        Add("work-all", "start an agent on every card in the shown board's backlog and In Progress with none on it, as that column's ▶ Work All does (backlog cards move to In Progress; no asking first): {project}. Only when Philip asks.", a => BulkApi(a, BulkStart.Kind.Work));
+        Add("work-on", "start an agent on a board card, as the card's Work on button does (moves it to In Progress): {project, card}, or on several at once as ▶ Work on N does: {project, cards} (a list, or ids separated by spaces). A card blocked by one not yet in QA or done is refused (left out of several) unless force: true. Only when Philip asks.", WorkOn);
+        Add("work-all", "start an agent on every card in the shown board's backlog and In Progress with none on it, as that column's ▶ Work All does (backlog cards move to In Progress; no asking first): {project}. Cards blocked by one not yet in QA or done are left out and named unless force: true. Only when Philip asks.", a => BulkApi(a, BulkStart.Kind.Work));
         Add("qa-all", "run QA on every card in the shown board's QA column with no QA agent on it, as its 🧪 QA Run All does (no asking first): {project}. Only when Philip asks.", a => BulkApi(a, BulkStart.Kind.Qa));
         Add("improve-card", "start an agent that fills a thin card out (what's wanted, where in the code, done when), asking Philip first if its words are unclear; the card's Improve button: {project, card}, or an agent each on several at once as ✦ Improve N does: {project, cards} (a list, or ids separated by spaces). Only when Philip asks.", ImproveCard);
         Add("send-back", "send a card in the QA column back with what's wrong, as its panel's Send back does: {project, card, notes}. The notes go into the card " +
@@ -310,11 +310,15 @@ public partial class MainViewModel
     {
         var p = FindProject(a);
         if (p.Board is null || p.Agents is null) throw new ApiError($"{p.Name} needs a board and agents for that.");
-        if (a.Get("cards") is not null) return p.Board.WorkOnCards(a.List("cards"));
+        var force = Force(a);
+        if (a.Get("cards") is not null) return p.Board.WorkOnCards(a.List("cards"), force);
         var id = a.Need("card");
         if (p.Board.Show(id) is not { } card) throw new ApiError($"No card {id} on {p.Name}'s boards.");
         if (p.Agents.ForCard(id) is { } busy) throw new ApiError($"{id} already has an agent: \"{busy.Name}\" (id {busy.Id}, {busy.StateText}).");
-        p.Board.StartWork(card);
+        // WOR-0173: a card waiting on another not yet in QA or done isn't started unless told to
+        if (!force && !p.Board.InQa(card.Card) && p.Board.OpenBlockers(card.Card, fresh: true) is { Count: > 0 } open)
+            throw new ApiError(BlockedStart.Refusal(card.Id, open));
+        p.Board.StartWork(card, force: true);
         return p.Agents.ForCard(id) is { } started ? $"Started \"{started.Name}\" (id {started.Id}) on {id}." : $"Couldn't start an agent on {id}.";
     }
 
@@ -322,8 +326,10 @@ public partial class MainViewModel
     {
         var p = FindProject(a);
         if (p.Board is null || p.Agents is null) throw new ApiError($"{p.Name} needs a board and agents for that.");
-        return p.Board.StartBulk(kind);
+        return p.Board.StartBulk(kind, Force(a));
     }
+
+    static bool Force(ApiArgs a) => a.Get("force") is { } f && (f.Equals("true", StringComparison.OrdinalIgnoreCase) || f is "1" or "yes");
 
     string ImproveCard(ApiArgs a)
     {

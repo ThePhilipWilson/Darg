@@ -34,8 +34,10 @@ public static class BulkStart
 
     static bool IsDone(string id, IReadOnlyList<Column> columns) => columns.Count > 0 && columns[^1].Id == id;
 
-    /// <summary>The button's words: "▶ Work All (5)", "🧪 QA Run All (2)".</summary>
-    public static string Label(Kind kind, int count) => kind == Kind.Qa ? $"🧪 QA Run All ({count})" : $"▶ Work All ({count})";
+    /// <summary>The button's words: "▶ Work All (5)", "🧪 QA Run All (2)"; with cards it leaves out for their open blockers
+    /// (WOR-0173), "▶ Work All (4, 3 blocked)".</summary>
+    public static string Label(Kind kind, int count, int blocked = 0) =>
+        kind == Kind.Qa ? $"🧪 QA Run All ({count})" : blocked > 0 ? $"▶ Work All ({count}, {blocked} blocked)" : $"▶ Work All ({count})";
 
     public static bool NeedsAsking(int count) => count > AskAbove;
 
@@ -44,7 +46,8 @@ public static class BulkStart
         kind == Kind.Qa ? $"Start {count} QA agents, one per card?" : $"Start {count} agents, one per card?";
 
     /// <summary>What the status line says once they're started: who started, and who didn't and why.</summary>
-    public static string Summary(Kind kind, IReadOnlyList<string> started, IReadOnlyList<(string Id, string Why)> failed)
+    public static string Summary(Kind kind, IReadOnlyList<string> started, IReadOnlyList<(string Id, string Why)> failed,
+        IReadOnlyList<(string Id, IReadOnlyList<BlockerState> Open)>? blocked = null)
     {
         var what = kind == Kind.Qa ? "QA" : "work";
         var said = started.Count switch
@@ -53,7 +56,8 @@ public static class BulkStart
             1 => $"Started {what} on {started[0]}",
             _ => $"Started {what} on {started.Count} cards: {string.Join(", ", started)}",
         };
-        if (failed.Count == 0) return said;
-        return $"{said}; couldn't start {string.Join("; ", failed.Select(f => $"{f.Id} ({f.Why})"))}";
+        if (failed.Count > 0) said += $"; couldn't start {string.Join("; ", failed.Select(f => $"{f.Id} ({f.Why})"))}";
+        if (blocked is { Count: > 0 }) said += "; " + BlockedStart.LeftOut(blocked);
+        return said;
     }
 }

@@ -549,13 +549,22 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         var picked = Root.Rows.Select(r => (Row: r, Cards: r.Shown().Where(c => c.IsPicked && c.CanStart).Select(c => c.Card).ToList()))
             .Where(p => p.Cards.Count > 0).ToList();
         if (picked.Count == 0) return;
-        var all = picked.SelectMany(p => p.Cards).Select(c => c.Id).ToList();
-        foreach (var (row, cards) in picked)
+        // a picked card with an open blocker is left out and named (WOR-0173); Work on alone on it asks instead
+        BlockersStale();
+        var split = picked.Select(p => { var (free, blocked) = p.Row.SplitBlocked(p.Cards, force: false); return (p.Row, Free: free, Blocked: blocked); }).ToList();
+        var all = split.SelectMany(p => p.Free).Select(c => c.Id).ToList();
+        foreach (var (row, free, blocked) in split)
         {
             row._picked.Clear();
-            row.WorkOnAll(cards, all);
+            if (free.Count > 0) row.WorkOnAll(free, all, blocked: blocked);
+            else { row._notice = "Started nothing; " + BlockedStart.LeftOut(blocked); row.Apply(); }
         }
-        if (picked.Count > 1) { Root._notice = $"Started {all.Count} agents on {picked.Count} boards"; Root.Apply(); }
+        if (split.Count(p => p.Free.Count > 0) > 1)
+        {
+            var leftOut = split.SelectMany(p => p.Blocked).ToList();
+            Root._notice = $"Started {all.Count} agents on {split.Count(p => p.Free.Count > 0)} boards" + (leftOut.Count > 0 ? "; " + BlockedStart.LeftOut(leftOut) : "");
+            Root.Apply();
+        }
     }
 
     /// <summary>✦ Improve N (WOR-0099): an Improve agent on every picked card with no agent at work on it, on
@@ -586,13 +595,17 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     /// <summary>Start agents on cards of the shown board by id, together, as ▶ Work on N does (the API's work-on
     /// with several cards). Cards that already have an agent are left out. Says what was started.</summary>
-    public string WorkOnCards(IReadOnlyList<string> ids)
+    public string WorkOnCards(IReadOnlyList<string> ids, bool force = false)
     {
         if (_board is null) return "No board is showing.";
         var cards = ids.Select(id => _board.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
             .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null && !IsDone(c.Id)).DistinctBy(c => c.Id).ToList();
         if (cards.Count == 0) return "None of those cards is on the board without an agent and outside Done (a card in Done must be moved out first).";
-        WorkOnAll(cards);
+        BlockersStale(); // as things are now, not as of the last reload
+        var (free, blocked) = SplitBlocked(cards, force);
+        if (free.Count == 0)
+            throw new ApiError("Started nothing: " + string.Join(" ", blocked.Select(b => BlockedStart.Refusal(b.Id, b.Open))));
+        WorkOnAll(free, blocked: blocked);
         return _notice ?? "";
     }
 
@@ -612,7 +625,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     /// <summary>Start an agent on each card, all together; a card that fails to start is named in the status line and the
     /// rest still start (WOR-0125: one bad card shouldn't stop a Work All).</summary>
-    void WorkOnAll(List<Card> cards, IReadOnlyList<string>? alongside = null, bool bulk = false)
+    void WorkOnAll(List<Card> cards, IReadOnlyList<string>? alongside = null, bool bulk = false,
+        IReadOnlyList<(string Id, IReadOnlyList<BlockerState> Open)>? blocked = null)
     {
         using var timing = StallWatch.Shared.Section("Work on picked");
         var started = new List<string>();
@@ -625,15 +639,23 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             if (AgentFor?.Invoke(card.Id) is null) failed.Add((card.Id, "no agent started"));
             else started.Add(card.Id);
         }
-        _notice = bulk || failed.Count > 0 ? BulkStart.Summary(BulkStart.Kind.Work, started, failed)
+        _notice = bulk || failed.Count > 0 || blocked is { Count: > 0 } ? BulkStart.Summary(BulkStart.Kind.Work, started, failed, blocked)
             : started.Count == 1 ? $"Started an agent on {started[0]}" : $"Started {started.Count} agents: {string.Join(", ", started)}";
         Reload();
     }
 
     /// <summary>The cards a column's bulk button would start (WOR-0125), among those showing on this row: for Work All,
     /// every card in the backlog and the working column that its own ▶ Work on is offered on (no live agent, not done);
-    /// for QA Run All, every card in the QA column its own 🧪 Run QA is offered on (no QA agent running).</summary>
-    List<CardViewModel> BulkCards(BulkStart.Kind kind)
+    /// for QA Run All, every card in the QA column its own 🧪 Run QA is offered on (no QA agent running). Work All leaves
+    /// out a card with an open blocker (WOR-0173): <see cref="BulkBlocked"/> lists those.</summary>
+    List<CardViewModel> BulkCards(BulkStart.Kind kind) =>
+        kind == BulkStart.Kind.Work ? BulkCandidates(kind).Where(c => OpenBlockers(c.Card).Count == 0).ToList() : BulkCandidates(kind);
+
+    /// <summary>The cards Work All would start but for an open blocker, each with what it waits on (WOR-0173).</summary>
+    List<(string Id, IReadOnlyList<BlockerState> Open)> BulkBlocked(BulkStart.Kind kind) =>
+        kind != BulkStart.Kind.Work ? [] : BulkCandidates(kind).Select(c => (c.Id, OpenBlockers(c.Card))).Where(b => b.Item2.Count > 0).ToList();
+
+    List<CardViewModel> BulkCandidates(BulkStart.Kind kind)
     {
         if (_board is null) return [];
         IReadOnlyList<string> lists = kind switch
@@ -648,21 +670,28 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     public BulkStart.Kind BulkKindOf(string listId) => _board is null ? BulkStart.Kind.None : BulkStart.For(listId, _board.Columns);
     public int BulkCount(BulkStart.Kind kind) => kind == BulkStart.Kind.None ? 0 : BulkCards(kind).Count;
+    /// <summary>How many cards Work All leaves out for an open blocker (WOR-0173): its label says so.</summary>
+    public int BulkBlockedCount(BulkStart.Kind kind) => BulkBlocked(kind).Count;
 
     /// <summary>Work All / QA Run All (WOR-0125): start every card the button counts, at once, the board staying on
     /// screen. Work All moves backlog cards to In Progress as Work on does, and tells each agent the others beside it.
-    /// What started and what didn't goes in the status line, with no dialog per card. Returns that line.</summary>
-    public string StartBulk(BulkStart.Kind kind)
+    /// What started and what didn't goes in the status line, with no dialog per card. Returns that line. Work All leaves
+    /// out cards with an open blocker and names them (WOR-0173), unless <paramref name="force"/> (the API's).</summary>
+    public string StartBulk(BulkStart.Kind kind, bool force = false)
     {
-        var cards = BulkCards(kind).Select(c => c.Card).ToList();
+        BlockersStale(); // as things are now: a blocker may have reached QA on a board this one hasn't reloaded for
+        var cards = (force ? BulkCandidates(kind) : BulkCards(kind)).Select(c => c.Card).ToList();
+        List<(string Id, IReadOnlyList<BlockerState> Open)> blocked = force ? [] : BulkBlocked(kind);
         if (cards.Count == 0)
         {
-            _notice = kind == BulkStart.Kind.Qa ? "Nothing to QA: every card in QA has a QA agent on it" : "Nothing to start: every card here has an agent on it";
+            _notice = kind == BulkStart.Kind.Qa ? "Nothing to QA: every card in QA has a QA agent on it"
+                : blocked.Count > 0 ? "Nothing to start: " + BlockedStart.LeftOut(blocked) + " (Work on one to start it anyway)"
+                : "Nothing to start: every card here has an agent on it";
             Apply();
             return _notice;
         }
         Root.Editor = null; // its panel, left open, could save over what an agent writes into the card
-        if (kind == BulkStart.Kind.Work) { WorkOnAll(cards, bulk: true); return _notice ?? ""; }
+        if (kind == BulkStart.Kind.Work) { WorkOnAll(cards, bulk: true, blocked: blocked); return _notice ?? ""; }
         using var timing = StallWatch.Shared.Section("QA run all");
         var started = new List<string>();
         var failed = new List<(string Id, string Why)>();
@@ -888,6 +917,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
                      && old.BlockersKey == CardViewModel.KeyOf(blockers) && used.Add(old)
                 ? old : new CardViewModel(c, targets, this, agent, OtherBoards, blockers);
             vm.IsPicked = _picked.Contains(c.Id);
+            vm.BlockedAsk = _asking is { } ask && ask.Id == c.Id ? ask.Text : null;
             return vm;
         }
         var lists = new List<ListViewModel>();
@@ -910,8 +940,53 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Start an agent on a card: it goes to the board's working column ("In Progress", else
-    /// the first column) if it was waiting in the backlog or the first column, and the agent opens.</summary>
-    public void StartWork(CardViewModel card) => StartWork(card.Card, [], show: false, reload: true);
+    /// the first column) if it was waiting in the backlog or the first column, and the agent opens. A card with an open
+    /// blocker (WOR-0173) asks on its tile first, "Blocked by WOR-0172, In Progress. Start anyway?", unless
+    /// <paramref name="force"/> (its Start anyway).</summary>
+    public void StartWork(CardViewModel card, bool force = false)
+    {
+        // in QA, Work on only gets the result running to try: nothing new is built, so a blocker doesn't hold it
+        if (!force && !InQa(card.Card) && OpenBlockers(card.Card, fresh: true) is { Count: > 0 } open)
+        {
+            _asking = (card.Id, BlockedStart.Question(open));
+            card.BlockedAsk = _asking.Value.Text;
+            return;
+        }
+        if (_asking?.Id == card.Id) _asking = null;
+        card.BlockedAsk = null;
+        StartWork(card.Card, [], show: false, reload: true);
+    }
+
+    /// <summary>The tile asking whether to start a blocked card (WOR-0173): its id and the question; kept here so a
+    /// reload, which may build the tile again, keeps asking.</summary>
+    (string Id, string Text)? _asking;
+    public void CancelBlocked(CardViewModel card)
+    {
+        if (_asking?.Id == card.Id) _asking = null;
+        card.BlockedAsk = null;
+    }
+
+    /// <summary>The card's blockers still holding it up (WOR-0173): on any of the project's boards and not yet in QA or done.
+    /// <paramref name="fresh"/> reads the boards again now (before starting anything), rather than the kept lookup
+    /// (<see cref="BlockIndex"/>, which a board changing makes stale only after a short wait).</summary>
+    public IReadOnlyList<BlockerState> OpenBlockers(Card card, bool fresh = false)
+    {
+        if (card.BlockedBy.Count == 0) return [];
+        if (fresh) BlockersStale();
+        return Blockers.Open(card, BlockIndex());
+    }
+
+    /// <summary>Split cards into those free to start and those an open blocker holds (WOR-0173); with
+    /// <paramref name="force"/>, all are free.</summary>
+    (List<Card> Free, List<(string Id, IReadOnlyList<BlockerState> Open)> Blocked) SplitBlocked(IEnumerable<Card> cards, bool force)
+    {
+        var free = new List<Card>();
+        var blocked = new List<(string Id, IReadOnlyList<BlockerState> Open)>();
+        foreach (var card in cards)
+            if (!force && OpenBlockers(card) is { Count: > 0 } open) blocked.Add((card.Id, open));
+            else free.Add(card);
+        return (free, blocked);
+    }
 
     /// <summary>Cards that entered the attention, QA or done column since the last read of this board's folder, whoever
     /// moved them (an agent editing board.json, a QA check, a drag), are handed to the project, which writes or archives
@@ -1346,11 +1421,12 @@ public sealed partial class ListViewModel(BoardViewModel board, string id, strin
     BulkStart.Kind BulkKind => Board.BulkKindOf(Id);
     int BulkCount => Board.BulkCount(BulkKind);
     public bool HasBulk => BulkKind != BulkStart.Kind.None;
-    public string BulkText => BulkStart.Label(BulkKind, BulkCount);
+    public string BulkText => BulkStart.Label(BulkKind, BulkCount, Board.BulkBlockedCount(BulkKind));
     public string BulkTip => BulkKind == BulkStart.Kind.Qa
         ? "Run QA on every card showing in this column with no QA agent on it, an agent each. More than " + BulkStart.AskAbove + " asks first."
         : "Start an agent on every card showing in the backlog and In Progress with none on it, all at once; each is told which others run beside it, " +
-          "and backlog cards move to In Progress. More than " + BulkStart.AskAbove + " asks first.";
+          "and backlog cards move to In Progress. A card blocked by one not yet in QA or done is left out (Work on it to start it anyway). " +
+          "More than " + BulkStart.AskAbove + " asks first.";
     bool CanBulk() => BulkCount > 0;
     /// <summary>More than a few: the column asks "Start 7 agents?" before any start.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowBulk))] public partial bool ConfirmingBulk { get; set; }
@@ -1424,6 +1500,12 @@ public sealed partial class CardViewModel : ObservableObject
     /// <summary>WOR-0162: an Improve button beside a thin card's score (under 3 stars), when Improve could start.</summary>
     public bool ShowImprove => CanStart && Quality.Stars < TicketScore.Max;
     public IRelayCommand WorkOnCommand { get; }
+    /// <summary>Work on was pressed on a blocked card (WOR-0173): the tile asks "Blocked by WOR-0172, In Progress. Start
+    /// anyway?" with Start anyway and Cancel. Null when it isn't asking.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(AskingBlocked))] public partial string? BlockedAsk { get; set; }
+    public bool AskingBlocked => BlockedAsk is not null;
+    public IRelayCommand StartAnywayCommand { get; }
+    public IRelayCommand CancelBlockedCommand { get; }
     public IRelayCommand OpenAgentCommand { get; }
     public IRelayCommand ImproveCommand { get; }
     public IRelayCommand RunQaCommand { get; }
@@ -1450,6 +1532,8 @@ public sealed partial class CardViewModel : ObservableObject
         Agent = agent;
         QaWasRunning = board.QaRunning?.Invoke(card.Id) == true;
         WorkOnCommand = new RelayCommand(() => board.StartWork(this));
+        StartAnywayCommand = new RelayCommand(() => board.StartWork(this, force: true));
+        CancelBlockedCommand = new RelayCommand(() => board.CancelBlocked(this));
         OpenAgentCommand = new RelayCommand(() => { if (Agent is not null) board.OpenAgent?.Invoke(Agent); });
         ImproveCommand = new RelayCommand(() => board.StartImprove(this));
         RunQaCommand = new RelayCommand(() => board.StartQa(this));
@@ -1774,9 +1858,25 @@ public partial class CardEditor : ObservableObject
     void WorkOn()
     {
         if (_card is null) return;
+        // a blocked card asks here first (WOR-0173); in QA, Work on only gets it running to try, so it doesn't
+        if (!InQa && _board.OpenBlockers(_card.Card, fresh: true) is { Count: > 0 } open) { BlockedAsk = BlockedStart.Question(open); return; }
         _board.Root.Editor = null;
-        _board.StartWork(_card);
+        _board.StartWork(_card, force: true);
     }
+
+    /// <summary>Work on was pressed on a blocked card (WOR-0173): the panel asks "Blocked by WOR-0172, In Progress. Start
+    /// anyway?" under its buttons. Null when it isn't asking.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(AskingBlocked))] public partial string? BlockedAsk { get; set; }
+    public bool AskingBlocked => BlockedAsk is not null;
+    [RelayCommand]
+    void StartAnyway()
+    {
+        if (_card is null) return;
+        BlockedAsk = null;
+        _board.Root.Editor = null;
+        _board.StartWork(_card, force: true);
+    }
+    [RelayCommand] void CancelBlocked() => BlockedAsk = null;
 
     /// <summary>The QA verdict buttons (WOR-0095): a card in QA with no agent running can be sent to For Human Attention
     /// (its decision report is written by the board's reload), approved to done, or sent back with notes below.</summary>
