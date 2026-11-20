@@ -76,6 +76,18 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        <TextBlock Text="Phone notifications" FontSize="15" FontWeight="SemiBold" Margin="0,12,0,0"/>
+        <TextBlock Classes="dim small" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"
+                   Text="What makes a desktop notification also goes to your phone through ntfy, even with the phone locked. A card waiting on your decision shows its options as buttons: tap one and Darg answers the card. Install the ntfy app, subscribe to the topic below on the server below, and keep the topic secret: anyone who knows it can read it."/>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBox Text="{Binding PushServer}" Width="200" Watermark="https://ntfy.sh" AutomationProperties.Name="ntfy server"/>
+          <TextBox Text="{Binding PushTopic}" Width="300" Watermark="topic (blank: off)" AutomationProperties.Name="ntfy topic"/>
+          <Button Content="Save" Command="{Binding SavePushCommand}"/>
+          <Button Content="✦ New topic" Command="{Binding NewPushTopicCommand}" AutomationProperties.Name="New topic"/>
+          <Button Content="🔔 Send test" Command="{Binding PushTestCommand}" AutomationProperties.Name="Send test"/>
+          <Button Content="Turn off" Command="{Binding PushOffCommand}"/>
+        </StackPanel>
+        <SelectableTextBlock Classes="dim small" Text="{Binding PushState}" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"/>
         <TextBlock Classes="bad" Text="{Binding Status}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap"/>
       </StackPanel>
     </ScrollViewer>

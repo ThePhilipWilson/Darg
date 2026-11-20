@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- the fake ntfy server (AND-0006), shared with the unit tests -->
+    <Compile Include="../Darg.Core.Tests/FakeNtfy.cs" Link="FakeNtfy.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -38,7 +38,11 @@ public partial class MainViewModel : ObservableObject
         Mascot.Notify += (agent, what, detail) =>
         {
             Log(MascotId, agent.Id, "Fettle", agent.Name, what, detail);
-            if (!(WindowActive && Mascot.Open)) Notifier.Show(MascotId, agent.Id, NotificationEntry.HeaderFor("Fettle", agent.Name, what), "Fettle", detail);
+            if (!(WindowActive && Mascot.Open))
+            {
+                Notifier.Show(MascotId, agent.Id, NotificationEntry.HeaderFor("Fettle", agent.Name, what), "Fettle", detail);
+                PushTell(NotificationEntry.HeaderFor("Fettle", agent.Name, what), what, detail);
+            }
         };
         Mascot.AsksSettled += agent => Settle(MascotId, agent.Id);
         Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
@@ -52,6 +56,7 @@ public partial class MainViewModel : ObservableObject
         }
         ArtifactHost.OpenRequested += file => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenArtifact(file));
         Restart = new RestartViewModel(BusyAgents, SaveAll);
+        StartPush(config.Push); // AND-0006: phone notifications, when the instance has a topic
         DevHooks();
     }
 
@@ -137,8 +142,8 @@ public partial class MainViewModel : ObservableObject
             agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
             agents.AsksSettled += agent => Settle(vm.Config.Id, agent.Id);
             // WOR-0124: a card waiting on a decision notifies as a question does; clicking opens the card
-            vm.CardNotify += (card, title, question) => TellCard(vm, card, title, question);
-            vm.CardSettled += card => Settle(vm.Config.Id, CardPrefix + card);
+            vm.CardNotify += (card, title, decision) => TellCard(vm, card, title, decision);
+            vm.CardSettled += card => { Settle(vm.Config.Id, CardPrefix + card); PushSettled(vm, card); };
             agents.Mascot = Mascot; // null while the app starts; set just after Bench is made
         }
         if (vm.Notes is { } notes) notes.Organise = (shown, text) => Mascot?.Ask(shown, text) ?? false;
@@ -355,18 +360,23 @@ public partial class MainViewModel : ObservableObject
         Log(project.Config.Id, agent.Id, project.Name, agent.Name, what, detail);
         var looking = WindowActive && Selected == project && project.OnAgents && project.Agents?.Shown == agent;
         using var timing = StallWatch.Shared.Section("Notifier.Show");
-        if (!looking) Notifier.Show(project.Config.Id, agent.Id, NotificationEntry.HeaderFor(project.Name, agent.Name, what), project.Name, detail);
+        if (looking) return;
+        Notifier.Show(project.Config.Id, agent.Id, NotificationEntry.HeaderFor(project.Name, agent.Name, what), project.Name, detail);
+        PushTell($"{project.Name}: " + NotificationEntry.HeaderFor(project.Name, agent.Name, what), what, detail);
     }
 
     /// <summary>A notification's "agent" for a card waiting on a decision (WOR-0124): opening it opens the card.</summary>
     public const string CardPrefix = "card:";
 
     /// <summary>A card is waiting on my decision (WOR-0124), unless I'm looking at it already.</summary>
-    void TellCard(ProjectViewModel project, string card, string title, string question)
+    void TellCard(ProjectViewModel project, string card, string title, CardDecision decision)
     {
+        var question = decision.Question;
         Log(project.Config.Id, CardPrefix + card, project.Name, $"{card} {title}", NotificationEntry.DecisionWaits, question);
         var looking = WindowActive && Selected == project && project.OnBoard && project.Board?.Editor?.CardId == card;
-        if (!looking) Notifier.Show(project.Config.Id, CardPrefix + card, NotificationEntry.HeaderFor(project.Name, $"{card} {title}", NotificationEntry.DecisionWaits), project.Name, question);
+        if (looking) return;
+        Notifier.Show(project.Config.Id, CardPrefix + card, NotificationEntry.HeaderFor(project.Name, $"{card} {title}", NotificationEntry.DecisionWaits), project.Name, question);
+        PushDecision(project, card, title, decision); // AND-0006: its options as buttons on the phone
     }
 
     /// <summary>Open a project's agent: its tab, the agents section, that agent, the window to the front.</summary>
@@ -466,8 +476,8 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>What card agents filed when they finished (there with the agents feature).</summary>
     public ReportsViewModel? Reports { get; }
     public bool UsesTerminal => Consoles is not null;
-    /// <summary>A card is waiting on my decision (WOR-0124): its id, title and question. Notifies as an agent's question does.</summary>
-    public event Action<string, string, string>? CardNotify;
+    /// <summary>A card is waiting on my decision (WOR-0124): its id, title and decision. Notifies as an agent's question does.</summary>
+    public event Action<string, string, CardDecision>? CardNotify;
     /// <summary>A card's decision was answered (WOR-0124): its notification goes from the list.</summary>
     public event Action<string>? CardSettled;
 
@@ -610,7 +620,7 @@ public partial class ProjectViewModel : ObservableObject
                 };
                 agent.PropertyChanged += ended;
             }
-            void DecisionWaits(Card card, CardDecision d) => CardNotify?.Invoke(card.Id, card.Title, d.Question);
+            void DecisionWaits(Card card, CardDecision d) => CardNotify?.Invoke(card.Id, card.Title, d);
             // WOR-0124: an answer with no done/back/stay goes to the agent that asked if it's still listed, else to a new card agent
             Board.DecisionToAgent = (card, file, decision, answer, notes) =>
             {

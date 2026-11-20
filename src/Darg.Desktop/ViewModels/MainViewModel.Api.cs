@@ -81,6 +81,10 @@ public partial class MainViewModel
                      "{} says which is on. Only when Philip asks.", SetThemeApi);
         Add("optimise-tokens", "the header's Optimise tokens toggle: {on: true|false} turns it on (every agent one model down and at no more than " +
                                "medium effort, running ones from their next turn) or off; {} says whether it's on. Only when Philip asks.", OptimiseTokensApi);
+        Add("push", "phone notifications through ntfy (AND-0006): {} says how they stand; {topic: new} turns them on with a fresh secret topic " +
+                    "(or {topic, server?, token?} for a given one), {off: true} turns them off. Philip subscribes to the topic in the ntfy app; a card waiting on a decision " +
+                    "shows its options as buttons there. Only when Philip asks.", PushApi);
+        api.Add("push-test", "send a test notification to the phone, to check it arrives: {}.", _ => Dispatcher.UIThread.InvokeAsync(PushTest));
         Add("run-command", "run one of a project's saved commands in its Terminal section: {project, command} (the command's name).", RunCommand);
         // AND-0007: Fettle from the phone. The phone app calls these; Fettle itself has no use for them.
         Add("fettle-say", "for the phone app, not Fettle: send Philip's words to Fettle as if typed in its box, with what the phone shows: {project, text, chat?, section?, card?, doc?, voice?}. " +

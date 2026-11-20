@@ -5,8 +5,8 @@ using Darg.Core;
 
 namespace Darg.Desktop.ViewModels;
 
-/// <summary>The app's own settings (the header's ⚙ Settings): so far, the theme. A pick shows at once and is
-/// saved to settings.json in the instance folder.</summary>
+/// <summary>The app's own settings (the header's ⚙ Settings): the theme (a pick shows at once and is saved to
+/// settings.json in the instance folder) and phone notifications through ntfy (AND-0006, kept in instance.json).</summary>
 public partial class SettingsViewModel : ObservableObject
 {
     readonly MainViewModel _main;
@@ -18,7 +18,40 @@ public partial class SettingsViewModel : ObservableObject
         _main = main;
         Themes = [.. Core.Themes.All.Select(t => new ThemeChoice(t, new RelayCommand(() => Pick(t))))];
         Mark();
+        PushTopic = main.PushConfig?.Topic ?? "";
+        PushServer = main.PushConfig?.Server ?? PushConfig.DefaultServer;
+        main.PushChanged += ShowPush;
+        ShowPush();
     }
+
+    /// <summary>The ntfy topic phone notifications go to (blank: off).</summary>
+    [ObservableProperty] public partial string PushTopic { get; set; } = "";
+    [ObservableProperty] public partial string PushServer { get; set; } = PushConfig.DefaultServer;
+    /// <summary>How phone notifications stand: on or off, where to subscribe, the last answer and any problem.</summary>
+    [ObservableProperty] public partial string PushState { get; set; } = "";
+
+    void ShowPush() => Avalonia.Threading.Dispatcher.UIThread.Post(() => PushState = _main.PushStatus());
+
+    /// <summary>A fresh secret topic, saved and on at once.</summary>
+    [RelayCommand] void NewPushTopic()
+    {
+        PushTopic = PushConfig.NewTopic();
+        SavePush();
+    }
+
+    [RelayCommand] void SavePush()
+    {
+        var on = PushTopic.Trim().Length > 0;
+        Status = _main.SavePush(on ? new PushConfig { Topic = PushTopic.Trim(), Server = PushServer.Trim(), Token = _main.PushConfig?.Token } : null);
+    }
+
+    [RelayCommand] void PushOff()
+    {
+        PushTopic = "";
+        SavePush();
+    }
+
+    [RelayCommand] async Task PushTest() => PushState = await _main.PushTest() + Environment.NewLine + _main.PushStatus();
 
     void Pick(Theme theme)
     {
@@ -34,7 +67,11 @@ public partial class SettingsViewModel : ObservableObject
         foreach (var c in Themes) c.IsCurrent = c.Theme == ThemeManager.Current;
     }
 
-    [RelayCommand] void Close() => _main.CloseSettings();
+    [RelayCommand] void Close()
+    {
+        _main.PushChanged -= ShowPush;
+        _main.CloseSettings();
+    }
 }
 
 /// <summary>A theme as a card to click: its name, a line on it, and a little picture of a window in its colours.</summary>

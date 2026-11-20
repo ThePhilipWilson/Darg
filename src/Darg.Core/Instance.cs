@@ -14,6 +14,8 @@ public sealed class InstanceConfig
     /// <summary>The shell a new console opens (a name from <see cref="Shells"/>, e.g. "Git Bash"); the
     /// platform's usual one when not set or not installed here. The last one picked from the console menu.</summary>
     public string? Shell { get; set; }
+    /// <summary>Phone notifications through ntfy (AND-0006): off when not set, so the work instance leaves them out.</summary>
+    public PushConfig? Push { get; set; }
     public List<ToolConfig> ToolsOrDefaults() => Tools is { Count: > 0 } t ? t : ToolConfig.Defaults();
 
     static readonly JsonSerializerOptions Json = new()
