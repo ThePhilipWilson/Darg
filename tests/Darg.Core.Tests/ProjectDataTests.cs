@@ -80,5 +80,85 @@ public sealed class ProjectDataTests : IDisposable
         Assert.Equal("", ProjectData.Migrate(instance)); // nothing left to move
     }
 
+    /// <summary>The old folder with an artifact, a report, a note and a board in it, the config's board pointing there.</summary>
+    static string Legacy(string instance)
+    {
+        var old = Path.Combine(instance, "projects", "p");
+        foreach (var (rel, text) in new[] { ("artifacts/a1/page.html", "<title>page</title>"), ("reports/r.md", "r"), ("notes/n.md", "n"), ("tasks/Main/board.json", "{}") })
+        {
+            var file = Path.Combine(old, rel);
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, text);
+        }
+        var config = InstanceConfig.Load(instance);
+        config.Projects[0].Boards = Path.Combine(old, "tasks").Replace('\\', '/');
+        config.Save(instance);
+        return old;
+    }
+
+    [Fact]
+    public void Migrate_moves_the_old_folder_onto_another_drive()
+    {
+        // WOR-0152: the instance is on C: and the repo on D:, where Directory.Move throws; nothing moved, so the
+        // project's artifacts, reports and notes vanished from Darg. The test's bin folder is on the repo's drive.
+        var instance = Dir("inst");
+        var repo = Path.Combine(AppContext.BaseDirectory, "wb-pdata-xvol-" + Guid.NewGuid().ToString("N")[..8]);
+        if (string.Equals(Path.GetPathRoot(instance), Path.GetPathRoot(repo), StringComparison.OrdinalIgnoreCase)) return; // one drive here: nothing to show
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(repo, ".git"));
+            new InstanceConfig { Projects = [new() { Id = "p", Name = "P", Repos = [repo] }] }.Save(instance);
+            var old = Legacy(instance);
+
+            var said = ProjectData.Migrate(instance);
+
+            Assert.Contains("P (4)", said);
+            var page = Path.Combine(repo, ".darg", "artifacts", "a1", "page.html");
+            Assert.True(File.Exists(page));
+            Assert.Equal("page", Assert.Single(ArtifactStore.List("p", instance)).Title);
+            Assert.True(File.Exists(Path.Combine(repo, ".darg", "reports", "r.md")));
+            Assert.True(File.Exists(Path.Combine(repo, ".darg", "notes", "n.md")));
+            Assert.Equal(Path.Combine(repo, ".darg", "tasks").Replace('\\', '/'), InstanceConfig.Load(instance).Projects[0].Boards);
+            Assert.False(Directory.Exists(old));
+        }
+        finally { try { Directory.Delete(repo, true); } catch (IOException) { } }
+    }
+
+    [Fact]
+    public void A_file_held_open_stays_behind_and_the_rest_still_move()
+    {
+        var (instance, repo) = Setup();
+        var old = Legacy(instance);
+        var held = Path.Combine(old, "artifacts", "a1", "page.html");
+
+        string said;
+        using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
+            said = ProjectData.Migrate(instance);
+
+        Assert.Contains("P (3)", said);
+        Assert.True(File.Exists(held));
+        Assert.True(File.Exists(Path.Combine(repo, ".darg", "reports", "r.md")));
+        Assert.Equal(Path.Combine(repo, ".darg", "tasks").Replace('\\', '/'), InstanceConfig.Load(instance).Projects[0].Boards);
+
+        // the next start takes what was left
+        Assert.Contains("P (1)", ProjectData.Migrate(instance));
+        Assert.True(File.Exists(Path.Combine(repo, ".darg", "artifacts", "a1", "page.html")));
+        Assert.False(Directory.Exists(old));
+    }
+
+    [Fact]
+    public void A_board_that_could_not_move_is_still_pointed_at_where_it_is()
+    {
+        var (instance, repo) = Setup();
+        var old = Legacy(instance);
+        var board = Path.Combine(old, "tasks", "Main", "board.json");
+
+        using (new FileStream(board, FileMode.Open, FileAccess.Read, FileShare.None))
+            ProjectData.Migrate(instance);
+
+        Assert.Equal(Path.Combine(old, "tasks").Replace('\\', '/'), InstanceConfig.Load(instance).Projects[0].Boards);
+        Assert.True(File.Exists(board));
+    }
+
     public void Dispose() { try { Directory.Delete(_dir, true); } catch (IOException) { } }
 }

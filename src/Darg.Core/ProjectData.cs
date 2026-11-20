@@ -126,10 +126,13 @@ public static class ProjectData
             try
             {
                 var n = MoveInto(old, target);
-                if (n == 0) { TryDelete(old); continue; }
-                moved.Add($"{p.Name} ({n})");
+                // repointed whether or not anything went this time: a board left by an earlier start may have just gone
                 changed |= Repoint(p, old, target);
-                Rewrite(instance, p.Id, old, target);
+                if (n > 0)
+                {
+                    moved.Add($"{p.Name} ({n})");
+                    Rewrite(instance, p.Id, old, target);
+                }
                 TryDelete(old);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
@@ -139,7 +142,10 @@ public static class ProjectData
     }
 
     /// <summary>Every entry of <paramref name="from"/> into <paramref name="to"/>, merging a folder that's in both and
-    /// keeping the file already there; returns how many entries went.</summary>
+    /// keeping the file already there; returns how many entries went. The instance's data is usually on C: and repos
+    /// on another drive, where <see cref="Directory.Move"/> refuses (WOR-0152: nothing moved, so reports, artifacts and
+    /// notes vanished from view): a folder then goes file by file. An entry that can't move (a file held open) stays
+    /// behind for the next start, and the rest still go.</summary>
     static int MoveInto(string from, string to)
     {
         var n = 0;
@@ -147,16 +153,25 @@ public static class ProjectData
         foreach (var entry in Directory.GetFileSystemEntries(from))
         {
             var dest = Path.Combine(to, Path.GetFileName(entry));
-            if (Directory.Exists(entry))
+            try
             {
-                if (!Directory.Exists(dest)) Directory.Move(entry, dest);
-                else MoveInto(entry, dest);
-                n++;
+                if (Directory.Exists(entry))
+                {
+                    if (!Directory.Exists(dest) && SameVolume(entry, dest))
+                        try { Directory.Move(entry, dest); n++; continue; }
+                        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // held open, or a mount point: go file by file
+                    if (MoveInto(entry, dest) > 0) n++;
+                    TryDelete(entry);
+                }
+                else if (!File.Exists(dest)) { File.Move(entry, dest); n++; }
             }
-            else if (!File.Exists(dest)) { File.Move(entry, dest); n++; }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
         return n;
     }
+
+    static bool SameVolume(string a, string b) =>
+        string.Equals(Path.GetPathRoot(Path.GetFullPath(a)), Path.GetPathRoot(Path.GetFullPath(b)), StringComparison.OrdinalIgnoreCase);
 
     static void TryDelete(string dir)
     {
@@ -173,8 +188,11 @@ public static class ProjectData
             var full = Path.GetFullPath(path).TrimEnd('\\', '/');
             var prefix = Path.GetFullPath(old).TrimEnd('\\', '/');
             if (!full.StartsWith(prefix + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return path;
+            var moved = target + full[prefix.Length..];
+            // not all of it could move (a file held open): keep pointing where it is until the next start takes the rest
+            if (Directory.Exists(full) || !Directory.Exists(moved)) return path;
             any = true;
-            return (target + full[prefix.Length..]).Replace('\\', '/');
+            return moved.Replace('\\', '/');
         }
         p.Boards = Swap(p.Boards);
         p.Notes = Swap(p.Notes);
