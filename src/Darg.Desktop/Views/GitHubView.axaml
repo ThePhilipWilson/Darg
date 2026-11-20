@@ -1,67 +1,164 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:views="using:Darg.Desktop.Views"
              x:Class="Darg.Desktop.Views.GitHubView"
              x:DataType="vm:GitHubViewModel">
-  <UserControl.DataTemplates>
-    <DataTemplate DataType="vm:HubRow">
-      <Border Classes="card" Margin="0,0,0,6">
-        <DockPanel>
-          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-            <Button Content="→ card" Command="{Binding ToCardCommand}" IsVisible="{Binding CanCard}" Classes="workon" Opacity="1"/>
-            <Button Content="Open ↗" Command="{Binding OpenCommand}" Classes="workon" Opacity="1"/>
-          </StackPanel>
-          <TextBlock DockPanel.Dock="Left" Text="{Binding Tag}" Classes="mono dim" MinWidth="70" VerticalAlignment="Top" Margin="0,1,10,0"
-                     Classes.good="{Binding Good}" Classes.bad="{Binding Bad}"/>
-          <StackPanel Spacing="2">
-            <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
-            <TextBlock Text="{Binding Meta}" Classes="dim small"/>
-          </StackPanel>
-        </DockPanel>
-      </Border>
-    </DataTemplate>
-  </UserControl.DataTemplates>
+  <UserControl.Styles>
+    <Style Selector="TextBlock.unread">
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.running">
+      <Setter Property="Foreground" Value="{DynamicResource Info}"/>
+    </Style>
+    <Style Selector="SelectableTextBlock.add">
+      <Setter Property="Foreground" Value="{DynamicResource Ok}"/>
+    </Style>
+    <Style Selector="SelectableTextBlock.del">
+      <Setter Property="Foreground" Value="{DynamicResource Bad}"/>
+    </Style>
+    <Style Selector="SelectableTextBlock.hunk">
+      <Setter Property="Foreground" Value="{DynamicResource Info}"/>
+    </Style>
+  </UserControl.Styles>
 
   <DockPanel>
-    <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
+    <!-- top bar: the repo tabs when there are several, then Refresh and when it was read -->
+    <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,6">
       <DockPanel>
         <Button DockPanel.Dock="Right" Content="↻ Refresh" Command="{Binding RefreshCommand}"/>
-        <TextBlock Text="GitHub · GitLab" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
-        <TextBlock Classes="dim" Text="{Binding Status}" VerticalAlignment="Center"/>
+        <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+        <TextBlock Text="GitHub · GitLab" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" IsVisible="{Binding !ManyRepos}"/>
+        <ListBox ItemsSource="{Binding Repos}" SelectedItem="{Binding Repo}" IsVisible="{Binding ManyRepos}" Background="Transparent"
+                 AutomationProperties.Name="Repo">
+          <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:HubRepoView">
+              <TextBlock Text="{Binding Name}" Classes="mono"/>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
       </DockPanel>
     </Border>
-    <ScrollViewer>
-      <ItemsControl ItemsSource="{Binding Repos}" Margin="16">
-        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="22"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:HubRepoView">
-            <StackPanel Spacing="10">
-              <StackPanel Orientation="Horizontal" Spacing="12">
-                <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" Classes="mono"/>
-                <TextBlock Text="{Binding Counts}" Classes="dim" VerticalAlignment="Center"/>
+
+    <Grid ColumnDefinitions="480,*">
+      <!-- left: a tab per kind and its list -->
+      <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
+        <DockPanel>
+          <TabStrip DockPanel.Dock="Top" Margin="8,6,8,4" ItemsSource="{Binding Tabs}" SelectedIndex="{Binding TabIndex}"
+                    AutomationProperties.Name="GitHub list">
+            <TabStrip.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></TabStrip.ItemsPanel>
+            <TabStrip.Styles>
+              <Style Selector="TabStripItem">
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="MinHeight" Value="28"/>
+                <Setter Property="Padding" Value="6,2"/>
+              </Style>
+            </TabStrip.Styles>
+          </TabStrip>
+          <TextBlock DockPanel.Dock="Top" Text="Nothing here." Classes="dim" Margin="14,8" IsVisible="{Binding !Rows.Count}"/>
+          <ListBox ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="GitHub items">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:HubRow">
+                <DockPanel AutomationProperties.Name="{Binding Title}" Margin="0,2">
+                  <TextBlock DockPanel.Dock="Left" Text="{Binding Tag}" Classes="mono dim" MinWidth="64" VerticalAlignment="Top" Margin="0,1,8,0"
+                             Classes.good="{Binding Good}" Classes.bad="{Binding Bad}" Classes.running="{Binding Running}"/>
+                  <StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <Border Classes="label" IsVisible="{Binding HasGroup}" VerticalAlignment="Center" HorizontalAlignment="Left">
+                        <TextBlock Text="{Binding Group}" FontSize="10"/>
+                      </Border>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" Classes.unread="{Binding Unread}"/>
+                    <TextBlock Text="{Binding Meta}" Classes="dim small" TextTrimming="CharacterEllipsis"/>
+                  </StackPanel>
+                </DockPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+
+      <!-- right: the repo when nothing is picked, else the picked thing in full -->
+      <Panel Grid.Column="1">
+        <ScrollViewer IsVisible="{Binding ShowSummary}">
+          <StackPanel Margin="20,16" Spacing="8" DataContext="{Binding Repo}" x:DataType="vm:HubRepoView">
+            <DockPanel>
+              <Button DockPanel.Dock="Right" Content="Open ↗" Command="{Binding $parent[views:GitHubView].((vm:GitHubViewModel)DataContext).OpenRepoCommand}"
+                      ToolTip.Tip="The repo on the web"/>
+              <SelectableTextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" Classes="mono"/>
+            </DockPanel>
+            <TextBlock Text="{Binding Repo.Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}"/>
+            <TextBlock Text="{Binding About}" Classes="dim"/>
+            <TextBlock Text="{Binding Counts}" Classes="dim"/>
+            <TextBlock Text="{Binding Error}" Classes="bad" IsVisible="{Binding HasError}" TextWrapping="Wrap"/>
+            <TextBlock Text="Pick anything on the left to see it here in full." Classes="dim small" Margin="0,8,0,0"/>
+          </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel IsVisible="{Binding HasSelected}">
+          <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="12,6">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <Button Content="✓ Mark read" Command="{Binding MarkReadCommand}" IsVisible="{Binding CanMarkRead}" ToolTip.Tip="Mark this notification read on GitHub"/>
+                <Button Content="→ card" Command="{Binding ToCardCommand}" IsVisible="{Binding CanCard}" ToolTip.Tip="Make a card from this on the project's board"/>
+                <Button Content="Open ↗" Command="{Binding OpenCommand}" ToolTip.Tip="Open it on the web"/>
               </StackPanel>
-              <TextBlock Text="{Binding Error}" Classes="bad" IsVisible="{Binding HasError}" TextWrapping="Wrap"/>
-              <Grid ColumnDefinitions="*,16,*,16,*">
-                <StackPanel>
-                  <TextBlock Text="Pull requests" Classes="dim small" Margin="0,0,0,6"/>
-                  <ItemsControl ItemsSource="{Binding Pulls}"/>
-                  <TextBlock Text="None open" Classes="dim small" IsVisible="{Binding !Pulls.Count}"/>
-                </StackPanel>
-                <StackPanel Grid.Column="2">
-                  <TextBlock Text="Issues" Classes="dim small" Margin="0,0,0,6"/>
-                  <ItemsControl ItemsSource="{Binding Issues}"/>
-                  <TextBlock Text="None open" Classes="dim small" IsVisible="{Binding !Issues.Count}"/>
-                </StackPanel>
-                <StackPanel Grid.Column="4">
-                  <TextBlock Text="Recent CI runs" Classes="dim small" Margin="0,0,0,6"/>
-                  <ItemsControl ItemsSource="{Binding Runs}"/>
-                  <TextBlock Text="No runs" Classes="dim small" IsVisible="{Binding !Runs.Count}"/>
-                </StackPanel>
-              </Grid>
-            </StackPanel>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-    </ScrollViewer>
+              <StackPanel VerticalAlignment="Center" Spacing="2">
+                <SelectableTextBlock Text="{Binding Detail.Title, FallbackValue=''}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding Detail.Sub, FallbackValue=''}" Classes="dim small" TextWrapping="Wrap"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <TextBlock DockPanel.Dock="Top" Text="{Binding DetailStatus}" Classes="dim" Margin="16,10,16,0" TextWrapping="Wrap"
+                     IsVisible="{Binding DetailStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+          <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Detail.Parts, FallbackValue={x:Null}}" Margin="16,12">
+              <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="14"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:HubPartView">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" IsVisible="{Binding HasHeading}" TextWrapping="Wrap"/>
+                    <Border Classes="card" IsVisible="{Binding IsMarkdown}" Padding="12,8">
+                      <views:MarkdownView Markdown="{Binding Text}" Loaded="OnMarkdownLoaded"/>
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding Lines}" IsVisible="{Binding IsLines}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:HubLineView">
+                          <DockPanel Margin="0,1">
+                            <Button DockPanel.Dock="Right" Content="↗" Command="{Binding OpenCommand}" IsVisible="{Binding HasUrl}" Classes="workon" Padding="6,0"
+                                    ToolTip.Tip="Open on the web"/>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding Meta}" Classes="dim small mono" VerticalAlignment="Center" Margin="10,0"/>
+                            <TextBlock DockPanel.Dock="Left" Text="{Binding Tag}" Classes="mono dim" MinWidth="72" Margin="0,0,8,0" VerticalAlignment="Top"
+                                       Classes.good="{Binding Good}" Classes.bad="{Binding Bad}"/>
+                            <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                          </DockPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel IsVisible="{Binding IsLog}" Spacing="4">
+                      <Button Content="{Binding LogToggle}" Command="{Binding ToggleLogCommand}" IsVisible="{Binding HasFull}" HorizontalAlignment="Left"/>
+                      <Border Background="{DynamicResource Sunk}" CornerRadius="4" Padding="10,8">
+                        <SelectableTextBlock Text="{Binding LogText}" FontFamily="Cascadia Mono,Consolas,Menlo,monospace" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource LogInk}"/>
+                      </Border>
+                    </StackPanel>
+                    <Border IsVisible="{Binding IsDiff}" Background="{DynamicResource Sunk}" CornerRadius="4" Padding="10,8">
+                      <ItemsControl ItemsSource="{Binding Diff}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:DiffLine">
+                            <SelectableTextBlock Text="{Binding Text}" FontFamily="Cascadia Mono,Consolas,Menlo,monospace" FontSize="12" TextWrapping="Wrap"
+                                                 Classes.add="{Binding Add}" Classes.del="{Binding Del}" Classes.hunk="{Binding Hunk}"/>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Border>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
+      </Panel>
+    </Grid>
   </DockPanel>
 </UserControl>

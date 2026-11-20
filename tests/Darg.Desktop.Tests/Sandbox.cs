@@ -52,6 +52,22 @@ public static class Sandbox
             File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
         Environment.SetEnvironmentVariable("CLAUDE_PATH", claude);
+
+        // gh is a fake too (tools/perf/fake_gh.py): the GitHub page reads a made-up repo, never GitHub itself
+        var fakeGh = Path.Combine(Repo, "tools", "perf", "fake_gh.py");
+        string gh;
+        if (OperatingSystem.IsWindows())
+        {
+            gh = Path.Combine(Root, "gh.cmd");
+            File.WriteAllText(gh, $"@\"{python}\" \"{fakeGh}\" %*\r\n");
+        }
+        else
+        {
+            gh = Path.Combine(Root, "gh");
+            File.WriteAllText(gh, $"#!/bin/sh\nexec \"{python}\" \"{fakeGh}\" \"$@\"\n");
+            File.SetUnixFileMode(gh, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        Environment.SetEnvironmentVariable("GH_PATH", gh);
         Environment.SetEnvironmentVariable("FAKE_SECONDS", "1");
         Environment.SetEnvironmentVariable("FAKE_RATE", "4");
         Environment.SetEnvironmentVariable("FAKE_RESULT", "200");
