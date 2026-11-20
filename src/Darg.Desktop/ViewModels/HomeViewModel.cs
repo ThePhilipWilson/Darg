@@ -117,7 +117,8 @@ public partial class HomeViewModel : ObservableObject
             var live = agents.Agents.Where(a => a.NeedsYou || a.Working).OrderBy(a => a.NeedsYou ? 0 : 1).ToList();
             Sync(Agents, live);
             var needs = live.Count(a => a.NeedsYou);
-            AgentsTitle = needs > 0 ? $"Agents · {needs} need{(needs == 1 ? "s" : "")} you" : "Agents";
+            var running = agents.Agents.Count(a => a.Working);
+            AgentsTitle = "Agents" + (running > 0 ? $" · {running} running" : "") + (needs > 0 ? $" · {needs} need{(needs == 1 ? "s" : "")} you" : "");
             var rest = agents.Agents.Count - live.Count;
             AgentsEmpty = live.Count > 0 ? "" : rest == 0 ? "No agents yet." : $"None at work. {rest} finished or saved in Agents.";
         }
