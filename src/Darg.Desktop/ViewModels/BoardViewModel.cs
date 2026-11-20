@@ -1081,6 +1081,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     void StartImprove(Card card)
     {
         if (Folder is null || Improve is null) return;
+        if (AgentFor?.Invoke(card.Id) is not null) return; // an agent is on it already (WOR-0155)
         // the card's panel, left open, would save its old text over what the agent writes
         if (Root.Editor?.CardId == card.Id) Root.Editor = null;
         Improve(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)));

@@ -162,4 +162,31 @@ public class CardWorkTests
         await DargApp.Settle(1500);
         Assert.DoesNotContain(app.Agents.Agents, a => a.Purpose == AgentPurposes.Qa);
     }
+
+    [AvaloniaFact] // WOR-0155: Improve shows its agent on the card and locks it, until the agent's turn ends
+    public async Task Improve_puts_the_agent_on_the_card_and_locks_it_until_its_turn_ends()
+    {
+        using var app = DargApp.Make();
+        var card = app.Card("fix the logo", "To Do", "jagged");
+        await app.Start();
+        Environment.SetEnvironmentVariable("FAKE_SECONDS", "30");
+        try
+        {
+            await app.Api("improve-card", new { project = "proj", card = card.Id });
+            var agent = Assert.Single(app.Agents.Agents);
+            Assert.Equal(AgentPurposes.Improve, agent.Purpose);
+            Assert.Equal(card.Id, agent.CardId);
+            Assert.Same(agent, app.Agents.ForCard(card.Id));
+
+            var tile = app.Board.Show(card.Id)!;
+            Assert.True(tile.HasAgent);
+            Assert.False(tile.CanStart); // Work on and Improve go
+            app.Board.Open(tile);
+            Assert.False(app.Board.Editor!.CanWorkOn);
+
+            await app.Api("improve-card", new { project = "proj", card = card.Id }); // a repeat click
+            Assert.Single(app.Agents.Agents);
+        }
+        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
+    }
 }
