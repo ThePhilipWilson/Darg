@@ -41,6 +41,8 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     readonly Dictionary<string, AgentViewModel?> _open = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Chats left mid-turn (+ New chat, another chat picked), still running until that turn ends (WOR-0157).</summary>
     readonly HashSet<AgentViewModel> _finishing = [];
+    /// <summary>The chat the phone is in, per project (AND-0007): kept running whatever the desktop shows.</summary>
+    readonly Dictionary<string, AgentViewModel> _phone = new(StringComparer.OrdinalIgnoreCase);
 
     static string Store => AgentStore.Folder("~bench");
 
@@ -95,7 +97,10 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     AgentViewModel Load(AgentRecord r) => Live().FirstOrDefault(a => a.Id == r.Id) ?? Wire(new AgentViewModel(r, Store));
 
     /// <summary>The chats running or open now: the one on screen, each other project's, and those finishing a turn.</summary>
-    public IEnumerable<AgentViewModel> Live() => _open.Values.Append(Agent).Concat(_finishing).OfType<AgentViewModel>().Distinct();
+    public IEnumerable<AgentViewModel> Live() => _open.Values.Append(Agent).Concat(_finishing).Concat(_phone.Values).OfType<AgentViewModel>().Distinct();
+
+    /// <summary>Held open somewhere other than the desktop's box: another project's, or the phone's.</summary>
+    bool HeldElsewhere(AgentViewModel a) => _open.Values.Contains(a) || _phone.Values.Contains(a);
 
     /// <summary>A chat is no longer on screen. Its session ends, unless another project has it open or it's mid-turn:
     /// ending it then cut Fettle off after the work and before the reply, which came back to nothing (WOR-0157: a
@@ -104,7 +109,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     void LetGo(AgentViewModel left)
     {
         left.Save();
-        if (_open.Values.Contains(left)) return; // another project has it open: it carries on there
+        if (HeldElsewhere(left)) return; // another project, or the phone, has it open: it carries on there
         if (!left.Working && !left.NeedsYou) { left.End(); return; }
         if (!_finishing.Add(left)) return;
         left.TurnEnded += Ended;
@@ -114,7 +119,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
             if (left.Working || left.NeedsYou) return; // carried on (a message from the Agents view): wait for that turn
             left.TurnEnded -= Ended;
             _finishing.Remove(left);
-            if (left != Agent && !_open.Values.Contains(left)) left.End();
+            if (left != Agent && !HeldElsewhere(left)) left.End();
         });
     }
 
@@ -148,9 +153,9 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     }
 
     /// <summary>A new chat's model profile (WOR-0034): by a "kind: fettle" rule, else by what was asked.</summary>
-    Task<ProfilePick?> ProfileFor(string text)
+    Task<ProfilePick?> ProfileFor(string text, string? project = null)
     {
-        var job = new AgentJob(JobKinds.Fettle, text, Project: ProjectId);
+        var job = new AgentJob(JobKinds.Fettle, text, Project: project ?? ProjectId);
         return Task.Run(() => ModelProfiles.Pick(ModelProfiles.Load(), job)); // off the UI thread, as in AgentsViewModel.Start
     }
 
@@ -244,6 +249,43 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         Agent.Project ??= ProjectId; // as in Wire: an untagged chat joins the project it carries on in
         Agent.Say(text, sent);
     }
+
+    /// <summary>A message from the phone (AND-0007, the fettle-say command): into <paramref name="chatId"/>, or a new chat
+    /// in <paramref name="projectId"/> when there's none or it has no session to carry on. <paramref name="sent"/> carries
+    /// the phone's own context line (<see cref="PhoneFettle.Message"/>), not the desktop's. The phone's chat stays
+    /// running while the desktop shows other chats or projects; starting another lets the last one go, as + New chat does.</summary>
+    public AgentViewModel PhoneSay(string projectId, string? chatId, string text, string sent)
+    {
+        var chat = chatId is null ? null : Find(chatId) ?? throw new ApiError($"No Fettle chat \"{chatId}\".");
+        if (chat is { Working: true }) throw new ApiError($"Fettle is mid-turn in \"{chat.Name}\"; send when it's done.");
+        if (chat is { NeedsYou: true }) throw new ApiError($"Fettle is waiting on an answer in \"{chat.Name}\"; answer it with fettle-answer.");
+        if (chat is null || (chat.State is AgentState.Exited or AgentState.Saved && chat.SessionId is null))
+        {
+            var home = InstanceConfig.Folder();
+            Directory.CreateDirectory(home);
+            chat = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text, profile: ProfileFor(text, projectId))
+                { StoreFolder = Store, Project = projectId });
+            chat.Save();
+            _ = Retitle(chat.Id, text);
+        }
+        else
+        {
+            chat.Project ??= projectId;
+            chat.Say(text, sent);
+        }
+        if (_phone.TryGetValue(projectId, out var last) && last != chat)
+        {
+            _phone.Remove(projectId);
+            if (last != Agent) LetGo(last);
+        }
+        _phone[projectId] = chat;
+        ListChats();
+        return chat;
+    }
+
+    /// <summary>A chat by id: a live one, else a saved one (loaded, not yet running).</summary>
+    public AgentViewModel? Find(string chatId) =>
+        Live().FirstOrDefault(a => a.Id == chatId) ?? (AgentStore.List(Store).FirstOrDefault(r => r.Id == chatId) is { } r ? Load(r) : null);
 
     IEnumerable<string> Args()
     {

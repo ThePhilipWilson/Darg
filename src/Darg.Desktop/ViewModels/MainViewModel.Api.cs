@@ -82,6 +82,14 @@ public partial class MainViewModel
         Add("optimise-tokens", "the header's Optimise tokens toggle: {on: true|false} turns it on (every agent one model down and at no more than " +
                                "medium effort, running ones from their next turn) or off; {} says whether it's on. Only when Philip asks.", OptimiseTokensApi);
         Add("run-command", "run one of a project's saved commands in its Terminal section: {project, command} (the command's name).", RunCommand);
+        // AND-0007: Fettle from the phone. The phone app calls these; Fettle itself has no use for them.
+        Add("fettle-say", "for the phone app, not Fettle: send Philip's words to Fettle as if typed in its box, with what the phone shows: {project, text, chat?, section?, card?, doc?, voice?}. " +
+                          "No chat: a new one. voice: true when dictated. Returns the chat as fettle does, from his message.", FettleSay);
+        Add("fettle", "for the phone app, not Fettle: a Fettle chat: {chat, from?}. Its state and its transcript from entry from (default 0): user, fettle, note, tool, " +
+                      "question (with its questions and options to tap) and permission entries, each with its index.", a => FettleRead(a.Need("chat"), FromArg(a)));
+        Add("fettle-answer", "for the phone app, not Fettle: answer what a Fettle chat waits on: {chat, answers} (question text to the label picked, or his own words) " +
+                             "for a question, {chat, allow: true|false} for a tool it wants to use.", FettleAnswer);
+        Add("fettle-chats", "for the phone app, not Fettle: a project's Fettle chats, newest first: {project}. Each: id, name, updated.", FettleChats);
     }
 
     static string Json(JsonNode n) => DargApi.Json(n);
@@ -468,6 +476,87 @@ public partial class MainViewModel
             throw new ApiError($"\"{agent.Name}\" is mid-turn ({agent.StateText}); send when it's done.");
         agent.Say(text, text);
         return $"Sent to \"{agent.Name}\".";
+    }
+
+    static int FromArg(ApiArgs a) => int.TryParse(a.Get("from"), out var n) && n > 0 ? n : 0;
+
+    string FettleSay(ApiArgs a)
+    {
+        var p = FindProject(a);
+        var text = a.Need("text");
+        var voice = a.Get("voice") is "true" or "1";
+        var section = a.Get("section");
+        if (section is not null && !Enum.TryParse<Section>(section, true, out _))
+            throw new ApiError($"No section \"{section}\"; one of {string.Join(", ", Enum.GetNames<Section>())}.");
+        var context = PhoneFettle.Context(p.Name, section, a.Get("card"), a.Get("doc"));
+        var chat = Mascot.PhoneSay(p.Config.Id, a.Get("chat"), text, PhoneFettle.Message(context, text, voice));
+        // from his message on: the phone shows it at once, and Fettle's reply follows as it polls
+        var from = chat.Items.Select((item, i) => (item, i)).LastOrDefault(x => x.item is UserItem).i;
+        return FettleRead(chat, from);
+    }
+
+    string FettleRead(string chatId, int from) =>
+        FettleRead(Mascot.Find(chatId) ?? throw new ApiError($"No Fettle chat \"{chatId}\"."), from);
+
+    static string FettleRead(AgentViewModel chat, int from)
+    {
+        var items = new JsonArray();
+        var all = chat.Items.ToList();
+        for (var i = Math.Min(from, all.Count); i < all.Count; i++) items.Add(FettleEntryFor(all[i], i).ToJson());
+        return Json(new JsonObject
+        {
+            ["id"] = chat.Id, ["name"] = chat.Name, ["project"] = chat.Project, ["state"] = chat.StateText,
+            ["busy"] = chat.Working, ["needsYou"] = chat.NeedsYou, ["count"] = all.Count, ["from"] = from, ["items"] = items,
+        });
+    }
+
+    static FettleEntry FettleEntryFor(TranscriptItem item, int i) => item switch
+    {
+        UserItem u => new(i, "user", u.Text, null, false, []),
+        TextItem t => new(i, "fettle", t.Text, null, false, []),
+        NoteItem n => new(i, "note", n.Text, null, false, []),
+        ToolItem t => new(i, "tool", t.Name, t.Summary, false, []),
+        QuestionItem q => new(i, "question", string.Join(" / ", q.Questions.Select(g => g.Question)), null, q.Pending,
+            q.Questions.Select(g => new FettleQuestion(g.Header, g.Question, g.MultiSelect, g.Options.Select(o => new FettleOption(o.Label, o.Description)).ToList(), g.Chosen)).ToList()),
+        PermissionItem p => new(i, "permission", p.Tool, p.Summary, p.Pending, []),
+        _ => new(i, item.GetType().Name.Replace("Item", "").ToLowerInvariant(), "", null, false, []),
+    };
+
+    string FettleAnswer(ApiArgs a)
+    {
+        var chat = Mascot.Find(a.Need("chat")) ?? throw new ApiError($"No Fettle chat \"{a.Get("chat")}\".");
+        var waiting = chat.Items.OfType<IPending>().LastOrDefault(x => x.Pending) as TranscriptItem
+                      ?? throw new ApiError($"Fettle isn't waiting on anything in \"{chat.Name}\".");
+        var from = chat.Items.IndexOf(waiting);
+        switch (waiting)
+        {
+            case QuestionItem q:
+                var given = a.Get("answers") is { } json ? JsonNode.Parse(json) as JsonObject : null;
+                if (given is null || given.Count == 0) throw new ApiError("Missing \"answers\": each question's text to the label picked.");
+                foreach (var g in q.Questions)
+                {
+                    var answer = (string?)given[g.Question]
+                                 ?? (q.Questions.Count == 1 && given.Count == 1 ? (string?)given.First().Value : null) // one question: its text needn't match exactly
+                                 ?? throw new ApiError($"No answer for \"{g.Question}\".");
+                    q.Pick(g.Question, answer);
+                }
+                break;
+            case PermissionItem p:
+                var allow = a.Need("allow") is "true" or "1" or "yes";
+                (allow ? p.AllowCommand : p.DenyCommand).Execute(null);
+                break;
+        }
+        return FettleRead(chat, from);
+    }
+
+    string FettleChats(ApiArgs a)
+    {
+        var p = FindProject(a);
+        var list = new JsonArray();
+        foreach (var r in AgentStore.List(AgentStore.Folder("~bench"))
+                     .Where(r => r.Project is null || string.Equals(r.Project, p.Config.Id, StringComparison.OrdinalIgnoreCase)))
+            list.Add(new JsonObject { ["id"] = r.Id, ["name"] = r.Name, ["updated"] = r.Updated.ToString("s") });
+        return Json(list);
     }
 
     string ForgetAgents(IReadOnlyList<string> ids)

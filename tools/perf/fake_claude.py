@@ -6,6 +6,11 @@ FAKE_RESULT   characters in each tool result (default 4000)
 FAKE_TOUCH    1: rewrite the agent's card file every FAKE_TOUCH_EVERY seconds (default 10), as agents edit cards
 FAKE_LOG      a file: each start (its args and folder), each message it is sent and each one-shot question is
               appended to it as a JSON line, for the integration tests (WOR-0127) to check what an agent was given
+
+A message can steer the turn (AND-0007), for tests of what Fettle does:
+FAKE_ASK      asks an AskUserQuestion ("Which board?": Main or Elsewhere) before the work, waits for the answer and
+              logs it as "answered"
+FAKE_CARD <project>: <title>   calls the Darg API's new-card ($DARG_API) as Fettle does, and replies with its link
 """
 import json, os, re, sys, threading, time
 
@@ -73,12 +78,48 @@ size = int(os.environ.get("FAKE_RESULT", "4000"))
 touch = os.environ.get("FAKE_TOUCH") == "1"
 touch_every = float(os.environ.get("FAKE_TOUCH_EVERY", "10"))
 sid = "fake-%d" % os.getpid()
+waiting = {}  # request id -> [event, response]: questions asked of the host, until it answers
+
+def ask(n):
+    rid = "ask-%d-%d" % (os.getpid(), n)
+    slot = [threading.Event(), None]
+    waiting[rid] = slot
+    emit({"type": "control_request", "request_id": rid, "request": {"subtype": "can_use_tool", "tool_name": "AskUserQuestion",
+          "input": {"questions": [{"question": "Which board?", "header": "Board", "multiSelect": False,
+                                   "options": [{"label": "Main", "description": "the inbox"}, {"label": "Elsewhere", "description": "another board"}]}]},
+          "tool_use_id": "tq%d" % n, "requires_user_interaction": True}})
+    slot[0].wait()
+    answer = slot[1] or {}
+    log("answered", response=answer)
+    return answer
+
+def new_card(project, title):
+    import urllib.request
+    body = json.dumps({"project": project, "title": title}).encode("utf-8")
+    req = urllib.request.Request(os.environ["DARG_API"] + "/new-card", data=body, method="POST")
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+asks = 0
 
 def work(text):
+    global asks
     card = re.search(r"Card file: (.+)", text)
     card = card.group(1).strip() if card else None
     emit({"type": "system", "subtype": "init", "session_id": sid, "model": "fake", "cwd": os.getcwd(),
           "apiKeySource": "none", "permissionMode": "auto"})
+    if "FAKE_ASK" in text:
+        asks += 1
+        answer = ask(asks)
+        picked = ((answer.get("updatedInput") or {}).get("answers") or {}).get("Which board?", "nothing")
+        emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Picked: " + picked}]}})
+    made = re.search(r"FAKE_CARD (\S+): (.+)", text)
+    if made:
+        try:
+            got = new_card(made.group(1), made.group(2).strip())
+            emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Made " + got["link"] + "."}]}})
+        except Exception as e:
+            emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "new-card failed: %s" % e}]}})
     end = time.time() + seconds
     last_touch = time.time()
     n = 0
@@ -105,6 +146,12 @@ for line in sys.stdin:
         continue
     if m.get("type") == "control_request":
         emit({"type": "control_response", "response": {"subtype": "success", "request_id": m.get("request_id"), "response": {}}})
+    elif m.get("type") == "control_response":  # the host answering a question (FAKE_ASK)
+        r = m.get("response") or {}
+        slot = waiting.pop(r.get("request_id"), None)
+        if slot:
+            slot[1] = r.get("response")
+            slot[0].set()
     elif m.get("type") == "user":
         content = m["message"]["content"]
         text = content if isinstance(content, str) else "".join(c.get("text", "") for c in content if isinstance(c, dict))
