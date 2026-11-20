@@ -39,7 +39,17 @@ public static class Dictation
     static Button? active;
     static string? savedHint;
     static DateTime lastSound;
+    static bool heardSound;
     static int session;
+
+    /// <summary>Quiet this long, with nothing heard yet, shows the "No sound" warning. Tests shorten it.</summary>
+    public static TimeSpan QuietWarning { get; set; } = TimeSpan.FromSeconds(6);
+    /// <summary>Test seam: awaited after the model is loaded, before the mic opens (stands in for a slow load).</summary>
+    public static Func<Task>? AfterLoad { get; set; }
+    /// <summary>Test seam: the sample source in place of the real microphone (null = the default microphone).</summary>
+    public static Func<ISampleSource>? SourceFactory { get; set; }
+    /// <summary>Test seam: the folder the model is looked for in (null = %APPDATA%/Darg/models).</summary>
+    public static string? ModelFolder { get; set; }
 
     /// <summary>The status goes where it can be seen: the box's own placeholder. Also appended to dictation.log in the
     /// instance folder so a failure can be read afterwards.</summary>
@@ -70,11 +80,11 @@ public static class Dictation
 
 #if WINDOWS
     const string ModelFile = "ggml-small.en.bin";
-    static WaveInEvent? mic;
+    static Listening? current;
     static WhisperFactory? factory;
     static readonly SemaphoreSlim loading = new(1, 1);
 
-    static string ModelPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Darg", "models", ModelFile);
+    public static string ModelPath => Path.Combine(ModelFolder ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Darg", "models"), ModelFile);
 
     static async Task<WhisperFactory> LoadAsync(Action<string> say)
     {
@@ -115,6 +125,7 @@ public static class Dictation
         active = b;
         savedHint = box.PlaceholderText;
         lastSound = DateTime.UtcNow;
+        heardSound = false;
         Show(b, true);
         _ = Task.Run(async () =>
         {
@@ -122,6 +133,7 @@ public static class Dictation
             try
             {
                 var f = await LoadAsync(SayUi);
+                if (AfterLoad is { } hook) await hook();
                 if (mine != session) return;
                 await Run(b, box, f, mine, SayUi);
             }
@@ -139,48 +151,78 @@ public static class Dictation
     }
 
 #if WINDOWS
+    /// <summary>One open microphone: its phrase cutter, the phrases waiting for the model, and the way to close it
+    /// that hands over a phrase still being spoken.</summary>
+    sealed class Listening(ISampleSource source)
+    {
+        public readonly ISampleSource Source = source;
+        public readonly SpeechSegmenter Seg = new();
+        public readonly System.Threading.Channels.Channel<float[]> Work = System.Threading.Channels.Channel.CreateUnbounded<float[]>();
+        bool closed;
+
+        public void Feed(float[] x)
+        {
+            lock (Seg)
+            {
+                if (closed) return;
+                foreach (var p in Seg.Feed(x)) Work.Writer.TryWrite(p);
+            }
+        }
+
+        /// <summary>Stops the mic, queues the phrase in progress (if long enough to be speech) and ends the queue.</summary>
+        public void Finish()
+        {
+            lock (Seg)
+            {
+                if (closed) return;
+                closed = true;
+                try { Source.Stop(); } catch { }
+                if (Seg.Flush() is { } tail) Work.Writer.TryWrite(tail);
+                Work.Writer.TryComplete();
+            }
+        }
+    }
+
     static async Task Run(Button b, TextBox box, WhisperFactory f, int mine, Action<string> say)
     {
-        var seg = new SpeechSegmenter();
-        var work = System.Threading.Channels.Channel.CreateUnbounded<float[]>();
         using var processor = f.CreateBuilder().WithLanguage("en")
             .WithPrompt("Darg, Fettle, Claude, Avalonia, agent, card, board, commit, branch.").Build();
-        var m = new WaveInEvent { WaveFormat = new WaveFormat(SpeechSegmenter.Rate, 16, 1), BufferMilliseconds = 100 };
-        m.DataAvailable += (_, a) =>
+        using var src = (SourceFactory ?? (() => new MicSource()))();
+        var run = new Listening(src);
+        src.Samples += x =>
         {
             if (mine != session) return;
-            var n = a.BytesRecorded / 2;
-            var x = new float[n];
-            for (var i = 0; i < n; i++) x[i] = BitConverter.ToInt16(a.Buffer, i * 2) / 32768f;
-            foreach (var p in seg.Feed(x)) work.Writer.TryWrite(p);
-            var lvl = seg.Level * 100;
-            var hearing = seg.Hearing;
+            run.Feed(x);
+            double level; bool hearing;
+            lock (run.Seg) { level = run.Seg.Level * 100; hearing = run.Seg.Hearing; }
             Dispatcher.UIThread.Post(() =>
             {
                 if (mine != session) return;
-                b.Content = hearing ? "🔊" : lvl >= 1 ? "🔉" : "⏺";
-                if (lvl >= 1) lastSound = DateTime.UtcNow;
-                else if ((DateTime.UtcNow - lastSound).TotalSeconds > 6)
+                b.Content = hearing ? "🔊" : level >= 1 ? "🔉" : "⏺";
+                if (level >= 1) { lastSound = DateTime.UtcNow; heardSound = true; }
+                else if (!heardSound && DateTime.UtcNow - lastSound > QuietWarning)
                 {
                     lastSound = DateTime.UtcNow;
                     Say(b, "No sound from the microphone. In Windows Settings > Sound > Input pick your mic and watch its level bar while you talk.");
                 }
             });
         };
-        m.RecordingStopped += (_, _) => work.Writer.TryComplete();
-        mic = m;
-        m.StartRecording();
+        src.Stopped += run.Finish; // also when the device ends by itself: hand over what was heard
+        current = run;
+        // the clock for the "No sound" warning starts when the mic opens, not when the button was pressed:
+        // loading the model can take longer than the warning's wait
+        lastSound = DateTime.UtcNow;
+        src.Start();
         say("Listening: speak, then pause. Each phrase appears when you stop.");
-        await foreach (var phrase in work.Reader.ReadAllAsync())
+        await foreach (var phrase in run.Work.Reader.ReadAllAsync())
         {
-            if (mine != session) break;
             say("Transcribing...");
             var sb = new System.Text.StringBuilder();
             await foreach (var s in processor.ProcessAsync(phrase)) sb.Append(s.Text);
             var text = SpeechText.Clean(sb.ToString());
-            if (mine != session) break;
             if (text.Length == 0) { say("Listening (heard no words in that)."); continue; }
-            Dispatcher.UIThread.Post(() => { if (mine != session) return; Say(b, "Typed: " + text); Insert(box, text); });
+            // typed even when the mic was stopped meanwhile: stopping mid-phrase still delivers that phrase
+            Dispatcher.UIThread.Post(() => { Say(b, "Typed: " + text); Insert(box, text); });
         }
     }
 #endif
@@ -191,8 +233,8 @@ public static class Dictation
     {
         session++;
 #if WINDOWS
-        try { mic?.StopRecording(); mic?.Dispose(); } catch { }
-        mic = null;
+        current?.Finish();
+        current = null;
 #endif
         if (active is { } b)
         {
@@ -220,3 +262,38 @@ public static class Dictation
         box.CaretIndex = at + add.Length;
     }
 }
+
+/// <summary>Where dictation's samples (16 kHz mono, -1..1) come from: the microphone, or a test's wave file.</summary>
+public interface ISampleSource : IDisposable
+{
+    event Action<float[]>? Samples;
+    /// <summary>Raised when recording has ended.</summary>
+    event Action? Stopped;
+    void Start();
+    void Stop();
+}
+
+#if WINDOWS
+sealed class MicSource : ISampleSource
+{
+    readonly WaveInEvent mic = new() { WaveFormat = new WaveFormat(SpeechSegmenter.Rate, 16, 1), BufferMilliseconds = 100 };
+    public event Action<float[]>? Samples;
+    public event Action? Stopped;
+
+    public MicSource()
+    {
+        mic.DataAvailable += (_, a) =>
+        {
+            var n = a.BytesRecorded / 2;
+            var x = new float[n];
+            for (var i = 0; i < n; i++) x[i] = BitConverter.ToInt16(a.Buffer, i * 2) / 32768f;
+            Samples?.Invoke(x);
+        };
+        mic.RecordingStopped += (_, _) => Stopped?.Invoke();
+    }
+
+    public void Start() => mic.StartRecording();
+    public void Stop() => mic.StopRecording();
+    public void Dispose() => mic.Dispose();
+}
+#endif

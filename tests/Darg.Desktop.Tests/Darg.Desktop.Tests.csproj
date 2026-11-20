@@ -24,6 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Darg.Desktop\Darg.Desktop.csproj" />
     <ProjectReference Include="..\..\src\Darg.Core\Darg.Core.csproj" />
   </ItemGroup>
