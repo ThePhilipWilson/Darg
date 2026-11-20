@@ -40,7 +40,7 @@ public partial class MainViewModel : ObservableObject
             Log(MascotId, agent.Id, "Fettle", agent.Name, what, detail);
             if (!(WindowActive && Mascot.Open))
             {
-                Notifier.Show(MascotId, agent.Id, NotificationEntry.HeaderFor("Fettle", agent.Name, what), "Fettle", detail);
+                Notifier.Show(MascotId, agent.Id, NotificationEntry.HeaderFor("Fettle", agent.Name, what), "Fettle", detail, NotificationEntry.Asks(what));
                 PushTell(NotificationEntry.HeaderFor("Fettle", agent.Name, what), what, detail);
             }
         };
@@ -362,7 +362,7 @@ public partial class MainViewModel : ObservableObject
         var looking = WindowActive && Selected == project && project.OnAgents && project.Agents?.Shown == agent;
         using var timing = StallWatch.Shared.Section("Notifier.Show");
         if (looking) return;
-        Notifier.Show(project.Config.Id, agent.Id, NotificationEntry.HeaderFor(project.Name, agent.Name, what), project.Name, detail);
+        Notifier.Show(project.Config.Id, agent.Id, NotificationEntry.HeaderFor(project.Name, agent.Name, what), project.Name, detail, NotificationEntry.Asks(what));
         PushTell($"{project.Name}: " + NotificationEntry.HeaderFor(project.Name, agent.Name, what), what, detail);
     }
 
@@ -376,7 +376,7 @@ public partial class MainViewModel : ObservableObject
         Log(project.Config.Id, CardPrefix + card, project.Name, $"{card} {title}", NotificationEntry.DecisionWaits, question);
         var looking = WindowActive && Selected == project && project.OnBoard && project.Board?.Editor?.CardId == card;
         if (looking) return;
-        Notifier.Show(project.Config.Id, CardPrefix + card, NotificationEntry.HeaderFor(project.Name, $"{card} {title}", NotificationEntry.DecisionWaits), project.Name, question);
+        Notifier.Show(project.Config.Id, CardPrefix + card, NotificationEntry.HeaderFor(project.Name, $"{card} {title}", NotificationEntry.DecisionWaits), project.Name, question, needsYou: true);
         PushDecision(project, card, title, decision); // AND-0006: its options as buttons on the phone
     }
 
@@ -440,7 +440,10 @@ public record NotificationEntry(string ProjectId, string AgentId, string Project
     public static string HeaderFor(string project, string agent, string what) =>
         string.IsNullOrWhiteSpace(agent) ? $"{project}: {what}" : $"{agent}: {what}";
     /// <summary>A question or permission ask, which goes stale once answered.</summary>
-    public bool IsAsk => What == "has a question" || What == DecisionWaits || What.StartsWith("wants to use ");
+    public bool IsAsk => Asks(What);
+    /// <summary>Whether a notification saying this waits on my answer: a question, a permission ask or a card's decision.
+    /// The list and the toast mark those (WOR-0163).</summary>
+    public static bool Asks(string what) => what == "has a question" || what == DecisionWaits || what.StartsWith("wants to use ", StringComparison.Ordinal);
     /// <summary>What a card waiting on a decision says (WOR-0124).</summary>
     public const string DecisionWaits = "needs your decision";
     public string Title => HeaderFor(Project, Agent, What);

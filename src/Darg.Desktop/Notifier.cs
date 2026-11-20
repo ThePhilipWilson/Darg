@@ -9,8 +9,11 @@ public static class Notifier
     /// <summary>(project id, agent id) of a notification the person clicked. Raised off the UI thread.</summary>
     public static event Action<string, string>? Opened;
 
-    /// <summary>A notification as shown.</summary>
-    public sealed record Notification(string ProjectId, string AgentId, string Title, string AgentName, string Detail);
+    /// <summary>A notification as shown. NeedsYou: it waits on the person's answer, and says so (WOR-0163).</summary>
+    public sealed record Notification(string ProjectId, string AgentId, string Title, string AgentName, string Detail, bool NeedsYou = false);
+
+    /// <summary>The small line a toast that waits on the person's answer carries.</summary>
+    public const string NeedsYouLine = "Waiting on your decision";
 
     /// <summary>When set (the integration tests set it), notifications go here instead of to the OS, and
     /// the app's own are never cleared from Action Center.</summary>
@@ -27,23 +30,25 @@ public static class Notifier
 #endif
     }
 
-    /// <summary>A toast: "Alpha: has a question" over the agent's name, then the detail.</summary>
-    public static void Show(string projectId, string agentId, string title, string agentName, string detail)
+    /// <summary>A toast: "Alpha: has a question" over the agent's name, then the detail; one that waits on
+    /// the person's answer (<paramref name="needsYou"/>) carries <see cref="NeedsYouLine"/> beneath.</summary>
+    public static void Show(string projectId, string agentId, string title, string agentName, string detail, bool needsYou = false)
     {
-        if (Capture is { } capture) { capture(new Notification(projectId, agentId, title, agentName, detail)); return; }
+        if (Capture is { } capture) { capture(new Notification(projectId, agentId, title, agentName, detail, needsYou)); return; }
 #if WINDOWS
         // off the UI thread: a toast takes about 100 ms to show, and five agents finishing together froze the window (WOR-0076)
         Task.Run(() =>
         {
             try
             {
-                new Microsoft.Toolkit.Uwp.Notifications.ToastContentBuilder()
+                var toast = new Microsoft.Toolkit.Uwp.Notifications.ToastContentBuilder()
                     .AddArgument("project", projectId)
                     .AddArgument("agent", agentId)
                     .AddText(title)
                     .AddText(agentName)
-                    .AddText(detail.Length > 180 ? detail[..180] + "…" : detail)
-                    .Show();
+                    .AddText(detail.Length > 180 ? detail[..180] + "…" : detail);
+                if (needsYou) toast.AddAttributionText("● " + NeedsYouLine);
+                toast.Show();
             }
             catch (Exception) { /* notifications off or unavailable: the tab badge still shows */ }
         });

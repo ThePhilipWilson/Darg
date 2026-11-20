@@ -279,6 +279,7 @@ public class DecisionTests
         lock (Sandbox.Notifications) note = Sandbox.Notifications.Single(n => n.AgentId == MainViewModel.CardPrefix + card.Id);
         Assert.Equal("Does dictation work for you?", note.Detail);
         Assert.Contains("needs your decision", note.Title);
+        Assert.True(note.NeedsYou, "the toast for a card's decision isn't marked as waiting on you"); // WOR-0163
         Assert.Contains(app.Main.Notifications, n => n.AgentId == MainViewModel.CardPrefix + card.Id && n.IsAsk);
 
         // answering it takes it off Fettle's list

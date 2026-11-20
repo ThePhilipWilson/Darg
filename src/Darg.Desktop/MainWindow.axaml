@@ -211,11 +211,24 @@
                     <DataTemplate>
                       <Button Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNotificationCommand}" CommandParameter="{Binding}"
                               HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" Padding="12,5">
-                        <StackPanel>
-                          <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                          <TextBlock Text="{Binding Sub}" Classes="dim small"/>
-                          <TextBlock Text="{Binding Detail}" Classes="dim small" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
+                        <!-- one waiting on my answer (a question, a permission ask, a card's decision) is marked: an accent bar and a pill (WOR-0163) -->
+                        <DockPanel>
+                          <Border DockPanel.Dock="Left" Width="3" Margin="0,1,8,1">
+                            <Border CornerRadius="1.5" Background="{DynamicResource Accent}" IsVisible="{Binding IsAsk}"/>
+                          </Border>
+                          <StackPanel>
+                            <DockPanel>
+                              <Border DockPanel.Dock="Right" Margin="6,0,0,0" Padding="5,0" CornerRadius="7" VerticalAlignment="Center"
+                                      Background="{DynamicResource Accent}" IsVisible="{Binding IsAsk}"
+                                      AutomationProperties.Name="Needs your decision" ToolTip.Tip="Waiting on your decision">
+                                <TextBlock Text="needs you" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource OnAccent}"/>
+                              </Border>
+                              <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                            </DockPanel>
+                            <TextBlock Text="{Binding Sub}" Classes="dim small"/>
+                            <TextBlock Text="{Binding Detail}" Classes="dim small" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                          </StackPanel>
+                        </DockPanel>
                       </Button>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
