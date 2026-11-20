@@ -456,7 +456,8 @@ public partial class MainViewModel
         catch (ArgumentException e) { throw new ApiError(e.Message); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new ApiError($"Couldn't move {id}: {e.Message}"); }
         p.Board.ReloadAll(); // the board on screen shows it now, not when the watcher's debounce runs
-        return $"Moved {id.Trim().ToUpperInvariant()} to {to.List} on {to.Board}.";
+        // JSON, as the phone's client reads every reply (AND-0003's DargClient refuses one that isn't)
+        return Json(new JsonObject { ["id"] = id.Trim().ToUpperInvariant(), ["board"] = to.Board, ["column"] = to.List, ["moved"] = $"Moved {id.Trim().ToUpperInvariant()} to {to.List} on {to.Board}." });
     }
 
     string Say(ApiArgs a)
