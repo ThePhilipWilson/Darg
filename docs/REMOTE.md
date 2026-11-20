@@ -32,7 +32,7 @@ How a phone reaches the desktop app. Built 2026-11-20; the phone app itself is A
 | `GET` or `POST /api/<command>` | yes | runs one, arguments as JSON body or query string, exactly as the desktop's API |
 | anything else | | 401 without a good token, 404 with one |
 
-Commands a phone may call (`RemoteAccess.Commands`): `projects`, `overview`, `agents`, `agent`, `cards`, `card`, `flows`, the read-only `notes`, `docs`, `doc`, `reports` and `report` (AND-0008), `say`, `decide`, `send-back`, `new-card`, `work-on`, `close-agents`. Anything else is a 403 even with a token: what drives the PC's own screen (`show`, `where`, `theme`), open-ended work from free text (`start-agent`, `run-command`, `new-flow`, `run-flow`), bulk starts (`work-all`, `qa-all`), `forget-agents`, `improve-card`, `to-attention`, and the `phone-*` commands, so a phone can never pair another. Adding one is a line in `RemoteAccess.Commands`.
+Commands a phone may call (`RemoteAccess.Commands`): `projects`, `overview`, `agents`, `agent`, `cards`, `card`, `flows`, the read-only `notes`, `docs`, `doc`, `reports` and `report` (AND-0008), `boards` and `move-card` (AND-0004), `say`, `decide`, `send-back`, `new-card`, `work-on`, `close-agents`. Anything else is a 403 even with a token: what drives the PC's own screen (`show`, `where`, `theme`), open-ended work from free text (`start-agent`, `run-command`, `new-flow`, `run-flow`), bulk starts (`work-all`, `qa-all`), `forget-agents`, `improve-card`, `to-attention`, and the `phone-*` commands, so a phone can never pair another. Adding one is a line in `RemoteAccess.Commands`.
 
 Not there yet: answering an agent's question or permission ask (no API command does it so far; AND-0005), push notifications (AND-0006), images and artifacts.
 

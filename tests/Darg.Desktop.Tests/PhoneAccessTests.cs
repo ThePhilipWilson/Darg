@@ -60,6 +60,8 @@ public class PhoneAccessTests
         Assert.Equal(HttpStatusCode.OK, agents.Status);
         Assert.StartsWith("[", agents.Body.TrimStart());
         Assert.Equal(HttpStatusCode.OK, (await Send(http, HttpMethod.Get, $"{root}/api/docs?project=proj")).Status); // AND-0008's read views too
+        Assert.Equal(HttpStatusCode.OK, (await Send(http, HttpMethod.Post, $"{root}/api/move-card", new { project = "proj", card = card.Id, column = "QA Ready" })).Status);
+        await app.Until(() => app.Read(card.Id).Status == "QA Ready", "the card moved from the phone to reach QA Ready on disk");
 
         // off the phone's list: refused even paired
         Assert.Equal(HttpStatusCode.Forbidden, (await Send(http, HttpMethod.Post, $"{root}/api/run-command", new { project = "proj", command = "x" })).Status);
