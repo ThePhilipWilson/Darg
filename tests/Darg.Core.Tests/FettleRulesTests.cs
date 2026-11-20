@@ -16,8 +16,21 @@ public class FettleRulesTests
     }
 
     [Fact]
-    public void IsSafeOnACommandLine() =>
+    public void IsSafeOnACommandLine()
+    {
         Assert.DoesNotContain(FettleRules.ChangeRequests, c => c is '<' or '>' or '"' or '&' or '|');
+        Assert.DoesNotContain(FettleRules.SayWhatYouDo, c => c is '<' or '>' or '"' or '&' or '|');
+    }
+
+    [Fact] // WOR-0157: a line first saying what was understood, a line last saying what was made, never silence
+    public void A_turn_that_does_something_says_so_first_and_last()
+    {
+        var r = FettleRules.SayWhatYouDo;
+        Assert.Contains("before the first tool call", r);
+        Assert.Contains("naming any card you made by its ID", r);
+        Assert.Contains("If you could not do it, say so", r);
+        Assert.Contains("without a reply", r);
+    }
 }
 
 /// <summary>Real Haiku turns with the change-request rule in the briefing (WOR-0132). Opt in with DARG_LIVE=1.

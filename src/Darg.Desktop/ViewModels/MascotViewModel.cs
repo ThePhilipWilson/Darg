@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Text.RegularExpressions;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Darg.Core;
@@ -38,6 +39,8 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     public string? ProjectId { get; private set; }
     /// <summary>The chat each project had open, kept (and running) while another project is on screen.</summary>
     readonly Dictionary<string, AgentViewModel?> _open = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Chats left mid-turn (+ New chat, another chat picked), still running until that turn ends (WOR-0157).</summary>
+    readonly HashSet<AgentViewModel> _finishing = [];
 
     static string Store => AgentStore.Folder("~bench");
 
@@ -91,8 +94,29 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     /// <summary>A saved chat as an agent: the live one if it's already open somewhere (an untagged chat lists in every project).</summary>
     AgentViewModel Load(AgentRecord r) => Live().FirstOrDefault(a => a.Id == r.Id) ?? Wire(new AgentViewModel(r, Store));
 
-    /// <summary>The chats running or open now: the one on screen and each other project's.</summary>
-    public IEnumerable<AgentViewModel> Live() => _open.Values.Append(Agent).OfType<AgentViewModel>().Distinct();
+    /// <summary>The chats running or open now: the one on screen, each other project's, and those finishing a turn.</summary>
+    public IEnumerable<AgentViewModel> Live() => _open.Values.Append(Agent).Concat(_finishing).OfType<AgentViewModel>().Distinct();
+
+    /// <summary>A chat is no longer on screen. Its session ends, unless another project has it open or it's mid-turn:
+    /// ending it then cut Fettle off after the work and before the reply, which came back to nothing (WOR-0157: a
+    /// request, + New chat to type the next, and the first one's card was made with no word said). A chat mid-turn
+    /// runs on, saving and notifying as ever, and its session ends once the turn has (unless it's back on screen).</summary>
+    void LetGo(AgentViewModel left)
+    {
+        left.Save();
+        if (_open.Values.Contains(left)) return; // another project has it open: it carries on there
+        if (!left.Working && !left.NeedsYou) { left.End(); return; }
+        if (!_finishing.Add(left)) return;
+        left.TurnEnded += Ended;
+        // posted: not from inside the session's own event
+        void Ended(bool _) => Dispatcher.UIThread.Post(() =>
+        {
+            if (left.Working || left.NeedsYou) return; // carried on (a message from the Agents view): wait for that turn
+            left.TurnEnded -= Ended;
+            _finishing.Remove(left);
+            if (left != Agent && !_open.Values.Contains(left)) left.End();
+        });
+    }
 
     static bool NeedsTitle(string name) => name is "Bench" or "" || name.EndsWith('…');
 
@@ -119,8 +143,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     {
         if (_listing || value is null || value.Id == Agent?.Id) return;
         if (AgentStore.List(Store).FirstOrDefault(r => r.Id == value.Id) is not { } r) return;
-        Agent?.Save();
-        if (Agent is { } left && !_open.Values.Contains(left)) left.End(); // not if another project has it open too
+        if (Agent is { } left) LetGo(left);
         Agent = Load(r);
     }
 
@@ -150,8 +173,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     [RelayCommand]
     void Fresh()
     {
-        Agent?.Save();
-        Agent?.End();
+        if (Agent is { } left) LetGo(left);
         Agent = null;
         ListChats();
     }
@@ -171,6 +193,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     public void ForgetChat(string id)
     {
         foreach (var a in Live().Where(a => a.Id == id).ToList()) a.End();
+        _finishing.RemoveWhere(a => a.Id == id);
         foreach (var k in _open.Where(kv => kv.Value?.Id == id).Select(kv => kv.Key).ToList()) _open[k] = null;
         AgentStore.Delete(Store, id);
         if (Agent?.Id == id) Agent = null;
@@ -245,6 +268,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         sb.AppendLine("Replies are the answer, or a line confirming what you did, and nothing more: one to three short sentences, a short list only when he asked for one. Never paste command output, file contents, diffs or long lists into a reply (he can open a step to see it); say what you found or changed in your own words. No headings, no recap of the steps you took, no offers of more help.");
         sb.AppendLine("You are for quick answers and instructions followed. When something needs the long version (a review, a write-up, an investigation, a change across many files or a lot of code), say so in a line and offer to start an agent on it (start-agent or work-on in the Darg API below), asking with AskUserQuestion; don't do the long job in this box.");
         sb.AppendLine(FettleRules.ChangeRequests); // WOR-0132
+        sb.AppendLine(FettleRules.SayWhatYouDo); // WOR-0157
         sb.AppendLine("Your manner is dry and wry: understated British humour, the odd quip when one comes naturally (\"Done. Three cards, none of them on fire.\"), never at the expense of the answer or of brevity. No exclamation marks, no cheerleading, no apologising for being an AI. When something's wrong or risky, say so plainly and drop the jokes.");
         sb.AppendLine("Each of his messages starts with [Philip is looking at: ...]: the project, the section and what's open there. Read his words against it: \"these\", \"them\", \"here\", \"the docs\", \"this card\" mean what's in that context, and changes stay inside it (that project, that folder) unless he names something else. If his words could reach further than what he's looking at, ask with AskUserQuestion first.");
         sb.AppendLine(Decisions.Briefing); // WOR-0078: only questions reach him

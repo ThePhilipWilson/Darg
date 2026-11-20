@@ -52,7 +52,50 @@ public class FettleChatTests
         var names = ArtifactHost.Server!.Api.Commands.Select(c => c.Name).ToList();
         Assert.NotEmpty(names);
         foreach (var n in names) Assert.Contains($"{n}: ", briefing);
+        Assert.Contains(FettleRules.SayWhatYouDo, briefing); // WOR-0157
     }
+
+    /// <summary>WOR-0157: Philip sends a request, then presses + New chat (or picks another chat) to type the next while
+    /// Fettle is still at it. Ending the session then cut Fettle off after the work and before the reply: the card was
+    /// made and the chat said nothing. The chat left mid-turn runs on, its reply and the turn's end saved, then closes.</summary>
+    static async Task LeftMidTurnFinishesItsTurn(Action<DargApp> leave)
+    {
+        Environment.SetEnvironmentVariable("FAKE_SECONDS", "3");
+        try
+        {
+            using var app = DargApp.Make();
+            Seed(app, "chat-old", "Older chat", 5);
+            await app.Start();
+            var fettle = app.Main.Mascot;
+            fettle.Open = true;
+            fettle.FreshCommand.Execute(null);
+            fettle.Compose = "make a card for the GitHub page";
+            fettle.SendCommand.Execute(null);
+            var first = fettle.Agent!;
+            await app.Until(() => app.Prompts().Any(p => p.Contains("GitHub page")) && first.Working, "Fettle to be at work on the request");
+
+            leave(app);
+            await DargApp.Settle();
+            Assert.NotSame(first, fettle.Agent);
+            Assert.True(first.Working, $"the chat left mid-turn was {first.State}, not still at work");
+
+            await app.Until(() => first.FinishedTurn, "the chat left mid-turn to finish its turn");
+            var saved = AgentStore.List(AgentStore.Folder("~bench")).Single(r => r.Id == first.Id);
+            Assert.Contains(saved.Items, i => i.Kind == "text" && i.Text.StartsWith("Step "));
+            Assert.Contains(saved.Items, i => i.Kind == "note" && i.Text.StartsWith("Turn done"));
+            await app.Until(() => first.State is AgentState.Saved or AgentState.Exited, "its session to close once the turn ended");
+            Assert.Equal("", app.Crashes());
+        }
+        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); } // the Sandbox default
+    }
+
+    [AvaloniaFact]
+    public Task New_chat_mid_turn_lets_the_turn_finish_and_reply() =>
+        LeftMidTurnFinishesItsTurn(app => app.Main.Mascot.FreshCommand.Execute(null));
+
+    [AvaloniaFact]
+    public Task Picking_another_chat_mid_turn_lets_the_turn_finish_and_reply() =>
+        LeftMidTurnFinishesItsTurn(app => app.Main.Mascot.SelectedChat = app.Main.Mascot.Chats.Single(c => c.Id == "chat-old"));
 
     static void Seed(DargApp app, string id, string name, int minutesAgo)
     {

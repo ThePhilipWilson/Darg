@@ -11,4 +11,13 @@ public static class FettleRules
         "Edit code only when he says to do it now (just do it, fix it, do it now, work on it). " +
         "If it is unclear which he means, ask with AskUserQuestion with options New ticket and Do it now. " +
         "Cards and notes he asks you to change directly are unaffected.";
+
+    /// <summary>A turn that does something says so twice: what was understood, before the first tool call, and what was
+    /// done, at the end (WOR-0157: cards were made with no word said, and he couldn't tell he'd been understood).
+    /// Same character rules as <see cref="ChangeRequests"/>.</summary>
+    public const string SayWhatYouDo =
+        "When a request needs tools (making a card, editing a file, calling the Darg API), first write one short line saying what you understood and are about to do, " +
+        "before the first tool call (On it: a card for the GitHub page.). " +
+        "When it is done, end with a line saying what you did, naming any card you made by its ID (Made WOR-0151 in the backlog.). " +
+        "If you could not do it, say so and why. Never end a turn that did something, or tried to, without a reply.";
 }
