@@ -28,7 +28,7 @@ public static class RemoteAccess
     public static readonly TimeSpan PairingLasts = TimeSpan.FromMinutes(10);
     public const int WrongTries = 5;
 
-    /// <summary>The Darg API commands a phone may call: reading projects, cards and agents, and the things worth doing
+    /// <summary>The Darg API commands a phone may call: reading projects, cards, agents, notes, docs and reports, and the things worth doing
     /// from the sofa (answer a decision, send a card back, message an agent, start work on a card, jot a card down).
     /// Left out: what drives the PC's own screen (show, where, theme), what runs open-ended work from free text
     /// (start-agent, run-command, flows' new-flow and run-flow), bulk starts, forgetting agents, and the phone-*
@@ -36,6 +36,7 @@ public static class RemoteAccess
     public static readonly IReadOnlySet<string> Commands = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "projects", "overview", "agents", "agent", "cards", "card", "flows",
+        "notes", "docs", "doc", "reports", "report", // AND-0008's read-only views
         "say", "decide", "send-back", "new-card", "work-on", "close-agents",
     };
 
