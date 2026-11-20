@@ -31,6 +31,12 @@ public class FettleRulesTests
         Assert.Contains("If you could not do it, say so", r);
         Assert.Contains("without a reply", r);
     }
+
+    [Fact] // WOR-0158 QA: the sentences ran together as ".).If you could not"
+    public void Sentences_of_the_rule_keep_their_space()
+    {
+        Assert.Contains("(Made [WOR-0151](card:WOR-0151) in the backlog). If you could not", FettleRules.SayWhatYouDo);
+    }
 }
 
 /// <summary>Real Haiku turns with the change-request rule in the briefing (WOR-0132). Opt in with DARG_LIVE=1.
