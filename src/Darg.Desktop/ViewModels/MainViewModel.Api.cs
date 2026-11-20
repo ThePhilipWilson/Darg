@@ -65,7 +65,8 @@ public partial class MainViewModel
                         "board? and column? (a name, or backlog, qa, attention, rework, done) put it straight there instead, with no placing (the phone's quick-add).", NewCard);
         Add("boards", "a project's boards column by column, empty columns too, as the phone draws them: {project}. Each board: name, inbox (where new-card puts a card), " +
                       "lists in order, each with id, name, kind (" + string.Join(", ", BoardLayouts.Kinds) + ", or empty for a plain column) and its cards " +
-                      "(id, title, type, labels, priority, quality 0-3, agent: the live one's id and state, or null).", BoardsLayout);
+                      "(id, title, type, labels, priority, quality 0-3, agent: the live one's id and state, or null, " +
+                      "blockedBy: the cards it waits on with found, cleared and cycle, blocked: any still open, blocks: the cards waiting on it).", BoardsLayout);
         Add("move-card", "move a card to another column of its board, as dragging it on the board does: {project, card, column, before?}. column is a column's name, " +
                          "or backlog, qa, attention, rework, done or completed; before a card in that column to land above (else the end). Only when Philip asks.", MoveCard);
         Add("say","send a message to a project's agent, as if Philip typed it: {id, text}. A saved agent resumes its session.", Say);
@@ -437,6 +438,8 @@ public partial class MainViewModel
         var p = FindProject(a);
         if (p.Config.Boards is null) throw new ApiError($"{p.Name} has no boards.");
         var boards = new JsonArray();
+        var all = CardIndex.Read(p.Config.Boards);
+        var index = Blockers.Index(all);
         foreach (var b in BoardLayouts.Read(p.Config.Boards))
             boards.Add(new JsonObject
             {
@@ -447,12 +450,14 @@ public partial class MainViewModel
                     ["cards"] = new JsonArray(l.Cards.Select(c =>
                     {
                         var live = AgentsOn(p, c.Id).FirstOrDefault(x => x.IsLiveOnCard);
-                        return (JsonNode?)new JsonObject
+                        var row = new JsonObject
                         {
                             ["id"] = c.Id, ["title"] = c.Title, ["type"] = c.Kind, ["priority"] = c.Priority,
                             ["labels"] = new JsonArray(c.Labels.Select(x => (JsonNode?)x).ToArray()), ["quality"] = c.Quality.Stars,
                             ["agent"] = live is null ? null : new JsonObject { ["id"] = live.Id, ["state"] = live.StateText },
                         };
+                        AddBlockers(row, c, index, all);
+                        return (JsonNode?)row;
                     }).ToArray()),
                 }).ToArray()),
             });

@@ -447,6 +447,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _watchBoards = new FileSystemWatcher(_project.Boards, "board.json") { IncludeSubdirectories = true, EnableRaisingEvents = true };
         void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.BoardJson"); Dispatcher.UIThread.Post(() => { t.Stop(); t.Start(); }); }
         _watchBoards.Created += Poke; _watchBoards.Deleted += Poke; _watchBoards.Renamed += (s, e) => Poke(s, e);
+        // WOR-0172: a card moved on any board may clear (or reopen) a blocker shown on another
+        _watchBoards.Changed += (_, _) => Dispatcher.UIThread.Post(BoardJsonChanged);
     }
 
     partial void OnSelectedBoardChanged(string? value)
@@ -768,8 +770,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             if (_stamps.Read(Folder, _board).Count > 0) _board = BoardStore.Load(Folder);
         }
         catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
+        BlockersStale();
         NoticeAttention();
-        if (Root.SyncLabels()) ApplyAll(); else Apply();
+        if (Root.SyncLabels()) ApplyAll(); else { Apply(); RedrawBlockedRows(); }
         Root.Reloaded?.Invoke();
     }
 
@@ -880,8 +883,10 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         CardViewModel ViewOf(Card c)
         {
             var agent = AgentFor?.Invoke(c.Id);
-            var vm = oldCards.TryGetValue(c.Id, out var old) && old.Agent == agent && old.QaWasRunning == (QaRunning?.Invoke(c.Id) == true) && old.Card.SameAs(c) && used.Add(old)
-                ? old : new CardViewModel(c, targets, this, agent, OtherBoards);
+            var blockers = BlockersFor(c); // WOR-0172: a blocker clearing on any board changes the tile, the card unchanged
+            var vm = oldCards.TryGetValue(c.Id, out var old) && old.Agent == agent && old.QaWasRunning == (QaRunning?.Invoke(c.Id) == true) && old.Card.SameAs(c)
+                     && old.BlockersKey == CardViewModel.KeyOf(blockers) && used.Add(old)
+                ? old : new CardViewModel(c, targets, this, agent, OtherBoards, blockers);
             vm.IsPicked = _picked.Contains(c.Id);
             return vm;
         }
@@ -1427,9 +1432,19 @@ public sealed partial class CardViewModel : ObservableObject
     public bool QaWasRunning { get; }
     /// <summary>The card is in QA and no QA agent is running on it: its tile shows Run QA, as the panel and menu do.</summary>
     public bool ShowRunQa { get; }
+    /// <summary>WOR-0172: the chips under its title, one per blocker still open (or an unknown id, or a cycle), in the Warn colour.</summary>
+    public IReadOnlyList<BlockerState> BlockerChips { get; }
+    public bool HasBlockers => BlockerChips.Count > 0;
+    /// <summary>What the chips were made from, so a tile is made again when a blocker clears though the card didn't change.</summary>
+    public string BlockersKey { get; }
+    public static string KeyOf(IReadOnlyList<BlockerState> blockers) =>
+        string.Join(",", blockers.Select(b => $"{b.Id}:{b.Found}:{b.Cleared}:{b.Cycle}:{b.Card?.Card.Title}:{b.Card?.Column}"));
+
     public CardViewModel(Card card, IEnumerable<(string Id, string Name)> lists, BoardViewModel board, AgentViewModel? agent = null,
-        IEnumerable<string>? otherBoards = null)
+        IEnumerable<string>? otherBoards = null, IReadOnlyList<BlockerState>? blockers = null)
     {
+        BlockerChips = blockers ?? [];
+        BlockersKey = KeyOf(BlockerChips);
         Card = card;
         Board = board;
         Agent = agent;
@@ -1677,6 +1692,7 @@ public partial class CardEditor : ObservableObject
         Type = CardTypes.All.FirstOrDefault(t => t.Equals(card?.Card.Kind, StringComparison.OrdinalIgnoreCase)) ?? card?.Card.Kind ?? CardTypes.Task;
         TypeChoices = CardTypes.All.Contains(Type) ? CardTypes.All : [.. CardTypes.All, Type];
         FlowTargets = MakeFlowTargets();
+        InitBlockers();
     }
 
     List<MoveTarget> MakeFlowTargets() => _card is not { } card || HasAgent || card.InDone ? [] : _board.FlowList().Select(f => new MoveTarget("▶ " + f.Name, new RelayCommand(() =>
@@ -1702,13 +1718,23 @@ public partial class CardEditor : ObservableObject
     {
         if (_board.Folder is null) return;
         if (Title.Trim().Length == 0) { Error = "A card needs a title."; return; }
+        if (BlockersError(_card?.Id) is { } blockError) { Error = blockError; return; }
         try
         {
-            // a card made on the inbox goes on to the story board Haiku says it fits (WOR-0087)
-            if (_card is null) _board.PlaceLater(_board.Folder, BoardStore.Create(_board.Folder, Title, Description, LabelList(), Priority, Type).Id);
-            else BoardStore.Update(_board.Folder, _card.Id, Title, Description, LabelList(), Priority,
-                // a blank Type stays blank unless it was changed (blank already reads as Task)
-                _card.Card.Type.Length == 0 && Type == CardTypes.Task ? null : Type);
+            if (_card is null)
+            {
+                var made = BoardStore.Create(_board.Folder, Title, Description, LabelList(), Priority, Type);
+                SaveBlockers(_board.Folder, made.Id, []);
+                // a card made on the inbox goes on to the story board Haiku says it fits (WOR-0087)
+                _board.PlaceLater(_board.Folder, made.Id);
+            }
+            else
+            {
+                BoardStore.Update(_board.Folder, _card.Id, Title, Description, LabelList(), Priority,
+                    // a blank Type stays blank unless it was changed (blank already reads as Task)
+                    _card.Card.Type.Length == 0 && Type == CardTypes.Task ? null : Type);
+                SaveBlockers(_board.Folder, _card.Id, _card.Card.BlockedBy);
+            }
         }
         catch (Exception e) { Error = e.Message; return; }
         _board.Root.Editor = null;

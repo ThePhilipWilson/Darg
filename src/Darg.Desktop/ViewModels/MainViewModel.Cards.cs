@@ -11,7 +11,7 @@ public partial class MainViewModel
     const string CardsUsage = "a project's cards across all its boards: {project, column?, label?, text?, agent?}. column is a column's name, or qa, attention " +
         "or done (each board's own; done takes in Completed); label a label; text words in the id, title or description; agent none (no live agent on it), " +
         "live, or any (some agent, finished ones included). Each: id, title, board, column, type, labels, file, agent (the live one: id, state, purpose, or null) " +
-        "and agents (every agent started on it, live or not). E.g. {project, column: qa, agent: none} or {project, column: done, agent: any}.";
+        "and agents (every agent started on it, live or not), blockedBy (the cards it waits on: id, found, cleared once in QA or done, cycle), blocked (any still open) and blocks (the cards waiting on it). E.g. {project, column: qa, agent: none} or {project, column: done, agent: any}.";
 
     const string CardUsage = "one card whole: {project, id}. What cards gives, plus its text (the file), decision (the open Decision it waits on, or null), " +
         "qaNotes, the reports filed for it (archived ones too) and every agent on it with what it's doing.";
@@ -57,6 +57,7 @@ public partial class MainViewModel
             throw new ApiError($"agent is none, live or any, not \"{a.Get("agent")}\".");
         var column = a.Get("column");
         var all = CardIndex.Read(p.Config.Boards);
+        var index = Blockers.Index(all);
         var cards = CardIndex.Filter(all, column, a.Get("label"), a.Get("text")).ToList();
         if (!string.IsNullOrWhiteSpace(column) && cards.Count == 0 && !all.Any(c => CardIndex.InColumn(c, column)))
         {
@@ -70,7 +71,7 @@ public partial class MainViewModel
             var live = on.FirstOrDefault(x => x.IsLiveOnCard);
             var keep = agentFilter switch { "none" => live is null, "live" => live is not null, "any" => on.Count > 0, _ => true };
             if (!keep) continue;
-            var row = CardJson(c);
+            var row = CardJson(c, index, all);
             row["agent"] = live is null ? null : new JsonObject { ["id"] = live.Id, ["state"] = live.StateText, ["purpose"] = live.Purpose };
             row["agents"] = new JsonArray(on.Select(x => (JsonNode?)ShortAgent(x)).ToArray());
             list.Add(row);
@@ -83,13 +84,14 @@ public partial class MainViewModel
         var p = FindProject(a);
         if (p.Config.Boards is null) throw new ApiError($"{p.Name} has no boards.");
         var id = a.Need("id");
-        if (CardIndex.Find(p.Config.Boards, id) is not { } c) throw new ApiError($"No card {id} on {p.Name}'s boards.");
+        var all = CardIndex.Read(p.Config.Boards);
+        if (all.FirstOrDefault(x => x.Card.Id.Equals(id.Trim(), StringComparison.OrdinalIgnoreCase)) is not { } c) throw new ApiError($"No card {id} on {p.Name}'s boards.");
         string text;
         try { text = File.ReadAllText(c.File); }
         catch (IOException e) { throw new ApiError($"Couldn't read {c.File}: {e.Message}"); }
         var on = AgentsOn(p, c.Card.Id);
         var live = on.FirstOrDefault(x => x.IsLiveOnCard);
-        var row = CardJson(c);
+        var row = CardJson(c, Blockers.Index(all), all);
         row["status"] = c.Card.Status;
         row["priority"] = c.Card.Priority;
         row["agent"] = live is null ? null : new JsonObject { ["id"] = live.Id, ["state"] = live.StateText, ["purpose"] = live.Purpose };
@@ -124,9 +126,31 @@ public partial class MainViewModel
     static JsonObject ShortAgent(AgentViewModel x) =>
         new() { ["id"] = x.Id, ["state"] = x.StateText, ["purpose"] = x.Purpose, ["live"] = x.IsLiveOnCard };
 
-    static JsonObject CardJson(BoardCard c) => new()
+    static JsonObject CardJson(BoardCard c, IReadOnlyDictionary<string, BoardCard> index, IReadOnlyList<BoardCard> all)
     {
-        ["id"] = c.Card.Id, ["title"] = c.Card.Title, ["board"] = c.Board, ["column"] = c.Column, ["type"] = c.Card.Kind,
-        ["labels"] = new JsonArray(c.Card.Labels.Select(l => (JsonNode?)l).ToArray()), ["file"] = c.File,
-    };
+        var row = new JsonObject
+        {
+            ["id"] = c.Card.Id, ["title"] = c.Card.Title, ["board"] = c.Board, ["column"] = c.Column, ["type"] = c.Card.Kind,
+            ["labels"] = new JsonArray(c.Card.Labels.Select(l => (JsonNode?)l).ToArray()), ["file"] = c.File,
+        };
+        AddBlockers(row, c.Card, index, all);
+        return row;
+    }
+
+    /// <summary>WOR-0172: a card's blockedBy (each blocker: id, found, cleared, cycle, and its title, board and column when
+    /// found), blocked (any still open), and blocks (the cards waiting on it), so the phone can show them too.</summary>
+    static void AddBlockers(JsonObject row, Card card, IReadOnlyDictionary<string, BoardCard> index, IEnumerable<BoardCard> all)
+    {
+        var states = Blockers.Of(card, index);
+        row["blockedBy"] = new JsonArray(states.Select(b => (JsonNode?)new JsonObject
+        {
+            ["id"] = b.Id, ["found"] = b.Found, ["cleared"] = b.Cleared, ["cycle"] = b.Cycle,
+            ["title"] = b.Card?.Card.Title, ["board"] = b.Card?.Board, ["column"] = b.Card?.Column,
+        }).ToArray());
+        row["blocked"] = states.Any(b => b.Found && !b.Cleared);
+        row["blocks"] = new JsonArray(Blockers.Blocks(card.Id, all).Select(x => (JsonNode?)new JsonObject
+        {
+            ["id"] = x.Card.Id, ["title"] = x.Card.Title, ["board"] = x.Board, ["column"] = x.Column,
+        }).ToArray());
+    }
 }

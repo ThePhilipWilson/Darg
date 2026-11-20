@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Darg.Desktop.ViewModels"
              xmlns:views="using:Darg.Desktop.Views"
+             xmlns:core="using:Darg.Core"
              x:Class="Darg.Desktop.Views.BoardView"
              x:DataType="vm:BoardViewModel">
   <UserControl.Styles>
@@ -53,6 +54,27 @@
     <Style Selector="TextBlock.quality"><Setter Property="Foreground" Value="{DynamicResource Bad}"/></Style>
     <Style Selector="TextBlock.quality.amber"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
     <Style Selector="TextBlock.quality.green"><Setter Property="Foreground" Value="{DynamicResource Ok}"/></Style>
+    <!-- WOR-0172: a blocker still open on a tile, outlined in the Warn colour -->
+    <Style Selector="Border.blocker">
+      <Setter Property="BorderBrush" Value="{DynamicResource Warn}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="6,0"/>
+      <Setter Property="Margin" Value="0,0,4,2"/>
+    </Style>
+    <!-- the panel's Blocked by / Blocks links: a card id that opens the card -->
+    <Style Selector="Button.blocklink">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Padding" Value="0,1"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+    </Style>
+    <Style Selector="Button.blocklink TextBlock"><Setter Property="Foreground" Value="{DynamicResource Dim}"/></Style>
+    <Style Selector="Button.blocklink.open TextBlock"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
+    <Style Selector="Button.blocklink:pointerover TextBlock"><Setter Property="TextDecorations" Value="Underline"/></Style>
   </UserControl.Styles>
   <Panel>
   <Grid ColumnDefinitions="*,Auto">
@@ -248,6 +270,17 @@
                               </StackPanel>
                             </Grid>
                             <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+                            <!-- WOR-0172: a chip per blocker still open (or an unknown id, or a cycle); it goes when the blocker reaches QA or done -->
+                            <ItemsControl ItemsSource="{Binding BlockerChips}" IsVisible="{Binding HasBlockers}">
+                              <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="core:BlockerState">
+                                  <Border Classes="blocker" ToolTip.Tip="{Binding Text, StringFormat='Blocked by {0}'}" AutomationProperties.Name="{Binding Chip}">
+                                    <TextBlock Text="{Binding Chip}" FontSize="10" Foreground="{DynamicResource Warn}"/>
+                                  </Border>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <ItemsControl ItemsSource="{Binding Labels}">
                               <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                               <ItemsControl.ItemTemplate>
@@ -389,6 +422,33 @@
           <Button x:Name="AddCardPicture" Content="+ Picture…" HorizontalAlignment="Left"
                   ToolTip.Tip="Copy a picture into the board's images folder and add it to the description as a markdown image"/>
           <TextBox Text="{Binding LabelsText}" PlaceholderText="Labels, comma separated"/>
+          <!-- WOR-0172: what this card waits on (edited here), and what waits on it, each a link to the card -->
+          <StackPanel Spacing="2">
+            <TextBlock Classes="dim small" Text="Blocked by"/>
+            <TextBox Text="{Binding BlockedByText}" PlaceholderText="Blocked by: card ids, comma separated (e.g. WOR-0150)"
+                     AutomationProperties.Name="Blocked by"
+                     ToolTip.Tip="The cards this one waits on, on any of the project's boards. A blocker clears once it is in QA, done or Completed."/>
+            <ItemsControl ItemsSource="{Binding BlockedByLinks}" IsVisible="{Binding HasBlockedByLinks}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:BlockerLink">
+                  <Button Classes="blocklink" Classes.open="{Binding IsOpen}" Command="{Binding Open}" ToolTip.Tip="Open this card"
+                          AutomationProperties.Name="{Binding Id, StringFormat='Open {0}'}">
+                    <TextBlock Text="{Binding Text, StringFormat='Blocked by {0}'}" TextWrapping="Wrap" FontSize="12"/>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <ItemsControl ItemsSource="{Binding BlocksLinks}" IsVisible="{Binding HasBlocksLinks}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:BlockerLink">
+                  <Button Classes="blocklink" Command="{Binding Open}" ToolTip.Tip="Open this card"
+                          AutomationProperties.Name="{Binding Id, StringFormat='Open {0}'}">
+                    <TextBlock Text="{Binding Text, StringFormat='Blocks {0}'}" TextWrapping="Wrap" FontSize="12"/>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
           <Grid ColumnDefinitions="*,8,*">
             <ComboBox Grid.Column="0" ItemsSource="{Binding TypeChoices}" SelectedItem="{Binding Type}" HorizontalAlignment="Stretch" ToolTip.Tip="Type"/>
             <ComboBox Grid.Column="2" ItemsSource="{Binding PriorityChoices}" SelectedItem="{Binding Priority}" PlaceholderText="Priority" HorizontalAlignment="Stretch"/>

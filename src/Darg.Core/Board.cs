@@ -17,6 +17,9 @@ public sealed record Card(string Id, string Title, string Status, string Priorit
     /// <summary>How ready it is to pick up cold: a star out of 3 (WOR-0156). Worked out on each read, never kept: a
     /// kept one would ride along into a <c>with</c> copy and into the record's equality.</summary>
     public TicketScore Quality => TicketQuality.Score(this);
+    /// <summary>The ids of the cards it waits on, from its <c>- **Blocked by:**</c> line (WOR-0172, <see cref="Blockers"/>),
+    /// upper-cased, in the order written; empty when it has none.</summary>
+    public IReadOnlyList<string> BlockedBy { get; init; } = [];
     public int Number => int.TryParse(Id[(Id.LastIndexOf('-') + 1)..], out var n) ? n : int.MaxValue;
     /// <summary>Its type, Task when the file leaves it blank.</summary>
     public string Kind => Type.Trim() is { Length: > 0 } t ? t : CardTypes.Task;
@@ -25,7 +28,8 @@ public sealed record Card(string Id, string Title, string Status, string Priorit
     public bool IsStory => Kind.Equals(CardTypes.Story, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The same card as read before: every field alike, labels by their contents (a record's own == compares the lists by reference).</summary>
-    public bool SameAs(Card other) => this with { Labels = other.Labels } == other && Labels.SequenceEqual(other.Labels);
+    public bool SameAs(Card other) => this with { Labels = other.Labels, BlockedBy = other.BlockedBy } == other
+        && Labels.SequenceEqual(other.Labels) && BlockedBy.SequenceEqual(other.BlockedBy);
 }
 
 /// <summary>Bring a shown list (an ObservableCollection a view is bound to) to a wanted one by removing, moving and
@@ -281,7 +285,40 @@ public static class BoardStore
         return new Card(head.Groups[1].Value, head.Groups[2].Value.Trim(), fields.GetValueOrDefault("Status", ""),
             fields.GetValueOrDefault("Priority", ""), fields.GetValueOrDefault("Type", ""), labels, file, desc,
             StampOf(fields.GetValueOrDefault("Created", "")), StampOf(fields.GetValueOrDefault("Moved", "")))
-        { Sections = sections };
+        { Sections = sections, BlockedBy = Blockers.ParseIds(BlockedByLine.Match(text.IndexOf("\n## ", StringComparison.Ordinal) is var h and >= 0 ? text[..h] : text) is { Success: true } b ? b.Groups[1].Value : "") };
+    }
+
+    /// <summary>The Blocked by line among the properties (above the description): <see cref="Field"/> takes one word only.</summary>
+    static readonly Regex BlockedByLine = new(@"^- \*\*Blocked by:\*\*[ \t]*(.*)$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+
+    /// <summary>Set a card's Blocked by line (WOR-0172): replaced where it is, else added after Labels (else Type, Priority,
+    /// Status, else the last property); no ids takes the line out. Returns the card as saved.</summary>
+    public static Card SetBlockedBy(string folder, string cardId, IEnumerable<string> ids)
+    {
+        var card = ReadCards(folder).FirstOrDefault(c => c.Id == cardId)
+                   ?? throw new ArgumentException($"No card {cardId} on this board.", nameof(cardId));
+        var value = Blockers.Format(ids);
+        if (Blockers.ParseIds(value).Any(id => id.Equals(cardId, StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException($"{cardId} can't wait on itself.", nameof(ids));
+        RewriteFields(folder, card, text => WithBlockedBy(text, value));
+        return ReadCards(folder).First(c => c.Id == cardId);
+    }
+
+    static string WithBlockedBy(string text, string value)
+    {
+        var desc = text.IndexOf("\n## ", StringComparison.Ordinal);
+        var head = desc < 0 ? text : text[..desc];
+        var tail = desc < 0 ? "" : text[desc..];
+        var line = new Regex(@"^- \*\*Blocked by:\*\*[^\n]*(\n|$)", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+        if (line.IsMatch(head))
+            return (value.Length > 0 ? line.Replace(head, m => $"- **{Blockers.Field}:** {value}" + m.Groups[1].Value, 1) : line.Replace(head, "", 1)) + tail;
+        if (value.Length == 0) return text;
+        Match? after = null;
+        foreach (var name in new[] { "Labels", "Type", "Priority", "Status" })
+            if ((after = Regex.Match(head, $@"^- \*\*{name}:\*\*[^\n]*$", RegexOptions.Multiline)).Success) break;
+        if (after is not { Success: true }) after = Field.Matches(head).LastOrDefault();
+        if (after is null) return text;
+        return head.Insert(after.Index + after.Length, $"\n- **{Blockers.Field}:** {value}") + tail;
     }
 
     static DateTime? StampOf(string text) =>
