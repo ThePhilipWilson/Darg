@@ -38,6 +38,10 @@
     <Style Selector="Border.kind TextBlock"><Setter Property="Foreground" Value="{DynamicResource LabelInk}"/></Style>
     <Style Selector="Border.kind.bug"><Setter Property="Background" Value="{DynamicResource BugBg}"/></Style>
     <Style Selector="Border.kind.bug TextBlock"><Setter Property="Foreground" Value="{DynamicResource BugInk}"/></Style>
+    <!-- WOR-0156: the ticket quality star beside a card's id -->
+    <Style Selector="TextBlock.quality"><Setter Property="Foreground" Value="{DynamicResource Bad}"/></Style>
+    <Style Selector="TextBlock.quality.amber"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
+    <Style Selector="TextBlock.quality.green"><Setter Property="Foreground" Value="{DynamicResource Ok}"/></Style>
   </UserControl.Styles>
   <Panel>
   <Grid ColumnDefinitions="*,Auto">
@@ -212,7 +216,12 @@
                                       CornerRadius="8" Padding="6,0" Margin="0,0,6,0" ToolTip.Tip="Its type">
                                 <TextBlock Text="{Binding Kind}" FontSize="10"/>
                               </Border>
-                              <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}" VerticalAlignment="Center"/>
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}" VerticalAlignment="Center"/>
+                                <TextBlock Classes="quality" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
+                                           FontSize="11" Text="{Binding Quality.Text}" VerticalAlignment="Center"
+                                           ToolTip.Tip="{Binding Quality.Tip}" AutomationProperties.Name="{Binding Quality.Tip}"/>
+                              </StackPanel>
                             </DockPanel>
                             <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
                             <ItemsControl ItemsSource="{Binding Labels}">
@@ -271,7 +280,12 @@
         <StackPanel DataContext="{Binding Editor}" x:DataType="vm:CardEditor" Margin="14" Spacing="10">
           <DockPanel>
             <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding Status}" VerticalAlignment="Center"/>
-            <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" Classes="mono" FontSize="13"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" Classes="mono" FontSize="13"/>
+              <TextBlock Classes="quality" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
+                         FontSize="13" VerticalAlignment="Center" Text="{Binding Quality.Long}"
+                         ToolTip.Tip="{Binding Quality.Tip}" AutomationProperties.Name="{Binding Quality.Tip}"/>
+            </StackPanel>
           </DockPanel>
           <TextBox Text="{Binding Title}" PlaceholderText="Title" FontSize="15" TextWrapping="Wrap"/>
           <!-- WOR-0124: what the card waits on, drawn as an AskUserQuestion is: pick an option and it's done -->

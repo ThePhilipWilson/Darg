@@ -1357,6 +1357,8 @@ public sealed partial class CardViewModel : ObservableObject
     public bool ShowsKind => !Card.Kind.Equals(CardTypes.Task, StringComparison.OrdinalIgnoreCase);
     public IReadOnlyList<string> Labels => Card.Labels;
     public string Description => Card.Description;
+    /// <summary>The ticket quality star beside its id (WOR-0156): read from the card file as it is now.</summary>
+    public TicketScore Quality => Card.Quality;
     public IReadOnlyList<MoveTarget> MoveTargets { get; }
     /// <summary>The agent working on this card (its state shows on the card, live), if any.</summary>
     public AgentViewModel? Agent { get; }
@@ -1461,7 +1463,10 @@ public partial class CardEditor : ObservableObject
     public IReadOnlyList<string> TypeChoices { get; }
     [ObservableProperty] public partial string Type { get; set; }
     [ObservableProperty] public partial string Title { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Pictures))] public partial string Description { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Pictures), nameof(Quality))] public partial string Description { get; set; }
+    /// <summary>The ticket quality star by the heading (WOR-0156), from the description as typed and the card's
+    /// later sections (## Where, ## Done when), so it moves as the box is filled in.</summary>
+    public TicketScore Quality => TicketQuality.Score(TicketQuality.TicketText(Description ?? "", _card?.Card.Sections ?? ""));
     /// <summary>The pictures the description shows (markdown images, files under the board's folder), for a preview under the box.</summary>
     public IReadOnlyList<Avalonia.Media.Imaging.Bitmap> Pictures => _board.Folder is null ? [] :
         Darg.Core.Pictures.InDescription(_board.Folder, Description).Select(p =>

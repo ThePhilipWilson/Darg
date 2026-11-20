@@ -11,6 +11,12 @@ public sealed record Card(string Id, string Title, string Status, string Priorit
 {
     /// <summary>When it entered its current column: its Moved line, else Created (a date only), else unknown (WOR-0146).</summary>
     public DateTime? InColumnSince => Moved ?? Created;
+    /// <summary>The sections after the description (## Where, ## Done when, ## How to check…), as written; empty when
+    /// it has none. The ticket quality score reads them (WOR-0156), and a change to them is a change to the card.</summary>
+    public string Sections { get; init; } = "";
+    /// <summary>How ready it is to pick up cold: a star out of 3 (WOR-0156). Worked out on each read, never kept: a
+    /// kept one would ride along into a <c>with</c> copy and into the record's equality.</summary>
+    public TicketScore Quality => TicketQuality.Score(this);
     public int Number => int.TryParse(Id[(Id.LastIndexOf('-') + 1)..], out var n) ? n : int.MaxValue;
     /// <summary>Its type, Task when the file leaves it blank.</summary>
     public string Kind => Type.Trim() is { Length: > 0 } t ? t : CardTypes.Task;
@@ -263,16 +269,19 @@ public static class BoardStore
         foreach (Match m in Field.Matches(text)) fields.TryAdd(m.Groups[1].Value, m.Groups[2].Value.Trim());
         var labels = fields.GetValueOrDefault("Labels", "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         var desc = "";
+        var sections = "";
         var d = text.IndexOf("\n## Description\n", StringComparison.Ordinal);
         if (d >= 0)
         {
             var rest = text[(d + "\n## Description\n".Length)..];
             var next = rest.IndexOf("\n## ", StringComparison.Ordinal);
             desc = (next >= 0 ? rest[..next] : rest).Trim();
+            if (next >= 0) sections = rest[(next + 1)..].Trim();
         }
         return new Card(head.Groups[1].Value, head.Groups[2].Value.Trim(), fields.GetValueOrDefault("Status", ""),
             fields.GetValueOrDefault("Priority", ""), fields.GetValueOrDefault("Type", ""), labels, file, desc,
-            StampOf(fields.GetValueOrDefault("Created", "")), StampOf(fields.GetValueOrDefault("Moved", "")));
+            StampOf(fields.GetValueOrDefault("Created", "")), StampOf(fields.GetValueOrDefault("Moved", "")))
+        { Sections = sections };
     }
 
     static DateTime? StampOf(string text) =>

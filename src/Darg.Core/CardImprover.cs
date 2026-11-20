@@ -32,6 +32,10 @@ public static partial class CardImprover
             $"Card file: {file}",
         };
         if (noteFile is not null) lines.Add($"It was made from this note on the wall: {noteFile}");
+        var score = card.Quality;
+        lines.Add($"Its ticket quality score is {score.Stars}/{TicketScore.Max} ({score.Colour}): " +
+            (score.Missing.Count == 0 ? "it already says what's wanted, where it lives and when it's done. Check it reads clearly and is still right; change only what isn't, or nothing, and say so."
+                : $"it doesn't say {string.Join(" or ", score.Missing)}."));
         lines.AddRange([
             "",
             "1. Read the card" + (noteFile is not null ? ", the note" : "") + ", the project's CLAUDE.md and enough of the code to know " +
@@ -42,8 +46,9 @@ public static partial class CardImprover
             "3. Rewrite the card's ## Description:",
             "   - My words first, as they were, quoted, so the original survives (keep any \"From a note on the wall\" line and any pictures).",
             "   - What's wanted, in a sentence or two of plain words.",
-            "   - Where: the screen and the files or classes involved, with paths.",
-            "   - Done when: a short list of checks someone could see or run.",
+            "   - **Where:** the screen and the files or classes involved, with paths.",
+            "   - **Done when:** a short list of checks someone could see or run.",
+            "   Write Where and Done when as those labels, in bold or as ## headings: the score beside the card's id reads them, and goes green once the card says all three.",
             "   - Questions left, if any.",
             "   Keep it short: a card, not a spec.",
             "4. If the title doesn't say what the card is, sharpen it on the # line (keep the id) and rename the file to match " +
