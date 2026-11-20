@@ -11,19 +11,31 @@ Darg is one app for everything in a project: boards, notes, docs, code, agents, 
 | [guide.md](guide.md) | What each section of the app is for and how to use it. |
 | [cards-and-qa.md](cards-and-qa.md) | The life of a card: Work on, QA, For Human Attention, decisions, reports, Done, CNR. |
 | [decisions-and-gotchas.md](decisions-and-gotchas.md) | Decisions, findings and traps collected from the finished-agent reports, with the card each came from. |
+| [REMOTE.md](REMOTE.md) | How a phone reaches the desktop API (AND-0002): TLS with a pinned certificate, pairing by QR, per-phone tokens, what's exposed. |
 
-## Background and history
+## Plans and history
 
 | Doc | What it is |
 |---|---|
+| [ANDROID.md](ANDROID.md) | The Android decision (2026-11-20): a thin remote client, a native Avalonia app over the Darg API; v1 features and what stays desktop-only. Being built. |
 | [PLAN.md](PLAN.md) | The original plan (2026-11-16): the ask, the big technical calls and what was built in the first slices. Written when the app was called Workbench. |
-| [PHONE-PLAN.md](PHONE-PLAN.md) | Draft plan for phone and tablet. Nothing in it is built. |
-| [ANDROID.md](ANDROID.md) | The Android decision: thin remote client, native Avalonia app over the Darg API; v1 features and what stays desktop-only. |
-| [REMOTE.md](REMOTE.md) | How a phone reaches the desktop API (AND-0002): TLS with a pinned certificate, pairing by QR, per-phone tokens, what's exposed. |
-| [MORNING.md](MORNING.md) | A checklist from the first overnight build (2026-11-17). Kept as history. |
+| [PHONE-PLAN.md](PHONE-PLAN.md) | The first draft for phone and tablet (2026-11-16), replaced by [ANDROID.md](ANDROID.md). |
+| [MORNING.md](MORNING.md) | A checklist from the first overnight build (2026-11-17). |
 | [mockup-v1.html](mockup-v1.html) | The first mockup, opened in a browser. |
 
 ## Where the detail is
 
-- `CLAUDE.md` at the repo root is the dense, always-current description of every part, written for agents. These docs are the readable version of it; when they disagree, check the code, then fix both.
-- Finished agents write a report per card (see [cards-and-qa.md](cards-and-qa.md)). They are cited here by card id, for example "WOR-0087", and sit in the project's Reports section (`.darg/reports/` in the repo, older ones in the instance's `projects/<project>/reports/`, with archived ones in `archive/`).
+- [CLAUDE.md](../CLAUDE.md) at the repo root is the dense, always-current description of every part, written for agents. These docs are the readable version of it; when they disagree, check the code, then fix both.
+- Finished agents write a report per card (see [cards-and-qa.md](cards-and-qa.md#reports-darg-writes-itself)). These docs cite them by card id, for example (WOR-0087), and they sit in the project's [Reports section](guide.md#reports): `.darg/reports/` in the repo, older ones in the instance's `projects/<project>/reports/`, archived ones in `archive/`.
+
+## How these docs are written
+
+Keep to this when adding to them; `DocsTests` checks the parts marked *(tested)*.
+
+- **Shape**: a doc opens with one `# Title` and a short paragraph saying what it covers *(tested)*. `##` for sections and `###` below them; never a bold line standing in for a heading *(tested)*. Headings are plain words, with no numbers or icons, so their links stay stable.
+- **Lists of named things**: each item leads with the name in bold, then a colon: `- **Board tabs** (WOR-0149): …`.
+- **Buttons and labels**: written as the app shows them, icon included (▶ Work on this, 🔔 For human attention), and they must exist in `src/` *(tested)*.
+- **Code**: identifiers, files, commands and settings go in backticks. Fenced blocks name their language (`powershell`, `text`, `markdown`) *(tested)*.
+- **Cards**: cited by full id in brackets after the claim, (WOR-0087), never shortened to a bare number as in `WOR-0139 to 0141` *(tested)*. Darg links the id to its card; on GitHub it reads as plain text.
+- **Links**: every mention of another doc in this folder is a link to it *(tested)*, to the section where one fits, e.g. [cards-and-qa.md](cards-and-qa.md#qa). Each link must reach a file and each `#part` a heading *(tested)*. Darg opens such a link at the doc, not at the heading.
+- **History docs** ([PLAN.md](PLAN.md), [MORNING.md](MORNING.md), [PHONE-PLAN.md](PHONE-PLAN.md)) keep their words as written, under a quoted line saying when and what replaced them.

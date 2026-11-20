@@ -1,12 +1,14 @@
 # Workbench: morning checklist (2026-11-17)
 
+> History: the checklist from the first overnight build, when Darg was called Workbench, kept as written. How the app works now is in [README.md](README.md) and the docs it lists.
+
 Open it from the **Workbench** shortcut on the desktop or in the Start menu. It runs from `D:\Apps\Workbench` on your real projects (Alpha, Beta, Project C).
 
 ## Built overnight
 
 - **Agents survive restarts.** Close Workbench (or let it crash) and the agents are still listed as "saved". Send one a message and it carries on in the same Claude conversation. Tested: an agent told to remember PINEAPPLE still knew it after a hard kill and restart. × on an agent forgets it. Bench keeps its chat too ("New chat" starts over).
 - **Consoles** (Term): tabs of shells. Saved commands appear as ▶ buttons: Alpha has **Web** (dotnet watch on the web build), **Tests** and **Git**; the others have **Git**. Add your own in Setup ("Name: command" per line). Nothing runs until you press it.
-- **Docs**: each project's vault folder (`vault/Code/<Project>`), rendered, with a finder; [[wikilinks]] open the doc they name; Edit, then Save or Ctrl+S.
+- **Docs**: each project's vault folder (`vault/Code/<Project>`), rendered, with a finder; `[[wikilinks]]` open the doc they name; Edit, then Save or Ctrl+S.
 - **Code view edits**: type in a file, the tab shows ●, Ctrl+S saves; closing an edited tab warns once.
 - **GitLab** on the same page as GitHub (for work; needs `glab` installed there).
 - **A crash in a view no longer closes the app**: it's written to `%APPDATA%\Workbench\home\crash.log`.

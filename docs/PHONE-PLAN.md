@@ -1,5 +1,7 @@
 # Workbench on the phone and tablet (draft, for Philip to react to)
 
+> History: the first phone and tablet draft, kept as written. Replaced by [ANDROID.md](ANDROID.md) (2026-11-20).
+
 Written 2026-11-16 overnight. Nothing here is built yet.
 
 ## The shape

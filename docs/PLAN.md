@@ -1,5 +1,7 @@
 # Workbench (working name)
 
+> History: the original plan, written 2026-11-16 when Darg was called Workbench and kept as written. How the app works now is in [README.md](README.md) and the docs it lists.
+
 One app for everything Philip does across projects: docs, tickets, notes, code, agents, servers, art tools. AI everywhere. Everything except running Unity happens in here.
 
 Started 2026-11-16 from Philip's freestyle, after trying Tim's Tatty. Tatty is good, but making it fit this would stop it being what Tim wants, so this is a separate build. Mockup: [mockup-v1.html](mockup-v1.html), opened locally in a browser.
