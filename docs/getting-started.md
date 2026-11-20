@@ -1,0 +1,85 @@
+# Getting started
+
+## What you need
+
+- The .NET 10 SDK. (This machine also has 7, 8 and 9; the repo targets 10.)
+- Claude Code (`claude`) on PATH, signed in. Agents are real Claude Code sessions, so Darg runs without it but has no agents.
+- Windows is the primary target. Mac and Linux build; toasts and a few Windows-only things (job object that kills children, WebView2) differ.
+- Optional: `gh` (GitHub section), `glab` (GitLab, untested here), Python on PATH for the integration tests' fake claude, Ollama/Forge/ComfyUI/Pinokio for the Tools page.
+
+## Build and run
+
+```
+dotnet build
+dotnet test
+```
+
+The app is `src/Darg.Desktop/bin/Debug/net10.0-windows10.0.19041.0/Darg.Desktop.exe` on Windows. `dotnet test` rebuilds only Core and the tests, not the app, so run `dotnet build` before launching the exe or you will be looking at the old build. Launch it with a visible window (`Start-Process -WindowStyle Normal`); from an agent's shell the process otherwise runs with no window.
+
+If restore fails with `Unable to find fallback package folder ... Microsoft Visual Studio\Shared\NuGetPackages`, the repo's `NuGet.config` already clears the fallback folders; keep it next to the `.csproj`/solution. On this machine the NuGet cache lives on D: (`NUGET_PACKAGES=D:/nuget/packages`) because C: is small.
+
+## First run and instances
+
+An **instance** is one install's data folder: its projects, settings and saved agents. By default it is `%APPDATA%\Darg\home` (older installs: `%APPDATA%\Workbench\home`, which Darg keeps using until it can move it). Inside, `instance.json` lists the projects. Setup (the header's gear/Setup page) edits it: add a folder as a project, tick its features, name its repos, boards and docs.
+
+Instances cannot see each other, by design (the work PC and home PC each run their own).
+
+## Environment variables
+
+Every `DARG_*` name also works as `WORKBENCH_*` (the app was renamed).
+
+| Variable | Effect |
+|---|---|
+| `DARG_HOME` | Use this folder as the instance. Use a throwaway one (`.shots/home`) for anything that writes cards or notes. |
+| `DARG_INSTANCE` | Instance name under `%APPDATA%\Darg\` (default `home`). |
+| `DARG_SECTION` | Open this section on start: Home, Board, Notes, Docs, Agents, Flows, Reports, Artifacts, Mistakes, Context, Code, GitHub, Preview, Terminal. |
+| `DARG_AGENT` | Start an agent with this prompt (in `DARG_AGENT_CWD` if set). |
+| `DARG_FLOW` | With `DARG_AGENT`, run this flow instead. |
+| `DARG_ADD_FOLDER` | Open Setup with this folder added as a project (unsaved). |
+| `DARG_API` | Set by Darg on every agent process: the API address with its token. Agents `POST $DARG_API/<command>`. |
+| `DARG_STALL_MS` | Lower the freeze-log threshold (default 200 ms) for `stalls.log`. |
+| `DARG_LIVE=1` | Makes the unit tests also run the live Claude tests (a real Haiku turn). |
+| `DARG_LIVE_TREE`, `_BRANCH`, `_SCRIPT`, `_HOST`, `_REPO`, `_GH`, `_FORGE` | Set by `tools/live.ps1` and the live tests. Don't set by hand; `tools/test.ps1` clears them. |
+| `DARG_TEST_PYTHON` | Name the Python for the fake claude in integration tests. |
+
+## Tests
+
+```
+pwsh -File tools/test.ps1                      # build + unit + integration, about 45 s
+pwsh -File tools/test.ps1 -Unit                # Core only, seconds
+pwsh -File tools/test.ps1 -Integration -Filter Send_back
+```
+
+- Unit tests: `tests/Darg.Core.Tests` (xunit, no UI). Integration tests: `tests/Darg.Desktop.Tests` (xunit v3 with Avalonia.Headless: the real window on a throwaway instance, agents played by `tools/perf/fake_claude.py`). Use `[AvaloniaFact]`, not `[Fact]`.
+- One run per folder at a time; a second run waits and names the first (`.shots/test.lock`).
+- A `-Filter` that matches no test fails. It matches `Class.Method`.
+- `tools/test.ps1` clears inherited `DARG_*` variables and the Sandbox points `UserHome` and `CLAUDE_CONFIG_DIR` into `.shots/integration/_user`, so tests never read your real timings or settings.
+- Each integration test leaves `.shots/integration/<test>/`: its instance, board files, `fake-claude.jsonl` (what each agent was started with and sent) and PNGs of what the window showed. That is how you see a view without a running app.
+- A failing test is never "unrelated". (One was called that in every QA pass for a week while it hid a real bug.)
+- A test board goes in its own folder inside the temp folder. `BoardStore.Create` numbers past every sibling board, so a stray one next to it bumps ids and fails the test.
+- Known flake: `DevServerTests.Reads_the_address…` counts PING processes machine-wide and fails when other agents are running; it passes alone.
+
+## Installing the copy you use
+
+```
+pwsh -File tools/publish.ps1
+```
+
+Builds Release into `D:\Apps\Darg`, makes Start menu and desktop shortcuts and writes `source.txt` (the repo) beside the exe. **Never run it from an agent inside Darg**: it closes the installed copy, which kills the agent's own host (it did, twice). The script refuses; run it from a terminal, or use the header's ⟳ menu.
+
+⟳ Update builds the repo into `<install>.next` while the app runs, then a helper (`Updater`, started outside the app's job) waits for the app to close, copies the build in and restarts it. If the repo moved on after a build, the button reads Rebuild, the header shows `⟳ Update ready •` and Use last build restarts into the existing one. A copy without `source.txt` (a debug build) can only restart. Agents started before an update keep the old instructions until they are restarted.
+
+## The live copy (experiment)
+
+```
+pwsh -File tools/live.ps1 [-Branch main] [-Shortcut]
+```
+
+Runs Darg under `dotnet watch` from its own worktree (`.claude/worktrees/live`, detached at the repo's branch), so agents' half-made edits never reach it. The ⟳ menu reads "⟳ live" and offers Pull in. C# changes apply by .NET hot reload, `.axaml` by HotAvalonia (Debug live builds only; the SDK disables hot reload in Release). An edit hot reload can't take makes `watch` close and reopen Darg, which stops agents mid-turn. It refuses while the installed copy runs on the same instance. Wiring a view's named parts in code-behind goes in `InitializeComponentState()`, which HotAvalonia re-runs after reloading that view; only `MainWindow` does so far.
+
+## Seeing the app without clicking
+
+- `tools/shot.ps1 -ProcessId <pid> -Out x.png` captures only the app's window (PrintWindow, works when covered). It does not capture WebView2 (Artifacts, Site) or popup windows (the ▾ shell menu, ⟳ flyout); use a screen copy or UI Automation for those.
+- UI Automation can press Avalonia buttons by name (look among the window's `Button` descendants). Synthetic clicks don't register on real Windows popups, and a flyout can't be opened while the window is behind another Darg.
+- Crashes in a view go to `crash.log` in the instance folder instead of closing the app. Freezes go to `stalls.log` (a UI-thread heartbeat logs gaps over 200 ms with the named sections that ran); measure there before guessing at a slowdown. `tools/perf/load.ps1` starts N fake agents on a throwaway board to reproduce load.
+- Scratch output goes in `.shots/` (git-ignored).
