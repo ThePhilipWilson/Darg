@@ -20,6 +20,24 @@ public partial class MainViewModel
         api.Add("overview", "what's going on in a project, in one call: {project}. Its Home page as JSON: the shown board's card count per column, " +
                             "cards in its middle columns with the agent on each, agents needing Philip or at work, the newest artifacts, unread reports, " +
                             "and per repo its branch, uncommitted file count and last commits.", Overview);
+        // read-only views for the phone (AND-0008): files are read off the UI thread, only the project lookup is on it
+        void Read(string name, string usage, Func<ApiArgs, ProjectConfig, string> run) =>
+            api.Add(name, usage, async a =>
+            {
+                var config = await Dispatcher.UIThread.InvokeAsync(() => FindProject(a).Config);
+                return await Task.Run(() => run(a, config));
+            });
+        Read("notes", "a project's notes wall, read only: {project}. Its columns and every note (id, column, colour, tags, created, ticket, text).",
+            (_, c) => Json(ReadViews.NotesList(c.NotesFolder())));
+        Read("docs", "the docs in a project's docs folder, read only: {project}. Paths relative to it, to give to doc.",
+            (_, c) => Json(new JsonArray((c.Docs is null ? [] : ReadViews.DocList(c.Docs)).Select(d => (JsonNode?)d).ToArray())));
+        Read("doc", "one doc's markdown, read only: {project, path} (a path from docs, or a name without .md). Returns path, title, text and links: " +
+                    "for each link in the text (wiki:Name for [[Name]], else the URL) where it goes: doc (ask for that path next), external, elsewhere or missing.",
+            (a, c) => Json(ReadViews.Doc(c.Docs ?? throw new ApiError("That project has no docs folder."), a.Need("path"))));
+        Read("reports", "a project's finished-agent reports, newest first, read only: {project, unread?: true}. Each: id, card, title, kind (finished, investigation, qa), date, read, commits.",
+            (a, c) => Json(ReadViews.ReportList(ReportStore.FolderFor(c.Id), a.Get("unread") == "true")));
+        Read("report", "one report, read only: {project, id} (from reports). Its details and the markdown body.",
+            (a, c) => Json(ReadViews.Report(ReportStore.FolderFor(c.Id), a.Need("id"))));
         Add("show", "bring something up on screen. {project, section?, card?, doc?, agent?, artifact?}: section is one of " +
                     string.Join(", ", Enum.GetNames<Section>()) + "; card an ID (opens its panel), doc a path or name in the project's docs, " +
                     "agent an agent id, artifact a file path. With only project, switches to its tab.", Show);
