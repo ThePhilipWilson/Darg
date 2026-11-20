@@ -29,7 +29,7 @@ public class CardHeaderTests
                 .First(b => b.Classes.Contains("card") && b.DataContext is CardViewModel c && c.Id == card.Id);
             app.Shot($"header-{theme.Id}");
             var parts = Parts(tile).ToList();
-            Assert.True(parts.Count == 6, $"{theme.Id}: expected id, star, type, priority, Run QA and Work on; found {string.Join(", ", parts.Select(p => p.Name))}");
+            Assert.True(new[] { "id", "star", "type", "priority", "Run QA", "Work on" }.All(n => parts.Any(p => p.Name == n)) && parts.Count == parts.Select(p => p.Name).Distinct().Count(), $"{theme.Id}: expected id, star, type, priority, Run QA and Work on once each (Improve too on a thin card); found {string.Join(", ", parts.Select(p => p.Name))}");
 
             foreach (var (name, control, box) in parts)
             {
@@ -68,6 +68,6 @@ public class CardHeaderTests
             else if (b.Child is TextBlock { Text: "High" }) yield return ("priority", b, Box(b));
         }
         foreach (var b in all.OfType<Button>().Where(b => b.Classes.Contains("workon")))
-            yield return ((string)b.Content! == "▶ Work on" ? "Work on" : "Run QA", b, Box(b));
+            yield return (((string)b.Content!) switch { "▶ Work on" => "Work on", "✦ Improve" => "Improve", _ => "Run QA" }, b, Box(b));
     }
 }
