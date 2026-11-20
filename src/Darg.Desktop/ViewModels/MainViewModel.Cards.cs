@@ -16,6 +16,38 @@ public partial class MainViewModel
     const string CardUsage = "one card whole: {project, id}. What cards gives, plus its text (the file), decision (the open Decision it waits on, or null), " +
         "qaNotes, the reports filed for it (archived ones too) and every agent on it with what it's doing.";
 
+    /// <summary>A card link was clicked (WOR-0158; Fettle's reply naming a card it made, an agent's, a doc's): its
+    /// panel opens, on the project on screen if that has it, else the first project that does. False when none has.</summary>
+    public bool OpenCardLink(string id)
+    {
+        var order = Projects.Where(p => p == Selected).Concat(Projects.Where(p => p != Selected));
+        foreach (var p in order)
+        {
+            if (p.Config.Boards is null || p.Board is null || !CardIndex.Read(p.Config.Boards).Any(c => c.Card.Id == id)) continue;
+            Setup = null; ToolsPage = null; // a page over the tabs would hide it, as the API's show
+            Selected = p;
+            if (!p.Board.OpenById(id)) return false;
+            p.OpenCommand.Execute(nameof(Section.Board));
+            return true;
+        }
+        return false;
+    }
+
+    HashSet<string>? _cardPrefixes;
+    DateTime _cardPrefixesRead;
+
+    /// <summary>Whether an ID prefix (WOR) is one of the projects' boards', so a bare card ID in a transcript links to its card.
+    /// Read from the board.json files at most once every 30 s: markdown asks it on every redraw of a streaming reply.</summary>
+    public bool IsCardPrefix(string prefix)
+    {
+        if (_cardPrefixes is null || DateTime.UtcNow - _cardPrefixesRead > TimeSpan.FromSeconds(30))
+        {
+            _cardPrefixes = CardLinks.Prefixes(Projects.Select(p => p.Config.Boards));
+            _cardPrefixesRead = DateTime.UtcNow;
+        }
+        return _cardPrefixes.Contains(prefix);
+    }
+
     string Cards(ApiArgs a)
     {
         var p = FindProject(a);

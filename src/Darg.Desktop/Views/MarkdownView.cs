@@ -33,8 +33,16 @@ public sealed class MarkdownView : StackPanel
     static IBrush Accent => ThemeManager.Brush("Accent");
     static IBrush HeaderRow => ThemeManager.Brush("Panel2");
 
-    /// <summary>A link was clicked: its target ("wiki:Name" for an Obsidian [[link]], else the URL).</summary>
+    /// <summary>A link was clicked: its target ("wiki:Name" for an Obsidian [[link]], else the URL). Card links
+    /// (card:WOR-0158) go to <see cref="OpenCard"/> instead, in every view.</summary>
     public event Action<string>? LinkClicked;
+
+    /// <summary>Set by the app (WOR-0158): open a card's panel by its ID, false when no project has it. Unset,
+    /// card links draw as plain links that do nothing.</summary>
+    public static Func<string, bool>? OpenCard { get; set; }
+    /// <summary>Set by the app: whether a prefix (WOR) is one of the instance's boards', so a bare WOR-0158 in the
+    /// text is linked to its card. Unset, only card: links are.</summary>
+    public static Func<string, bool>? IsCardPrefix { get; set; }
 
     public MarkdownView() => Spacing = 8;
 
@@ -202,6 +210,7 @@ public sealed class MarkdownView : StackPanel
     SelectableTextBlock Text(IReadOnlyList<Span> spans, double size = 0, bool bold = false, IBrush? brush = null)
     {
         // a fixed line height clips the descenders of a line holding a link (an embedded control), so those size themselves
+        if (IsCardPrefix is { } isPrefix) spans = CardLinks.Link(spans, isPrefix);
         var tb = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, LineHeight = size > 0 || spans.Any(s => s.Link is not null) ? double.NaN : 21 };
         var codes = new List<(int Start, int End, string Text)>();
         var at = 0;
@@ -217,12 +226,12 @@ public sealed class MarkdownView : StackPanel
             if (s.Link is not null)
             {
                 run.Foreground = Link; run.TextDecorations = TextDecorations.Underline;
-                if (LinkClicked is not null || IsWeb(s.Link))
+                if (LinkClicked is not null || IsWeb(s.Link) || (OpenCard is not null && CardLinks.IdOf(s.Link) is not null))
                 {
                     // a clickable link: the run inside a small text block that takes the click
                     var target = s.Link;
                     var link = new TextBlock { Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) };
-                    ToolTip.SetTip(link, target.StartsWith("wiki:", StringComparison.Ordinal) ? target[5..] : target);
+                    ToolTip.SetTip(link, CardLinks.IdOf(target) is { } cardId ? $"Open {cardId}" : target.StartsWith("wiki:", StringComparison.Ordinal) ? target[5..] : target);
                     link.Inlines!.Add(run);
                     // The link takes the press itself. Left to bubble, SelectableTextBlock's OnPointerPressed captures
                     // the pointer, and the release then goes to the paragraph, not the link: clicks were lost.
@@ -256,10 +265,11 @@ public sealed class MarkdownView : StackPanel
         link.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || link.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
         || link.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>A view that handles links (Docs) gets every click; anywhere else (agent transcripts, Tools
-    /// answers) a web or mail link opens in the browser.</summary>
+    /// <summary>A card link opens the card, wherever it is (WOR-0158). Otherwise a view that handles links (Docs)
+    /// gets every click; anywhere else (agent transcripts, Tools answers) a web or mail link opens in the browser.</summary>
     void Open(string target)
     {
+        if (CardLinks.IdOf(target) is { } card) { OpenCard?.Invoke(card); return; }
         if (LinkClicked is not null) { LinkClicked(target); return; }
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true }); }
         catch (Exception) { }

@@ -17,16 +17,42 @@ def log(kind, **fields):
     if not log_file:
         return
     line = json.dumps(dict(kind=kind, pid=os.getpid(), **fields)) + "\n"
-    # several fakes (an agent and a model pick) open the log at once, and Windows refuses the second open
-    # for a moment: retry, and never let the log take the fake down with it
+    # several fakes (an agent and a model pick) write the log at once. Append mode on Windows seeks to the end and
+    # then writes, so two processes' lines overwrote each other: a chat's "start" lost its head to the title
+    # question's "ask" and a test waited 30 s for it (WOR-0158). A lock folder (mkdir is atomic) takes turns
+    # across processes; one left by a fake killed mid-write is ignored after 2 s. Windows also refuses an open for
+    # a moment while another has the file: retry, and never let the log take the fake down with it.
     with lock:
+        held = False
         for _ in range(100):
             try:
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(line)
-                return
-            except OSError:
+                os.mkdir(log_file + ".lock")
+                held = True
+                break
+            except FileExistsError:
                 time.sleep(0.02)
+            except OSError:
+                break
+        else:
+            # 2 s with no turn: the holder died mid-write. Clear its lock so later lines don't wait 2 s each too.
+            try:
+                os.rmdir(log_file + ".lock")
+                os.mkdir(log_file + ".lock")
+                held = True
+            except OSError:
+                pass
+        try:
+            for _ in range(100):
+                try:
+                    with open(log_file, "a", encoding="utf-8") as f:
+                        f.write(line)
+                    return
+                except OSError:
+                    time.sleep(0.02)
+        finally:
+            if held:
+                try: os.rmdir(log_file + ".lock")
+                except OSError: pass
 
 def emit(o):
     with lock:

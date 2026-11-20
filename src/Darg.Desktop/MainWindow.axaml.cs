@@ -20,7 +20,10 @@ public partial class MainWindow : Window
         InitializeComponent();
         var vm = _vm = new ViewModels.MainViewModel();
         DataContext = vm;
-        Activated += (_, _) => vm.WindowActive = true;
+        // card links in any transcript or doc open the card (WOR-0158)
+        Views.MarkdownView.OpenCard = vm.OpenCardLink;
+        Views.MarkdownView.IsCardPrefix = vm.IsCardPrefix;
+        Activated +=(_, _) => vm.WindowActive = true;
         Deactivated += (_, _) => vm.WindowActive = false;
         vm.BringToFront += () =>
         {

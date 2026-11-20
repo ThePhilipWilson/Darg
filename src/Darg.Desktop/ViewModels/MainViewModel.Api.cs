@@ -43,7 +43,7 @@ public partial class MainViewModel
                             "Refused without a question and two options.", ToAttention);
         Add("new-card", "make a card in a project's backlog, on its inbox board (Inbox, Main or Backlog), as + Card does: {project, title, description?, " +
                         "type?: " + string.Join("|", CardTypes.All) + " (else guessed from the words), labels? (a list, or separated by commas), priority?}. " +
-                        "Returns its id, board and file; Haiku then moves it to the story board it fits, if the project has others. Use this rather than writing card files.", NewCard);
+                        "Returns its id, board, file and link (markdown that opens the card when clicked: put it in your reply); Haiku then moves it to the story board it fits, if the project has others. Use this rather than writing card files.", NewCard);
         Add("say","send a message to a project's agent, as if Philip typed it: {id, text}. A saved agent resumes its session.", Say);
         Add("close-agents", "close agents' sessions: {ids} (a list, or ids separated by spaces). They stay listed and carry on when sent a message.", a => CloseAgents(a.List("ids")));
         Add("forget-agents", "forget agents, as the × in the Agents list does: {ids}. Each one's session ends, it leaves the list and its saved file goes " +
@@ -357,6 +357,7 @@ public partial class MainViewModel
         {
             ["id"] = card.Id, ["title"] = card.Title, ["type"] = card.Type, ["board"] = Path.GetFileName(inbox.TrimEnd('\\', '/')),
             ["file"] = Path.GetFullPath(Path.Combine(inbox, "items", card.File)),
+            ["link"] = CardLinks.For(card.Id), // WOR-0158: Fettle's reply links the card it made
             ["placing"] = p.Board.Boards.Count > 1,
         });
     }
