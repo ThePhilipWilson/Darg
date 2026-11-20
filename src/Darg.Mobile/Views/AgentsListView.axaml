@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             xmlns:core="using:Darg.Core"
+             x:Class="Darg.Mobile.Views.AgentsListView"
+             x:DataType="vm:AgentsListViewModel"
+             x:Name="Root">
+  <!-- AND-0005: a project's agents, needs-you first; a row each that a thumb can hit, tapping one opens its transcript -->
+  <DockPanel Margin="16,12,16,0">
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+      <Button DockPanel.Dock="Right" Classes="icon" Content="⟳" Command="{Binding RefreshCommand}" AutomationProperties.Name="Refresh agents"/>
+      <TextBlock Text="Agents" Classes="title" VerticalAlignment="Center"/>
+    </DockPanel>
+    <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Classes="dim" Classes.bad="{Binding Bad}" Margin="0,0,0,8"
+               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Agents}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="core:RemoteAgent">
+            <Button Classes="row" Classes.needs="{Binding NeedsYou}" Command="{Binding #Root.((vm:AgentsListViewModel)DataContext).OpenCommand}"
+                    CommandParameter="{Binding}" AutomationProperties.Name="{Binding Name}">
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                <Border Grid.Column="1" Classes="state" Classes.needs="{Binding NeedsYou}" Classes.working="{Binding Working}" Margin="8,0,0,0">
+                  <TextBlock Text="{Binding StateText}" FontSize="13"/>
+                </Border>
+                <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Doing}" Classes="dim" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"
+                           IsVisible="{Binding Doing, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding Card, StringFormat='on {0}'}" Classes="dim" Margin="0,2,0,0"
+                           IsVisible="{Binding Card, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              </Grid>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+  <UserControl.Styles>
+    <Style Selector="Button.row.needs">
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+      <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="Border.state">
+      <Setter Property="Background" Value="{DynamicResource Panel2}"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="8,2"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.state.needs">
+      <Setter Property="Background" Value="{DynamicResource Accent}"/>
+    </Style>
+    <Style Selector="Border.state.needs TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+    </Style>
+    <Style Selector="Border.state.working TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+    </Style>
+  </UserControl.Styles>
+</UserControl>

@@ -26,7 +26,7 @@
       </ItemsControl>
     </Border>
     <Panel>
-      <!-- Home, Notes, Docs and Reports (AND-0008) -->
+      <!-- Home, Notes, Docs and Reports (AND-0008), Agents (AND-0005) -->
       <ContentControl Content="{Binding Content}" IsVisible="{Binding HasContent}"/>
       <!-- the Board section (AND-0004) -->
       <views:BoardSectionView DataContext="{Binding Board}" IsVisible="{Binding #Root.((vm:ProjectPageViewModel)DataContext).ShowsBoard}"/>

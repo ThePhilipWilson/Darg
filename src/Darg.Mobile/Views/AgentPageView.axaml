@@ -1,0 +1,99 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             x:Class="Darg.Mobile.Views.AgentPageView"
+             x:DataType="vm:AgentPageViewModel">
+  <!-- AND-0005: one agent on a phone. State at the top, the conversation in the middle (long replies folded to a
+       screenful, steps a line each, tap for more), a box at the bottom to nudge it. -->
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="16,8">
+      <StackPanel Spacing="4">
+        <TextBlock Text="{Binding StateLine}" TextWrapping="Wrap" Classes.working="{Binding Working}" Classes.needs="{Binding NeedsYou}" x:Name="StateText"/>
+        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes="dim" Classes.bad="{Binding Bad}"
+                   IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+      </StackPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="8">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Classes="primary" Content="Send" Command="{Binding SendCommand}" Margin="8,0,0,0" VerticalAlignment="Bottom"
+                AutomationProperties.Name="Send"/>
+        <TextBox Text="{Binding Compose}" PlaceholderText="{Binding SendHint}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160"
+                 AutomationProperties.Name="Message"/>
+      </DockPanel>
+    </Border>
+    <ScrollViewer x:Name="Scroll" HorizontalScrollBarVisibility="Disabled">
+      <ItemsControl ItemsSource="{Binding Entries}" Margin="12,8">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="vm:EntryRow">
+            <StackPanel Margin="0,4">
+              <!-- what Philip sent: a bubble on the right -->
+              <Border IsVisible="{Binding IsUser}" Classes="mine" HorizontalAlignment="Right" Margin="40,4,0,4">
+                <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{DynamicResource OnAccent}"/>
+              </Border>
+              <!-- a step: one line, the detail on a tap -->
+              <StackPanel IsVisible="{Binding IsStep}">
+                <Button Classes="step" Command="{Binding ToggleCommand}" AutomationProperties.Name="{Binding Line}">
+                  <TextBlock Text="{Binding Line}" Classes="dim" Classes.bad="{Binding IsBad}" TextTrimming="CharacterEllipsis" FontSize="13"/>
+                </Button>
+              </StackPanel>
+              <!-- an ask (question or permission) -->
+              <TextBlock IsVisible="{Binding IsAsk}" Text="{Binding Line}" FontWeight="SemiBold" Foreground="{DynamicResource Accent}"/>
+              <!-- the text: a reply, a note, an ask, an opened step's detail -->
+              <SelectableTextBlock IsVisible="{Binding ShowText}" Text="{Binding Text}" TextWrapping="Wrap"
+                                   Classes.code="{Binding IsStep}" Classes.note="{Binding IsNote}" Classes.bad="{Binding IsBad}"/>
+              <Button IsVisible="{Binding ShowMore}" Classes="more" Content="{Binding MoreLabel}"
+                      Command="{Binding ToggleCommand}"/>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+  <UserControl.Styles>
+    <Style Selector="Border.mine">
+      <Setter Property="Background" Value="{DynamicResource Accent}"/>
+      <Setter Property="CornerRadius" Value="14,14,4,14"/>
+      <Setter Property="Padding" Value="12,8"/>
+    </Style>
+    <Style Selector="SelectableTextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="LineHeight" Value="23"/>
+    </Style>
+    <Style Selector="SelectableTextBlock.code">
+      <Setter Property="FontFamily" Value="Cascadia Mono,Consolas,Menlo,monospace"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="LineHeight" Value="18"/>
+      <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+      <Setter Property="Margin" Value="12,0,0,4"/>
+    </Style>
+    <Style Selector="SelectableTextBlock.note">
+      <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+      <Setter Property="FontStyle" Value="Italic"/>
+      <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style Selector="SelectableTextBlock.bad">
+      <Setter Property="Foreground" Value="{DynamicResource Bad}"/>
+    </Style>
+    <Style Selector="Button.step">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="MinHeight" Value="36"/>
+      <Setter Property="Padding" Value="0,4"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+    </Style>
+    <Style Selector="Button.more">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+      <Setter Property="Padding" Value="0,4"/>
+      <Setter Property="MinHeight" Value="40"/>
+    </Style>
+    <Style Selector="TextBlock.working">
+      <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+    </Style>
+    <Style Selector="TextBlock.needs">
+      <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+  </UserControl.Styles>
+</UserControl>

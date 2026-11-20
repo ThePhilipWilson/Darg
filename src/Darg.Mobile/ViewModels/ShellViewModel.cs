@@ -314,6 +314,7 @@ public sealed partial class ProjectPageViewModel : PageViewModel
 
     readonly ShellViewModel? _shell;
     FettleChatViewModel? _fettle;
+    AgentsListViewModel? _agents;
 
     /// <summary>The card or doc open in the section showing, which Fettle is told about: set by the section that opens
     /// one (AND-0004's card panel, AND-0008's doc reader).</summary>
@@ -382,6 +383,7 @@ public sealed partial class ProjectPageViewModel : PageViewModel
     object? ContentFor(PhoneSection section)
     {
         if (_shell is null) return null;
+        if (section.Name == "Agents") return _agents ??= new AgentsListViewModel(_shell, Project.Id); // AND-0005
         if (!_read.TryGetValue(section.Name, out var read))
         {
             read = section.Name switch

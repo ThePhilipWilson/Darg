@@ -64,8 +64,9 @@ public sealed class DargClient(Connection connection, HttpMessageHandler? handle
                 throw new DargClientException($"{Connection.Address} answered, but not as Darg does (no {command} command there). Is that the right address?");
             if (!res.IsSuccessStatusCode)
                 throw new DargClientException(body.Length > 0 ? body : $"Darg answered {(int)res.StatusCode} {res.ReasonPhrase}.");
+            // some commands answer in words, not JSON (say: "Sent to …", AND-0005): that comes back as a string value
             try { return body.Length == 0 ? null : JsonNode.Parse(body); }
-            catch (System.Text.Json.JsonException e) { throw new DargClientException($"{Connection.Address} answered with something that isn't JSON.", e); }
+            catch (System.Text.Json.JsonException) { return JsonValue.Create(body); }
         }
     }
 

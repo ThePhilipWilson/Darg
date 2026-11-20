@@ -18,6 +18,8 @@
     <DataTemplate DataType="vm:DocsViewModel"><views:DocsView/></DataTemplate>
     <DataTemplate DataType="vm:ReportsViewModel"><views:ReportsView/></DataTemplate>
     <DataTemplate DataType="vm:ReadPageViewModel"><views:ReadPageView/></DataTemplate>
+    <DataTemplate DataType="vm:AgentsListViewModel"><views:AgentsListView/></DataTemplate>
+    <DataTemplate DataType="vm:AgentPageViewModel"><views:AgentPageView/></DataTemplate>
   </UserControl.DataTemplates>
 
   <DockPanel>
