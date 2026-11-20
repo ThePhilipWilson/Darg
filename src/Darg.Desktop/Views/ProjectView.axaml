@@ -27,6 +27,12 @@
                       Command="{Binding OpenCommand}" CommandParameter="Agents" ToolTip.Tip="Agents">
           <Panel>
             <StackPanel><TextBlock Text="✦" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Agents" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
+            <!-- how many are at work (WOR-0164): deliberately unlike the badges, an outlined square on the left in the working colour, not a filled accent circle on the right -->
+            <Border x:Name="RunningPip" Background="{DynamicResource Rail}" BorderBrush="{DynamicResource Info}" BorderThickness="1" CornerRadius="3" MinWidth="13" Height="13" Padding="2,0"
+                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-6,-2,0,0"
+                    IsVisible="{Binding Agents.AnyRunning, FallbackValue=False}" ToolTip.Tip="Agents at work">
+              <TextBlock Text="{Binding Agents.RunningCount, FallbackValue=''}" FontSize="9" Foreground="{DynamicResource Info}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
             <!-- the same flag as the project tab's "!" pip, so the two show and clear together -->
             <Border Background="{DynamicResource Accent}" CornerRadius="7" MinWidth="14" Height="14" Padding="3,0" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-6,0"
                     IsVisible="{Binding Agents.NeedingYou, FallbackValue=False}" ToolTip.Tip="An agent needs you">

@@ -21,7 +21,7 @@ public partial class AgentsViewModel : ObservableObject
         _store = AgentStore.Folder(project.Id.Length > 0 ? project.Id : "default");
         _reports = ReportStore.FolderFor(project.Id);
         SelectedRepo = RepoChoices.FirstOrDefault();
-        Agents.CollectionChanged += (_, _) => Resort();
+        Agents.CollectionChanged += (_, _) => { Resort(); CountRunning(); };
         foreach (var r in AgentStore.List(_store)) Add(new AgentViewModel(r, _store), select: false);
         Selected = Agents.FirstOrDefault();
         ReloadFlows();
@@ -287,6 +287,7 @@ public partial class AgentsViewModel : ObservableObject
             // it filed a report, or its card reached done, and its turn has now ended well: it goes (after this change has been handled)
             if (_goWhenFinished.Contains(agent.Id) && Finished(agent)) Dispatcher.UIThread.Post(() => { if (Agents.Contains(agent) && Finished(agent)) Forget(agent); });
             NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
+            CountRunning();
             if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
             // news from an agent that isn't the one open here stays marked in the list until it's looked at
             if (agent != Shown && agent.State is AgentState.NeedsYou or AgentState.Idle or AgentState.Exited) agent.Unseen = true;
@@ -330,6 +331,11 @@ public partial class AgentsViewModel : ObservableObject
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Folder))] public partial RepoChoice? SelectedRepo { get; set; }
     /// <summary>True while any agent here waits on the person (shown on the project's tab).</summary>
     [ObservableProperty] public partial bool NeedingYou { get; set; }
+    /// <summary>How many agents here are starting or at work (WOR-0164), shown quietly on the rail's Agents icon.
+    /// One waiting on the person isn't counted: it has the "!" instead.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(AnyRunning))] public partial int RunningCount { get; set; }
+    public bool AnyRunning => RunningCount > 0;
+    void CountRunning() => RunningCount = Agents.Count(a => a.Working);
     public event Action<AgentViewModel>? AgentNeedsYou;
     /// <summary>Something the person needs to hear about (a question, a permission ask, or the end of a long turn;
     /// see <see cref="Decisions"/>): (agent, what happened, detail).</summary>
