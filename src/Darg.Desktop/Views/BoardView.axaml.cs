@@ -30,16 +30,10 @@ public partial class BoardView : UserControl
             },
             click: (item, keys) => { if (item is CardViewModel card) card.Board.Click(card, keys); },
             carried: item => item is CardViewModel card ? card.Board.Carried(card) : [item]);
-        // several boards share the height, up to three on screen at once; more scroll
+        // several boards share the height; a row dragged taller keeps it and the rows scroll (WOR-0160)
         RowsScroll.SizeChanged += (_, _) => Fit();
-        BoardViewModel? watched = null;
-        DataContextChanged += (_, _) =>
-        {
-            if (watched is not null) watched.RowsChanged -= Fit;
-            watched = DataContext as BoardViewModel;
-            if (watched is not null) watched.RowsChanged += Fit;
-            Fit();
-        };
+        DataContextChanged += (_, _) => Fit();
+        RowDividers(this);
         ChipDoubleClicks(this);
         // a board tab pressed with Ctrl adds or removes it (WOR-0149); the button's click reads the flag
         AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (_, e) =>
@@ -85,11 +79,46 @@ public partial class BoardView : UserControl
 
     void Fit()
     {
-        if (DataContext is not BoardViewModel board || RowsScroll.Bounds.Height <= 0) return;
-        var h = RowsScroll.Bounds.Height;
-        var n = board.Rows.Count;
-        var each = n <= 1 ? h : Math.Max(320, Math.Floor(h / Math.Min(n, 3)));
-        foreach (var row in board.Rows) row.RowHeight = each;
+        if (DataContext is BoardViewModel board && RowsScroll.Bounds.Height > 0) board.RowsSpace = RowsScroll.Bounds.Height;
+    }
+
+    /// <summary>The divider below each row (WOR-0160): dragged, the row above it follows the pointer (kept for that
+    /// board when let go); double-clicked, the row goes back to sharing the height with the others.</summary>
+    static void RowDividers(Control host)
+    {
+        BoardViewModel? row = null;
+        double startY = 0, startH = 0;
+        host.AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (_, e) =>
+        {
+            if ((e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<Border>().FirstOrDefault(b => b.Classes.Contains("rowdivider")) is not { Tag: BoardViewModel r }
+                || !e.GetCurrentPoint(host).Properties.IsLeftButtonPressed) return;
+            e.Handled = true;
+            if (e.ClickCount == 2) { r.ResetRowHeightCommand.Execute(null); return; }
+            row = r;
+            startY = e.GetPosition(host).Y;
+            startH = r.RowHeight;
+            e.Pointer.Capture(host);
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        host.AddHandler(Avalonia.Input.InputElement.PointerMovedEvent, (_, e) =>
+        {
+            if (row is null) return;
+            row.ResizeRow(startH + e.GetPosition(host).Y - startY, save: false);
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        host.AddHandler(Avalonia.Input.InputElement.PointerReleasedEvent, (_, e) =>
+        {
+            if (row is null) return;
+            row.ResizeRow(startH + e.GetPosition(host).Y - startY, save: true);
+            row = null;
+            e.Pointer.Capture(null);
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        host.AddHandler(Avalonia.Input.InputElement.PointerCaptureLostEvent, (_, _) =>
+        {
+            if (row is null) return;
+            row.ResizeRow(row.RowHeight, save: true);
+            row = null;
+        });
     }
 
     /// <summary>A double-click on a filter chip makes it "must have" (AND). Seen on the second press (its

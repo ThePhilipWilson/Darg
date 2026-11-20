@@ -135,3 +135,66 @@ public static class ShownBoards
         catch (Exception) { }
     }
 }
+
+/// <summary>How tall each board's row is when several show at once (WOR-0160). A row dragged to a height by its
+/// divider keeps it (a file per project in the instance, projects/&lt;project&gt;/board-heights, a board and its
+/// height a line, tab between); the rows not set share what is left, none smaller than <see cref="FitMin"/>, and
+/// past that the rows scroll. One row on its own fills the space whatever it was set to.</summary>
+public static class BoardRowHeights
+{
+    /// <summary>The smallest a divider makes a row: its name, its columns' heads and a card or so.</summary>
+    public const double Min = 140;
+    /// <summary>The smallest the rows not set are shared down to before the rows scroll instead.</summary>
+    public const double FitMin = 180;
+
+    /// <summary>Each row's height, in order: a set one as set (no less than <see cref="Min"/>), the rest sharing
+    /// what is left of <paramref name="available"/>; with every row set and room to spare, the last takes it.</summary>
+    public static double[] Fit(double available, IReadOnlyList<double?> set)
+    {
+        if (set.Count == 0) return [];
+        if (set.Count == 1) return [Math.Max(available, Min)];
+        var heights = set.Select(h => h is { } v ? Math.Max(Min, Math.Round(v)) : double.NaN).ToArray();
+        var unset = heights.Count(double.IsNaN);
+        var left = available - heights.Where(h => !double.IsNaN(h)).Sum();
+        if (unset > 0)
+        {
+            var each = Math.Max(FitMin, Math.Floor(left / unset));
+            for (var i = 0; i < heights.Length; i++) if (double.IsNaN(heights[i])) heights[i] = each;
+        }
+        else if (left > 0) heights[^1] += Math.Floor(left);
+        return heights;
+    }
+
+    public static string FileFor(string projectId, string? instanceFolder = null) =>
+        Path.Combine(Path.GetDirectoryName(ShownBoards.FileFor(projectId, instanceFolder))!, "board-heights");
+
+    public static Dictionary<string, double> Load(string projectId, string? instanceFolder = null)
+    {
+        var heights = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var file = FileFor(projectId, instanceFolder);
+            if (!File.Exists(file)) return heights;
+            foreach (var line in File.ReadAllLines(file))
+            {
+                var tab = line.LastIndexOf('\t');
+                if (tab > 0 && double.TryParse(line[(tab + 1)..], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var h) && h > 0)
+                    heights[line[..tab].Trim()] = h;
+            }
+        }
+        catch (Exception) { }
+        return heights;
+    }
+
+    public static void Save(string projectId, IReadOnlyDictionary<string, double> heights, string? instanceFolder = null)
+    {
+        try
+        {
+            var file = FileFor(projectId, instanceFolder);
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllLines(file, heights.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(p => $"{p.Key}\t{Math.Round(p.Value).ToString(System.Globalization.CultureInfo.InvariantCulture)}"));
+        }
+        catch (Exception) { }
+    }
+}

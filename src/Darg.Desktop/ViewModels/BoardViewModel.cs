@@ -31,8 +31,14 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>A row's header (its board's name) shows once there is more than one row.</summary>
     [ObservableProperty] public partial bool ShowsHeader { get; set; }
     public bool IsExtraRow => _parent is not null;
-    /// <summary>Set by the view: a row's height, so several share the screen.</summary>
+    /// <summary>A row's height, so several share the screen (WOR-0160): one dragged by its divider keeps it, the
+    /// rest share what is left (<see cref="BoardRowHeights"/>). One row on its own fills the space.</summary>
     [ObservableProperty] public partial double RowHeight { get; set; } = double.NaN;
+    /// <summary>The height the rows have between them, set by the view as it is laid out.</summary>
+    public double RowsSpace { get => _rowsSpace; set { if (_rowsSpace == value) return; _rowsSpace = value; FitRows(); } }
+    double _rowsSpace;
+    /// <summary>The heights rows were dragged to, by board (kept in the instance).</summary>
+    Dictionary<string, double>? _heights;
 
     /// <summary>Set by the project: the live agent working on a card, if any.</summary>
     public Func<string, AgentViewModel?>? AgentFor { get => _parent is null ? field : _parent.AgentFor; set; }
@@ -237,7 +243,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             else Rows.Insert(i + 1, new BoardViewModel(this, want[i]));
         }
         foreach (var r in Rows) r.ShowsHeader = Rows.Count > 1;
-        RowsChanged?.Invoke();
+        FitRows();
         SyncLabels();
         ApplyAll();
     }
@@ -245,8 +251,39 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>A list on any row, by its <see cref="ListViewModel.Key"/>.</summary>
     public ListViewModel? ListByKey(string key) => Root.Rows.SelectMany(r => r.Lists).FirstOrDefault(l => l.Key == key);
 
-    /// <summary>Raised when a row comes or goes, so the view shares the height out again.</summary>
-    public event Action? RowsChanged;
+    /// <summary>Each row's height worked out again: those dragged keep theirs, the rest share what is left.</summary>
+    void FitRows()
+    {
+        var root = Root;
+        if (root._rowsSpace <= 0) return;
+        var heights = root._heights ??= BoardRowHeights.Load(_project.Id);
+        var fit = BoardRowHeights.Fit(root._rowsSpace,
+            root.Rows.Select(r => r.SelectedBoard is { } b && heights.TryGetValue(b, out var h) ? h : (double?)null).ToList());
+        for (var i = 0; i < fit.Length; i++) root.Rows[i].RowHeight = fit[i];
+    }
+
+    /// <summary>A row's divider dragged: the row takes that height (no less than <see cref="BoardRowHeights.Min"/>),
+    /// kept for its board once <paramref name="save"/> (the drag let go); the others share again.</summary>
+    public void ResizeRow(double height, bool save)
+    {
+        if (SelectedBoard is not { } board) return;
+        var root = Root;
+        var heights = root._heights ??= BoardRowHeights.Load(_project.Id);
+        heights[board] = Math.Max(BoardRowHeights.Min, Math.Round(height));
+        FitRows();
+        if (save) BoardRowHeights.Save(_project.Id, heights);
+    }
+
+    /// <summary>A divider double-clicked: its row goes back to sharing the space with the others.</summary>
+    [RelayCommand]
+    public void ResetRowHeight()
+    {
+        if (SelectedBoard is not { } board) return;
+        var heights = Root._heights ??= BoardRowHeights.Load(_project.Id);
+        if (!heights.Remove(board)) return;
+        FitRows();
+        BoardRowHeights.Save(_project.Id, heights);
+    }
 
     /// <summary>Show a board as a row of its own beside the picked one, or stop showing it.</summary>
     public void SetShown(string board, bool shown)

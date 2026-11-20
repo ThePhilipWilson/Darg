@@ -28,6 +28,7 @@
     <Style Selector="Button.enlarge:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="Transparent"/>
     </Style>
+    <Style Selector="Border.rowdivider:pointerover > Border"><Setter Property="Background" Value="{DynamicResource Accent}"/></Style>
     <Style Selector="Button.bulk">
       <Setter Property="FontSize" Value="11"/>
       <Setter Property="Padding" Value="6,2"/>
@@ -99,7 +100,7 @@
       </ItemsControl>
     </Border>
 
-    <!-- the boards on screen, a row each (WOR-0087): the picked one, then any shown with it -->
+    <!-- the boards on screen, a row each (WOR-0087): the picked one, then any shown with it; taller than the space, they scroll -->
     <ScrollViewer Grid.Row="2" x:Name="RowsScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
       <ItemsControl ItemsSource="{Binding Rows}">
         <ItemsControl.ItemTemplate>
@@ -112,6 +113,12 @@
           <TextBlock Classes="dim small" Text="{Binding Status}" VerticalAlignment="Center" Margin="10,0" TextTrimming="CharacterEllipsis" DockPanel.Dock="Right"/>
           <TextBlock Text="{Binding SelectedBoard}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center"/>
         </DockPanel>
+      </Border>
+      <!-- the divider below a row (WOR-0160): drag it to make this board taller or shorter, double-click to share again -->
+      <Border DockPanel.Dock="Bottom" Classes="rowdivider" Tag="{Binding}" IsVisible="{Binding ShowsHeader}" Height="9" Background="Transparent"
+              Cursor="SizeNorthSouth" ToolTip.Tip="Drag to resize this board; double-click to share the height again"
+              AutomationProperties.Name="{Binding SelectedBoard, StringFormat='Resize {0}'}">
+        <Border Height="3" Margin="40,0" CornerRadius="2" Background="{DynamicResource Line}" VerticalAlignment="Center"/>
       </Border>
     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
       <StackPanel Orientation="Horizontal">

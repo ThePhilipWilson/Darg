@@ -117,5 +117,34 @@ public sealed class StoryBoardsTests : IDisposable
         Assert.Equal(Path.Combine(_root, "projects", "workbench", "shown-boards"), ShownBoards.FileFor("workbench", _root));
     }
 
+    [Fact]
+    public void Rows_not_set_share_the_space_and_more_than_two_fit() // WOR-0160
+    {
+        Assert.Equal([700], BoardRowHeights.Fit(700, [500]));            // one row fills, set or not
+        Assert.Equal([350, 350], BoardRowHeights.Fit(700, [null, null]));
+        Assert.Equal([233, 233, 233], BoardRowHeights.Fit(700, [null, null, null])); // three on a 700 high screen
+        Assert.Equal([180, 180, 180, 180, 180], BoardRowHeights.Fit(700, [null, null, null, null, null])); // past that they scroll
+    }
+
+    [Fact]
+    public void A_dragged_row_keeps_its_height_and_the_rest_share_what_is_left()
+    {
+        Assert.Equal([400, 180, 180], BoardRowHeights.Fit(700, [400, null, null])); // never shared below FitMin: they scroll
+        Assert.Equal([200, 250, 250], BoardRowHeights.Fit(700, [200, null, null]));
+        Assert.Equal([140, 560], BoardRowHeights.Fit(700, [20, 100]));   // no smaller than Min; every row set, the last takes the spare
+        Assert.Equal([900, 900], BoardRowHeights.Fit(700, [900, 900])); // bigger than the screen: they scroll
+    }
+
+    [Fact]
+    public void Row_heights_are_kept_per_project_in_the_instance()
+    {
+        Assert.Empty(BoardRowHeights.Load("workbench", _root));
+        BoardRowHeights.Save("workbench", new Dictionary<string, double> { ["Art pipeline"] = 312.4, ["Main"] = 500 }, _root);
+        var back = BoardRowHeights.Load("workbench", _root);
+        Assert.Equal(312, back["art pipeline"]);
+        Assert.Equal(500, back["Main"]);
+        Assert.Equal(Path.Combine(_root, "projects", "workbench", "board-heights"), BoardRowHeights.FileFor("workbench", _root));
+    }
+
     public void Dispose() { try { Directory.Delete(_root, true); } catch (IOException) { } }
 }
