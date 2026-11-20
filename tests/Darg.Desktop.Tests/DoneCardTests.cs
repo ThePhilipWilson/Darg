@@ -116,6 +116,33 @@ public class DoneCardTests
     }
 
     [AvaloniaFact]
+    public async Task Clear_finished_takes_an_agent_whose_card_is_done_on_another_board()
+    {
+        // WOR-0153: the done check asked only the board shown, so a card done on another board of the project kept its
+        // agent listed as "saved". Aaa sorts first, so the shown board is Aaa and the card (made by DargApp) is on Main.
+        using var app = DargApp.Make();
+        BoardStore.CreateBoard(app.Boards, "Aaa", DargApp.Columns, "AAA");
+        var done = app.Card("finished on Main", "Done");
+        await app.Start();
+        await app.Api("work-on", new { project = "proj", card = done.Id }); // opens the card's board, so re-pick Aaa below
+        var stranded = app.Agents.ForCard(done.Id)!;
+        await app.Until(() => stranded.State == AgentState.Idle, "the turn to end");
+        app.Board.SelectedBoard = "Aaa";
+        await DargApp.Settle(300);
+        Assert.Equal("Aaa", app.Board.SelectedBoard);
+        Assert.False(app.Board.IsDone(done.Id), "premise: the shown board doesn't hold the done card");
+        Assert.True(app.Board.DoneCardIds().Contains(done.Id), "premise: the card is done on the project's other board");
+        Assert.True(stranded.CloseSession("Darg"));
+        app.Agents.RefreshCards(); // what a board reload does, here after the card's done state was read
+
+        Assert.Equal("Complete, pending removal", stranded.StateText);
+        app.Agents.ClearFinishedCommand.Execute(null);
+
+        Assert.DoesNotContain(stranded, app.Agents.Agents);
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
     public async Task Clean_up_forgets_the_agents_left_on_done_cards()
     {
         using var app = DargApp.Make();

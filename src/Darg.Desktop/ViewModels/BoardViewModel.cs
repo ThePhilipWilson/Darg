@@ -796,6 +796,11 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         return found;
     }
 
+    /// <summary>The id of every card done on any of the project's boards (WOR-0153: an agent's card may sit on a board that
+    /// isn't the one shown, so <see cref="IsDone"/> alone missed it). Read from the boards on disk, like <see cref="CardBoards"/>.</summary>
+    public HashSet<string> DoneCardIds() =>
+        _project.Boards is null ? [] : DoneCards(completedToo: true).Select(d => d.Card.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>A card is done when it's in Completed or the board's last column (its done column).</summary>
     public bool IsDone(string cardId)
     {

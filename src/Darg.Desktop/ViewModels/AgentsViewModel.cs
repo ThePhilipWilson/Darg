@@ -299,18 +299,19 @@ public partial class AgentsViewModel : ObservableObject
 
     public void SaveAll() { foreach (var a in Agents) a.Save(); }
 
-    /// <summary>Whether a board card is done: set by the project (the board's view), null: no board here.</summary>
-    public Func<string, bool>? CardIsDone { get; set; }
+    /// <summary>The ids of the cards done on the project's boards, all of them (WOR-0153): set by the project, null: no board here.</summary>
+    public Func<IReadOnlySet<string>>? DoneCardIds { get; set; }
+    bool IsCardDone(string? cardId) => cardId is not null && DoneCardIds?.Invoke().Contains(cardId) == true;
     /// <summary>Shows a card on the board (WOR-0143); false when it isn't on the board shown.</summary>
     public Func<string, bool>? OpenCard { get; set; }
-    bool IsCardDone(string? cardId) => cardId is not null && CardIsDone?.Invoke(cardId) == true;
 
     /// <summary>Re-read every card agent's card after the boards change (a card moved to Done shows on its agent).</summary>
     public void RefreshCards()
     {
         using var timing = StallWatch.Shared.Section("Agents.RefreshCards");
         if (CardBoards is not null) { _cardBoards = CardBoards(); SyncTabs(); Resort(); }
-        foreach (var a in Agents) if (a.CardId is not null) a.CardDone = IsCardDone(a.CardId);
+        var done = DoneCardIds?.Invoke(); // every board's, not only the one shown: an agent's card may be on another (WOR-0153)
+        foreach (var a in Agents) if (a.CardId is not null) a.CardDone = done?.Contains(a.CardId) == true;
         // a QA agent that has ended its turn has given its verdict: close it so it doesn't linger on the card
         foreach (var a in Agents.Where(a => a.IsDone && !a.LimitHit && a.ContinueAt is null && a.CardId is not null && a.Purpose == AgentPurposes.Qa).ToList()) a.CloseSession("Darg");
     }
