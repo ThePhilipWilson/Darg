@@ -1423,6 +1423,10 @@ public sealed record DecisionChoice(DecisionOption Option, IRelayCommand Command
     public string ActionText => Option.ActionText;
 }
 
+/// <summary>A picture in a card's decision box (WOR-0147): the copy drawn there and the file it came from, which a
+/// click shows at full size (WOR-0167).</summary>
+public sealed record DecisionPicture(Avalonia.Media.Imaging.Bitmap Picture, string File);
+
 /// <summary>A board's tab above the board; a plain click picks it alone, Ctrl+click adds it or takes it off.</summary>
 public sealed partial class BoardTab(BoardViewModel board, string name) : ObservableObject
 {
@@ -1538,8 +1542,38 @@ public partial class CardEditor : ObservableObject
     public bool HasDecisionContext => DecisionContext.Length > 0;
     /// <summary>WOR-0147: the pictures anywhere in the card file (decision, How to check, description), shown in the
     /// decision box so a question about how something looks has the thing beside it.</summary>
-    public IReadOnlyList<Avalonia.Media.Imaging.Bitmap> DecisionPictures { get; } = [];
+    public IReadOnlyList<DecisionPicture> DecisionPictures { get; } = [];
     public bool HasDecisionPictures => DecisionPictures.Count > 0;
+    /// <summary>WOR-0167: the decision picture clicked, read at full size and drawn over the board as big as it will
+    /// go; a click on it or Escape closes it, the arrow keys step through the others.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsEnlarged), nameof(EnlargedCaption))]
+    public partial Avalonia.Media.Imaging.Bitmap? Enlarged { get; private set; }
+    public bool IsEnlarged => Enlarged is not null;
+    int _enlargedAt = -1;
+    public string EnlargedCaption => !IsEnlarged ? "" : (DecisionPictures.Count > 1 ? $"{_enlargedAt + 1} of {DecisionPictures.Count} · ← → for the others · " : "")
+        + "click or Esc to close";
+    [RelayCommand] void Enlarge(DecisionPicture? picture)
+    {
+        var at = picture is null ? -1 : DecisionPictures.ToList().IndexOf(picture);
+        if (at >= 0) ShowEnlarged(at);
+    }
+    [RelayCommand] void CloseEnlarged() { Enlarged = null; _enlargedAt = -1; }
+    /// <summary>The next (+1) or previous (-1) picture while one is enlarged, wrapping round.</summary>
+    public void StepEnlarged(int by)
+    {
+        if (!IsEnlarged || DecisionPictures.Count < 2) return;
+        ShowEnlarged(((_enlargedAt + by) % DecisionPictures.Count + DecisionPictures.Count) % DecisionPictures.Count);
+    }
+    void ShowEnlarged(int at)
+    {
+        var picture = DecisionPictures[at];
+        Avalonia.Media.Imaging.Bitmap full;
+        // the file at its own size (the box's copy is cut to 720 wide); gone or unreadable since, the box's copy
+        try { using var f = File.OpenRead(picture.File); full = new Avalonia.Media.Imaging.Bitmap(f); }
+        catch (Exception) { full = picture.Picture; }
+        _enlargedAt = at;
+        Enlarged = full;
+    }
     public string DecisionAskedBy => Decision is null ? "" : Decision.Drafted ? "Drafted by Darg from the card: check it fits."
         : Decision.AskedBy.Length > 0 ? "Asked by " + Decision.AskedBy : "";
     public IReadOnlyList<DecisionChoice> DecisionChoices { get; } = [];
@@ -1580,9 +1614,9 @@ public partial class CardEditor : ObservableObject
             if (Decision is not null)
                 DecisionPictures = Darg.Core.Pictures.InDescription(Path.Combine(folder, "items"), text).Select(p =>
                 {
-                    try { using var f = File.OpenRead(p); return Avalonia.Media.Imaging.Bitmap.DecodeToWidth(f, 720); }
+                    try { using var f = File.OpenRead(p); return new DecisionPicture(Avalonia.Media.Imaging.Bitmap.DecodeToWidth(f, 720), p); }
                     catch (Exception) { return null; }
-                }).OfType<Avalonia.Media.Imaging.Bitmap>().ToList();
+                }).OfType<DecisionPicture>().ToList();
             // recommended first, as AskUserQuestion puts it
             DecisionChoices = (Decision?.Options ?? []).OrderByDescending(o => o.Recommended)
                 .Select(o => new DecisionChoice(o, new RelayCommand(() => Answer(o.Label)))).ToList();

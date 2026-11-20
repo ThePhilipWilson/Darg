@@ -1,4 +1,6 @@
+using Avalonia;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Darg.Core;
 using Darg.Desktop.ViewModels;
 
@@ -58,6 +60,82 @@ public class DecisionTests
         Assert.Single(app.Board.Editor.DecisionPictures);
         await app.Api("show", new { project = "proj", section = "Board", card = plain.Id });
         Assert.False(app.Board.Editor!.HasDecisionPictures);
+        Assert.Equal("", app.Crashes());
+    }
+
+    static string Png(DargApp app, string name, int width, int height)
+    {
+        var path = Path.Combine(app.BoardFolder, name);
+        using var bitmap = new Avalonia.Media.Imaging.WriteableBitmap(new Avalonia.PixelSize(width, height), new Avalonia.Vector(96, 96),
+            Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Opaque);
+        using (var frame = bitmap.Lock())
+        {
+            // a gradient with a frame round it, so a shot shows the whole picture and where it ends
+            var row = new int[width];
+            for (var y = 0; y < height; y++)
+            {
+                for (var x = 0; x < width; x++)
+                    row[x] = x < 8 || y < 8 || x >= width - 8 || y >= height - 8 ? unchecked((int)0xFFFFFFFF)
+                        : unchecked((int)0xFF000000) | (x * 255 / width << 16) | (y * 255 / height << 8) | 0x60;
+                System.Runtime.InteropServices.Marshal.Copy(row, 0, frame.Address + y * frame.RowBytes, width);
+            }
+        }
+        bitmap.Save(path);
+        return path.Replace('\\', '/');
+    }
+
+    static void Click(Avalonia.Visual c)
+    {
+        var top = Avalonia.Controls.TopLevel.GetTopLevel(c)!;
+        var at = c.TranslatePoint(new Avalonia.Point(c.Bounds.Width / 2, c.Bounds.Height / 2), top)!.Value;
+        Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, at);
+        Avalonia.Headless.HeadlessWindowExtensions.MouseDown(top, at, Avalonia.Input.MouseButton.Left);
+        Avalonia.Headless.HeadlessWindowExtensions.MouseUp(top, at, Avalonia.Input.MouseButton.Left);
+    }
+
+    static void Key(DargApp app, Avalonia.Input.Key key, Avalonia.Input.PhysicalKey physical) =>
+        Avalonia.Headless.HeadlessWindowExtensions.KeyPress(app.Window, key, Avalonia.Input.RawInputModifiers.None, physical, null);
+
+    /// <summary>WOR-0167: a screenshot in the decision box is cut down to fit; a click on it shows it at full size over
+    /// the board, the arrows step to the next, and a click on it or Escape closes it.</summary>
+    [AvaloniaFact]
+    public async Task Clicking_a_decision_picture_shows_it_full_size_until_clicked_or_escaped()
+    {
+        using var app = DargApp.Make();
+        var wide = Png(app, "wide.png", 1600, 900);
+        var other = Png(app, "other.png", 300, 200);
+        var card = app.Card("looks", BoardStore.AttentionName, Body(Decision()) + $"\n![the panel]({wide})\n\n![the other]({other})\n");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board", card = card.Id });
+        var editor = app.Board.Editor!;
+        Assert.Equal(2, editor.DecisionPictures.Count);
+        Assert.Equal(720, editor.DecisionPictures[0].Picture.PixelSize.Width); // the box's copy is cut down
+
+        List<Avalonia.Controls.Button> Thumbs() => app.Window.GetVisualDescendants().OfType<Avalonia.Controls.Button>()
+            .Where(b => b.Classes.Contains("enlarge") && b.IsEffectivelyVisible).ToList();
+        Avalonia.Controls.Border Lightbox() => app.Window.GetVisualDescendants().OfType<Avalonia.Controls.Border>().Single(b => b.Name == "Lightbox" && b.DataContext == editor);
+        await app.Until(() => Thumbs().Count == 2, "the decision pictures drawn");
+        Assert.False(Lightbox().IsVisible);
+        app.Shot("decision-pictures");
+
+        Click(Thumbs()[0]);
+        Assert.True(editor.IsEnlarged);
+        Assert.True(Lightbox().IsVisible);
+        Assert.Equal(1600, editor.Enlarged!.PixelSize.Width); // the file at its own size
+        Assert.Contains("1 of 2", editor.EnlargedCaption);
+        app.Shot("enlarged");
+
+        Key(app, Avalonia.Input.Key.Right, Avalonia.Input.PhysicalKey.ArrowRight);
+        Assert.Equal(300, editor.Enlarged!.PixelSize.Width);
+        Key(app, Avalonia.Input.Key.Escape, Avalonia.Input.PhysicalKey.Escape);
+        Assert.False(editor.IsEnlarged);
+        Assert.Same(editor, app.Board.Editor); // Escape closed the picture, not the card
+
+        Click(Thumbs()[1]);
+        Assert.Equal(300, editor.Enlarged!.PixelSize.Width);
+        Click(Lightbox());
+        Assert.False(editor.IsEnlarged);
+        Assert.False(Lightbox().IsVisible);
         Assert.Equal("", app.Crashes());
     }
 

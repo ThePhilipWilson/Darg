@@ -52,6 +52,16 @@ public partial class BoardView : UserControl
         {
             if (e.Source is TextBlock { Tag: ListViewModel list } t && t.Classes.Contains("listname")) { list.StartRenameCommand.Execute(null); e.Handled = true; }
         });
+        // an enlarged picture (WOR-0167) takes Escape and the arrows first, wherever focus is
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (DataContext is not BoardViewModel { Editor: { IsEnlarged: true } editor }) return;
+            if (e.Key == Avalonia.Input.Key.Escape) editor.CloseEnlargedCommand.Execute(null);
+            else if (e.Key is Avalonia.Input.Key.Right or Avalonia.Input.Key.Down) editor.StepEnlarged(1);
+            else if (e.Key is Avalonia.Input.Key.Left or Avalonia.Input.Key.Up) editor.StepEnlarged(-1);
+            else return;
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         AddHandler(KeyDownEvent, (_, e) =>
         {
             if (e.Source is not TextBox { Tag: ListViewModel list } box || !box.Classes.Contains("rename")) return;
@@ -64,6 +74,13 @@ public partial class BoardView : UserControl
             if (e.Key == Avalonia.Input.Key.A && e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control)) { board.PickAllCommand.Execute(null); e.Handled = true; }
             else if (e.Key == Avalonia.Input.Key.Escape && board.HasPicked) { board.ClearPicked(); e.Handled = true; }
         };
+    }
+
+    void LightboxReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Left || DataContext is not BoardViewModel { Editor: { } editor }) return;
+        editor.CloseEnlargedCommand.Execute(null);
+        e.Handled = true;
     }
 
     void Fit()
