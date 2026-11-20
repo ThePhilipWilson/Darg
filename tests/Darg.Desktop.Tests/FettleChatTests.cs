@@ -57,13 +57,15 @@ public class FettleChatTests
 
     /// <summary>WOR-0157: Philip sends a request, then presses + New chat (or picks another chat) to type the next while
     /// Fettle is still at it. Ending the session then cut Fettle off after the work and before the reply: the card was
-    /// made and the chat said nothing. The chat left mid-turn runs on, its reply and the turn's end saved, then closes.</summary>
-    static async Task LeftMidTurnFinishesItsTurn(Action<DargApp> leave)
+    /// made and the chat said nothing. The chat left mid-turn runs on, its reply and the turn's end saved, then closes.
+    /// Each test gets its own folder (test, the caller's name): the chat left mid-turn runs on after its test ends, so
+    /// a shared folder was still in use when the next case wiped it (WOR-0170).</summary>
+    static async Task LeftMidTurnFinishesItsTurn(Action<DargApp> leave, [System.Runtime.CompilerServices.CallerMemberName] string test = "")
     {
         Environment.SetEnvironmentVariable("FAKE_SECONDS", "3");
         try
         {
-            using var app = DargApp.Make();
+            using var app = DargApp.Make(test);
             Seed(app, "chat-old", "Older chat", 5);
             await app.Start();
             var fettle = app.Main.Mascot;

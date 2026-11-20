@@ -18,11 +18,17 @@
   pwsh -File tools/android.ps1 -Emulator       # same, starting the darg emulator if no phone is attached
   pwsh -File tools/android.ps1 -NoBuild        # pair and start only (after a cable re-plug, adb reverse is lost)
   pwsh -File tools/android.ps1 -NoPair         # leave the phone's saved connection alone
+  pwsh -File tools/android.ps1 -StopEmulator   # stop the emulator (every copy) and nothing else: do it when done with it
+
+  One emulator at a time (WOR-0170): one already running is waited for, never joined by a second, and one that hasn't
+  booted in 5 minutes is stopped, not left behind. An emulator takes 4.5 GB or more; one night two were left running,
+  one of them leaking, until Windows ran out of memory and the PC bluescreened.
 #>
 param(
     [switch]$NoBuild,
     [switch]$NoPair,
     [switch]$Emulator,
+    [switch]$StopEmulator,
     [string]$Configuration = 'Debug',
     [string]$Device,                 # an adb serial when several are attached
     [int]$Port = 47817,              # the desktop's API port (ArtifactServer's; another if 47817 was taken)
@@ -48,18 +54,43 @@ if (-not (Test-Path -LiteralPath $adb)) { $adb = (Get-Command adb -ErrorAction S
 
 function Get-Devices { @(& $adb devices | Select-String "`tdevice$" | ForEach-Object { ($_ -split "`t")[0] }) }
 
+# the emulator's processes (emulator.exe, its qemu, headless or not, and crashpad), whoever started them
+function Get-EmulatorProcesses {
+    $dir = (Join-Path $sdk 'emulator').TrimEnd('\') + '\'
+    @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($dir, [StringComparison]::OrdinalIgnoreCase) })
+}
+function Stop-Emulator {
+    $running = @(Get-EmulatorProcesses)
+    if ($running.Count -eq 0) { Write-Host 'No emulator running.'; return }
+    Write-Host "== stopping the emulator: $(($running | ForEach-Object { "$($_.Name) $($_.ProcessId)" }) -join ', ')"
+    & $adb emu kill 2>$null | Out-Null # lets it close its disk images, when it's online
+    $deadline = (Get-Date).AddSeconds(10)
+    while (@(Get-EmulatorProcesses).Count -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+    foreach ($p in @(Get-EmulatorProcesses)) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }
+}
+if ($StopEmulator) { Stop-Emulator; return }
+
 # -- a device to install on
 $devices = @(Get-Devices)
 if ($devices.Count -eq 0 -and $Emulator) {
     $env:ANDROID_AVD_HOME = Join-Path $root 'avd'
     $emu = Join-Path $sdk 'emulator\emulator.exe'
-    Write-Host "== starting the darg emulator"
-    # software GPU: with the host GPU (the default) the emulator sat "offline" to adb for 25 minutes on this PC
-    Start-Process -FilePath $emu -ArgumentList '-avd', 'darg', '-no-snapshot-save', '-no-boot-anim', '-gpu', 'swiftshader_indirect' -WindowStyle Normal
+    if (@(Get-EmulatorProcesses).Count) {
+        Write-Host '== an emulator is already running: waiting for it to boot rather than starting another'
+    } else {
+        Write-Host "== starting the darg emulator"
+        # software GPU: with the host GPU (the default) the emulator sat "offline" to adb for 25 minutes on this PC
+        Start-Process -FilePath $emu -ArgumentList '-avd', 'darg', '-no-snapshot-save', '-no-boot-anim', '-gpu', 'swiftshader_indirect' -WindowStyle Normal
+    }
     # never adb wait-for-device: it waits forever on an emulator that stays offline
     $deadline = (Get-Date).AddMinutes(5)
     while ((& $adb shell getprop sys.boot_completed 2>$null) -ne '1') {
-        if ((Get-Date) -gt $deadline) { throw "The emulator did not finish booting in 5 minutes (adb devices: $(& $adb devices | Select-Object -Skip 1))." }
+        if (-not @(Get-EmulatorProcesses).Count) { throw 'The emulator closed before it finished booting.' }
+        if ((Get-Date) -gt $deadline) {
+            $seen = "$(& $adb devices | Select-Object -Skip 1)"
+            Stop-Emulator # one stuck offline is stopped, not left running for hours
+            throw "The emulator did not finish booting in 5 minutes (adb devices: $seen); it has been stopped."
+        }
         Start-Sleep -Seconds 3
     }
     $devices = @(Get-Devices)

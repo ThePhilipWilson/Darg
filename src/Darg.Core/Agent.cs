@@ -235,6 +235,19 @@ public static class StreamParser
 public sealed class AgentSession : IAsyncDisposable
 {
     readonly Process _proc;
+    // what the session's process starts, watched so the heavy things it leaves running end with the session (WOR-0170)
+    ChildProcesses.ProcessGroup? _group;
+
+    /// <summary>What an agent may leave running that ends with its session (WOR-0170), by exe name: copies of Darg (and
+    /// its test host) and the Android emulator (its qemu, headless or not), with whatever those started. One night agents
+    /// left an emulator and debug copies running after they were done; they lived on until Darg closed, and with the
+    /// emulator leaking, Windows ran out of memory and the PC bluescreened. Not everything an agent started: a daemon
+    /// its tools start for every session to share (claude-draw, Forge) must outlive it. Tests add a name of their own.</summary>
+    public static Func<string, bool> LeftBehind { get; set; } = name =>
+        name.Equals("Darg.Desktop.exe", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("Darg.Desktop.Tests.exe", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("emulator.exe", StringComparison.OrdinalIgnoreCase) ||
+        name.StartsWith("qemu-system-", StringComparison.OrdinalIgnoreCase);
     readonly StringBuilder _stderr = new();
     // what's sent goes through a queue written on a thread of its own: a write to stdin blocks until the child reads,
     // and claude reads nothing until it has started up, so a card's prompt (more than the pipe holds) written
@@ -290,6 +303,7 @@ public sealed class AgentSession : IAsyncDisposable
         var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
         var s = new AgentSession(proc, psi.WorkingDirectory);
         proc.Start();
+        s._group = ChildProcesses.Leftovers(proc, LeftBehind);
         proc.StandardInput.AutoFlush = true;
         s._writer = Task.Run(s.WriteLoop);
         _ = Task.Run(s.ReadLoop);
@@ -407,6 +421,7 @@ public sealed class AgentSession : IAsyncDisposable
             await _proc.WaitForExitAsync(cts.Token);
         }
         catch (OperationCanceledException) { try { _proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } }
+        _group?.Dispose(); // the Darg copies and emulators it left running go with it
         _proc.Dispose();
     }
 }

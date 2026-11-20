@@ -46,6 +46,8 @@ Instances cannot see each other, by design: the work PC and home PC each run the
 | `DARG_LIVE=1` | Makes the unit tests also run the live Claude tests (a real Haiku turn). |
 | `DARG_LIVE_TREE`, `_BRANCH`, `_SCRIPT`, `_HOST`, `_REPO`, `_GH`, `_FORGE` | Set by `tools/live.ps1` and the live tests. Don't set by hand; `tools/test.ps1` clears them. |
 | `DARG_TEST_PYTHON` | Name the Python for the fake claude in integration tests. |
+| `DARG_TEST_SLOTS`, `DARG_TEST_COMMIT_PCT` | How many `tools/test.ps1` runs go at once on the machine (default 2), and the committed-memory percentage a run waits below before it builds (default 85). |
+| `DARG_MAX_COPIES` | How many agents' debug copies of Darg may run at once (default 4; 0 for no cap). The installed and live copies never count. A copy over the cap exits with code 3 and says why in `crash.log`. |
 
 ## Tests
 
@@ -58,6 +60,7 @@ pwsh -File tools/test.ps1 -Integration -Filter Send_back
 - **Unit tests**: `tests/Darg.Core.Tests` (xunit, no UI).
 - **Integration tests**: `tests/Darg.Desktop.Tests` (xunit v3 with Avalonia.Headless: the real window on a throwaway instance, agents played by `tools/perf/fake_claude.py`). Use `[AvaloniaFact]`, not `[Fact]`.
 - **One run per folder**: a second run waits and names the first (`.shots/test.lock`). Run in a worktree of your own when other agents share the main folder.
+- **Two runs per machine**: worktrees are separate folders, so `tools/test.ps1` also takes one of two machine-wide slots and waits while memory is short (WOR-0170). Five suites at once beside two emulators ran the PC out of memory.
 - **Filters**: `-Filter` matches `Class.Method`, and a filter that matches no test fails.
 - **Isolation**: `tools/test.ps1` clears inherited `DARG_*` variables and the Sandbox points `UserHome` and `CLAUDE_CONFIG_DIR` into `.shots/integration/_user`, so tests never read your real timings or settings.
 - **What a test leaves**: each integration test leaves `.shots/integration/<test>/`: its instance, board files, `fake-claude.jsonl` (what each agent was started with and sent) and PNGs of what the window showed. That is how you see a view without a running app.

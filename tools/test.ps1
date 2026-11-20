@@ -38,6 +38,42 @@ while (-not $lock) {
     }
 }
 
+# And a few runs on the whole machine at a time (WOR-0170): each worktree is its own folder, so five agents ran five
+# builds and suites at once (a suite alone peaks near 1.6 GB), beside two emulators, until Windows ran out of memory
+# and the PC bluescreened. A run takes one of DARG_TEST_SLOTS slots (default 2), waiting for one, and then waits while
+# the machine's committed memory is above DARG_TEST_COMMIT_PCT (default 85) percent of what it can commit.
+$slotDir = New-Item -ItemType Directory -Force (Join-Path $env:LOCALAPPDATA 'Darg\test-slots')
+$slots = if ($env:DARG_TEST_SLOTS -as [int]) { [math]::Max(1, [int]$env:DARG_TEST_SLOTS) } else { 2 }
+$slot = $null; $said = $false
+while (-not $slot) {
+    $busy = @()
+    for ($i = 1; $i -le $slots -and -not $slot; $i++) {
+        $path = Join-Path $slotDir "slot$i.lock"
+        try {
+            $slot = [IO.File]::Open($path, 'OpenOrCreate', 'ReadWrite', 'Read')
+            $slot.SetLength(0)
+            $me = [Text.Encoding]::UTF8.GetBytes("$repo, pid $PID, started $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
+            $slot.Write($me, 0, $me.Length); $slot.Flush()
+        } catch [IO.IOException] {
+            $busy += try { $r = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite'); try { (New-Object IO.StreamReader($r)).ReadToEnd() } finally { $r.Dispose() } } catch { 'unknown' }
+        }
+    }
+    if ($slot) { break }
+    if ((Get-Date) -gt $until) { $lock.Dispose(); Write-Host "All $slots test slots on this machine have been busy for $WaitMinutes min ($($busy -join '; ')). Giving up." -ForegroundColor Red; exit 1 }
+    if (-not $said) { Write-Host "All $slots test slots on this machine are in use ($($busy -join '; ')); waiting for one to come free." -ForegroundColor Yellow; $said = $true }
+    Start-Sleep -Seconds 3
+}
+$pct = if ($env:DARG_TEST_COMMIT_PCT -as [int]) { [int]$env:DARG_TEST_COMMIT_PCT } else { 85 }
+$said = $false
+while ($true) {
+    $os = Get-CimInstance Win32_OperatingSystem
+    $used = 100 * ($os.TotalVirtualMemorySize - $os.FreeVirtualMemory) / $os.TotalVirtualMemorySize
+    if ($used -le $pct) { break }
+    if ((Get-Date) -gt $until) { $slot.Dispose(); $lock.Dispose(); Write-Host ("The machine's memory has been {0:N0}% committed (over {1}%) for too long. Giving up: see what's using it (an emulator, other agents' builds)." -f $used, $pct) -ForegroundColor Red; exit 1 }
+    if (-not $said) { Write-Host ("The machine's memory is {0:N0}% committed (over {1}%); waiting for some to be freed." -f $used, $pct) -ForegroundColor Yellow; $said = $true }
+    Start-Sleep -Seconds 5
+}
+
 try {
     dotnet build "$repo/Darg.sln" -v quiet -nologo
     if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED" -ForegroundColor Red; exit 1 }
@@ -73,4 +109,4 @@ try {
     if ($failed.Count) { Write-Host "`nFAILED: $($failed -join ', ') (tests run: $counts)" -ForegroundColor Red; exit 1 }
     Write-Host "`nAll passed ($counts tests)." -ForegroundColor Green
 }
-finally { $lock.Dispose() }
+finally { $slot.Dispose(); $lock.Dispose() }

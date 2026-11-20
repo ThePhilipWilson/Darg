@@ -11,8 +11,11 @@ A message can steer the turn (AND-0007), for tests of what Fettle does:
 FAKE_ASK      asks an AskUserQuestion ("Which board?": Main or Elsewhere) before the work, waits for the answer and
               logs it as "answered"
 FAKE_CARD <project>: <title>   calls the Darg API's new-card ($DARG_API) as Fettle does, and replies with its link
+FAKE_SPAWN <file>  leaves a process running as agents leave an emulator (WOR-0170): pwsh's Start-Process starts a
+              hidden Windows PowerShell sleeping 10 minutes and exits, so nothing alive has it as a child; its id goes in
+              the file (not a ping: DevServerTests counts those)
 """
-import json, os, re, sys, threading, time
+import json, os, re, subprocess, sys, threading, time
 
 args = sys.argv[1:]
 lock = threading.Lock()
@@ -120,6 +123,13 @@ def work(text):
             emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Made " + got["link"] + "."}]}})
         except Exception as e:
             emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "new-card failed: %s" % e}]}})
+    spawn = re.search(r"FAKE_SPAWN (\S+)", text)
+    if spawn:
+        command = ("(Start-Process -FilePath powershell -ArgumentList '-NoProfile','-Command','Start-Sleep 600' -WindowStyle Hidden -PassThru).Id"
+                   " | Set-Content -LiteralPath '%s'" % spawn.group(1))
+        subprocess.run(["pwsh", "-NoProfile", "-NonInteractive", "-Command", command], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Left a process running."}]}})
     end = time.time() + seconds
     last_touch = time.time()
     n = 0
