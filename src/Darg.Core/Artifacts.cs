@@ -237,7 +237,10 @@ public sealed class ArtifactServer : IDisposable
             else if (parts.Length == 5 && parts[0] == "reply" && ctx.Request.HttpMethod == "POST")
                 await TakeReply(ctx, parts[1], parts[2], parts[3], parts[4]);
             else if (parts.Length is 2 or 3 && parts[0] == "api")
+            {
+                StallWatch.Shared.Count(parts.Length == 3 ? $"Api {parts[2]}" : "Api"); // for perf.log (WOR-0161)
                 await CallApi(ctx, parts[1], parts.Length == 3 ? parts[2] : null);
+            }
             else if (parts.Length is 2 or 3 && parts[0] == "agents")
                 await Agents(ctx, parts[1], parts.Length == 3 ? parts[2] : null);
             else res.StatusCode = 404;

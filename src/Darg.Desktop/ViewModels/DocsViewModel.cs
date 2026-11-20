@@ -4,6 +4,7 @@ using System.Text;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Darg.Core;
 
 namespace Darg.Desktop.ViewModels;
 
@@ -43,7 +44,7 @@ public partial class DocsViewModel : ObservableObject
         try
         {
             _watch = new FileSystemWatcher(folder, "*.md") { IncludeSubdirectories = true, EnableRaisingEvents = true };
-            void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
+            void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.Docs"); Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); }); }
             _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
         }
         catch (Exception) { }

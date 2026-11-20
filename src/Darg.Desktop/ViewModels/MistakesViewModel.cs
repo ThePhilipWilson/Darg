@@ -35,7 +35,7 @@ public partial class MistakesViewModel : ObservableObject, IDisposable
             var dir = Path.GetDirectoryName(file)!;
             Directory.CreateDirectory(dir);
             _watch = new FileSystemWatcher(dir, MistakeLog.FileName) { EnableRaisingEvents = true };
-            void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
+            void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.Mistakes"); Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); }); }
             _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
         }
         catch (Exception e) { Status = $"Can't watch {file}: {e.Message}"; }

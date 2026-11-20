@@ -31,6 +31,7 @@
     </PackageReference>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Iciclecreek.Avalonia.Terminal" Version="4.1.4" />
+    <PackageReference Include="Microsoft.Diagnostics.Runtime" Version="4.2.751201" />
   </ItemGroup>
 
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">

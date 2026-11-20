@@ -40,6 +40,9 @@ Instances cannot see each other, by design: the work PC and home PC each run the
 | `DARG_ADD_FOLDER` | Open Setup with this folder added as a project (unsaved). |
 | `DARG_API` | Set by Darg on every agent process: the address of [the Darg API](architecture.md#the-darg-api) with its token. Agents `POST $DARG_API/<command>`. |
 | `DARG_STALL_MS` | Lower the freeze-log threshold (default 200 ms) for `stalls.log`. |
+| `DARG_PERF_SECONDS` | Seconds between `perf.log` lines (default 60), see [performance.md](performance.md). |
+| `DARG_STACK_MS` | How long the UI thread must be held before its stack is logged (default 1000, minimum 100). |
+| `DARG_STACKS` | `0` turns the stack sampling off. |
 | `DARG_LIVE=1` | Makes the unit tests also run the live Claude tests (a real Haiku turn). |
 | `DARG_LIVE_TREE`, `_BRANCH`, `_SCRIPT`, `_HOST`, `_REPO`, `_GH`, `_FORGE` | Set by `tools/live.ps1` and the live tests. Don't set by hand; `tools/test.ps1` clears them. |
 | `DARG_TEST_PYTHON` | Name the Python for the fake claude in integration tests. |
@@ -86,5 +89,5 @@ Runs Darg under `dotnet watch` from its own worktree (`.claude/worktrees/live`, 
 
 - **Screenshots**: `tools/shot.ps1 -ProcessId <pid> -Out x.png` captures only the app's window (PrintWindow, works when covered). It does not capture WebView2 (Artifacts, Preview) or popup windows (the ▾ shell menu, the ⟳ flyout); use a screen copy or UI Automation for those.
 - **UI Automation**: it can press Avalonia buttons by name (look among the window's `Button` descendants). Synthetic clicks don't register on real Windows popups, and a flyout can't be opened while the window is behind another Darg.
-- **Crashes and freezes**: a crash in a view goes to `crash.log` in the instance folder instead of closing the app. Freezes go to `stalls.log` (a UI-thread heartbeat logs gaps over 200 ms with the named sections that ran); measure there before guessing at a slowdown. `tools/perf/load.ps1` starts N fake agents on a throwaway board to reproduce load.
+- **Crashes and freezes**: a crash in a view goes to `crash.log` in the instance folder instead of closing the app. Freezes go to `stalls.log` (a UI-thread heartbeat logs gaps over 200 ms with the named sections that ran); measure there before guessing at a slowdown. `tools/perf/load.ps1` starts N fake agents on a throwaway board to reproduce load; `perf.log` and `tools/perf/analyze.ps1` are in [performance.md](performance.md).
 - **Scratch output**: goes in `.shots/` (git-ignored).

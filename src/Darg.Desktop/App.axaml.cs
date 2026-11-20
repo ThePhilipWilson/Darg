@@ -6,6 +6,8 @@ namespace Darg.Desktop;
 
 public partial class App : Application
 {
+    System.Threading.Timer? _perfTimer;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -35,6 +37,15 @@ public partial class App : Application
             Darg.Core.StallWatch.Shared.Threshold = System.TimeSpan.FromMilliseconds(ms);
         new Avalonia.Threading.DispatcherTimer(Darg.Core.StallWatch.Shared.Interval, Avalonia.Threading.DispatcherPriority.Input,
             (_, _) => Darg.Core.StallWatch.Shared.Beat()).Start();
+        // held over a second: the UI thread's stack goes under the stall in stalls.log; and once a minute, what the
+        // app was busy with (CPU, memory, GC, sections, file watchers, API calls) goes to perf.log (WOR-0161)
+        UiStacks.Start();
+        try { Darg.Core.PerfLog.Shared.LogFile = System.IO.Path.Combine(Darg.Core.InstanceConfig.Folder(), "perf.log"); }
+        catch (System.Exception) { }
+        var perfEvery = int.TryParse(System.Environment.GetEnvironmentVariable("DARG_PERF_SECONDS"), out var ps) && ps > 0 ? ps : 60;
+        Darg.Core.PerfLog.Shared.Tick();
+        _perfTimer = new System.Threading.Timer(_ => Darg.Core.PerfLog.Shared.Tick(), null,
+            System.TimeSpan.FromSeconds(perfEvery), System.TimeSpan.FromSeconds(perfEvery));
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow();

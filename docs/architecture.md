@@ -14,7 +14,7 @@ Rule of thumb: put behaviour in Core with a unit test; keep the view model thin.
 
 An instance is a data folder (`%APPDATA%\Darg\<instance>`, or `DARG_HOME`; see [getting-started.md](getting-started.md#environment-variables)). `instance.json` lists its projects; each project has features (sections) switched on, folders and repos, boards, docs, saved commands, commit rules and an optional `preview`, all edited in [Setup](guide.md#setup). `LastProject` remembers the open tab in `last-project`, kept apart from `instance.json` so switching tabs doesn't rewrite a file people edit. Instances cannot see each other.
 
-Beside `instance.json` the instance folder also holds: `settings.json` (theme, Optimise tokens), `usage.json` (latest usage readings), `profiles.md` (model profiles), `flows/` (shared flows), `fettle-briefing.md`, `crash.log`, `stalls.log`, `dictation.log`, and the saved agents.
+Beside `instance.json` the instance folder also holds: `settings.json` (theme, Optimise tokens), `usage.json` (latest usage readings), `profiles.md` (model profiles), `flows/` (shared flows), `fettle-briefing.md`, `crash.log`, `stalls.log`, `perf.log`, `dictation.log`, and the saved agents.
 
 ## Where a project's files live
 

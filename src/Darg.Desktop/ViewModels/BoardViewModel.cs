@@ -408,7 +408,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (_project.Boards is null || !Directory.Exists(_project.Boards)) return;
         var t = new DispatcherTimer(TimeSpan.FromMilliseconds(400), DispatcherPriority.Background, (s, _) => { ((DispatcherTimer)s!).Stop(); RefreshBoards(); });
         _watchBoards = new FileSystemWatcher(_project.Boards, "board.json") { IncludeSubdirectories = true, EnableRaisingEvents = true };
-        void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { t.Stop(); t.Start(); });
+        void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.BoardJson"); Dispatcher.UIThread.Post(() => { t.Stop(); t.Start(); }); }
         _watchBoards.Created += Poke; _watchBoards.Deleted += Poke; _watchBoards.Renamed += (s, e) => Poke(s, e);
     }
 
@@ -1177,7 +1177,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (Folder is null || !Directory.Exists(Folder)) return;
         _debounce ??= new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => { _debounce!.Stop(); Changed(); });
         _watch = new FileSystemWatcher(Folder) { IncludeSubdirectories = true, EnableRaisingEvents = true };
-        void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
+        void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.Board"); Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); }); }
         _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
     }
 

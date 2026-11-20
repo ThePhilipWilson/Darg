@@ -11,6 +11,7 @@ Darg is one app for everything in a project: boards, notes, docs, code, agents, 
 | [guide.md](guide.md) | What each section of the app is for and how to use it. |
 | [cards-and-qa.md](cards-and-qa.md) | The life of a card: Work on, QA, For Human Attention, decisions, reports, Done, CNR. |
 | [decisions-and-gotchas.md](decisions-and-gotchas.md) | Decisions, findings and traps collected from the finished-agent reports, with the card each came from. |
+| [performance.md](performance.md) | How to profile Darg (stalls.log with stacks, perf.log, analyze.ps1) and what the first trace found (WOR-0161). |
 | [REMOTE.md](REMOTE.md) | How a phone reaches the desktop API (AND-0002): TLS with a pinned certificate, pairing by QR, per-phone tokens, what's exposed. |
 
 ## Plans and history

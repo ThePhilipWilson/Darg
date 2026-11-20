@@ -173,7 +173,7 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
         {
             Directory.CreateDirectory(folder);
             _watch = new FileSystemWatcher(folder, "*.md") { EnableRaisingEvents = true };
-            void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
+            void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.Reports"); Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); }); }
             _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
         }
         catch (Exception e) { Status = $"Can't watch {folder}: {e.Message}"; }

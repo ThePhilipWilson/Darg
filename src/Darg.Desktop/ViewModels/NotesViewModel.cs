@@ -139,7 +139,7 @@ public partial class NotesViewModel : ObservableObject
         {
             Directory.CreateDirectory(folder);
             _watch = new FileSystemWatcher(folder, "*.md") { EnableRaisingEvents = true };
-            void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
+            void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.Notes"); Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); }); }
             _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
             // the columns: Fettle's Organise may add some, or wall.json may be edited by hand
             _watchWall = new FileSystemWatcher(folder, "wall.json") { EnableRaisingEvents = true };
@@ -152,7 +152,7 @@ public partial class NotesViewModel : ObservableObject
             if (boards is not null && Directory.Exists(boards))
             {
                 _watchBoards = new FileSystemWatcher(boards, "*.md") { IncludeSubdirectories = true, EnableRaisingEvents = true };
-                void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
+                void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.NotesBoards"); Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); }); }
                 _watchBoards.Changed += Poke; _watchBoards.Created += Poke; _watchBoards.Deleted += Poke; _watchBoards.Renamed += (s, e) => Poke(s, e);
             }
         }

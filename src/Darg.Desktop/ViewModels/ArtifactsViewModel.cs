@@ -64,7 +64,7 @@ public partial class ArtifactsViewModel : ObservableObject
         {
             Directory.CreateDirectory(Folder);
             _watch = new FileSystemWatcher(Folder) { IncludeSubdirectories = true, EnableRaisingEvents = true };
-            void Poke(object? s, FileSystemEventArgs e) => Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
+            void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.Artifacts"); Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); }); }
             _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
         }
         catch (Exception) { }

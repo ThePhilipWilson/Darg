@@ -5,7 +5,7 @@
 # uses the real claude (it costs sessions). -Switch then flips sections and agents, -Scroll scrolls the open
 # transcript through UI Automation. Toasts show for real when the fake turns end. Build first: dotnet build.
 #   pwsh -File tools/perf/load.ps1 -Cards 5 -Section Board -Touch -StallMs 100
-param([string]$Board = "$env:APPDATA/Workbench/home/projects/workbench/tasks",
+param([string]$Board = "D:/GitHub/ThePhilipWilson/Workbench/.darg/tasks",
       [int]$Cards = 5, [int]$Wait = 40, [string]$Section = 'Board', [switch]$Real, [switch]$Keep,
       [double]$Rate = 5, [int]$Seconds = 30, [int]$Result = 4000, [switch]$Touch, [switch]$Switch, [switch]$Scroll, [int]$StallMs = 200)
 $ErrorActionPreference = 'Stop'
