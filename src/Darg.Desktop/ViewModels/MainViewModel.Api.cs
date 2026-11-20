@@ -73,6 +73,8 @@ public partial class MainViewModel
         Add("run-flow", "run a flow: {project, flow, card} on a board card, or {project, flow, task} on a task in words. Only when Philip asks.", RunFlow);
         Add("theme", "the app's colours: {theme} switches to that theme (" + string.Join(", ", Themes.All.Select(t => t.Id)) + ") and saves it; " +
                      "{} says which is on. Only when Philip asks.", SetThemeApi);
+        Add("optimise-tokens", "the header's Optimise tokens toggle: {on: true|false} turns it on (every agent one model down and at no more than " +
+                               "medium effort, running ones from their next turn) or off; {} says whether it's on. Only when Philip asks.", OptimiseTokensApi);
         Add("run-command", "run one of a project's saved commands in its Terminal section: {project, command} (the command's name).", RunCommand);
     }
 
@@ -86,6 +88,19 @@ public partial class MainViewModel
         var why = SetTheme(theme);
         SettingsPage?.Refresh();
         return why ?? $"{theme.Name} is on.";
+    }
+
+    string OptimiseTokensApi(ApiArgs a)
+    {
+        if (a.Get("on") is not { } text) return $"Optimise tokens is {(TokenSaver.On ? "on" : "off")}.";
+        var on = text.Trim().ToLowerInvariant() switch
+        {
+            "true" or "on" or "yes" or "1" => true,
+            "false" or "off" or "no" or "0" => false,
+            _ => throw new ApiError($"on takes true or false, not \"{text}\"."),
+        };
+        var why = SetOptimiseTokens(on);
+        return $"Optimise tokens is {(on ? "on" : "off")}." + (why is null ? "" : $" Couldn't save it: {why}");
     }
 
     ProjectViewModel FindProject(ApiArgs a)

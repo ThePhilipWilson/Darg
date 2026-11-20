@@ -33,6 +33,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var p in config.Projects) Projects.Add(Make(p));
         Mascot = new MascotViewModel(config.Projects) { Context = Where };
         Mascot.Restore();
+        Usage.OptimiseChanged = on => SetOptimiseTokens(on);
         foreach (var p in Projects) if (p.Agents is { } a) a.Mascot = Mascot;
         Mascot.Notify += (agent, what, detail) =>
         {
@@ -59,6 +60,16 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>The header's usage bar and timer (WOR-0069).</summary>
     public UsageViewModel Usage { get; } = new();
+
+    /// <summary>The header's Optimise tokens toggle (WOR-0159): saved, shown, and every agent open now switches
+    /// (from its next turn); null when saved, else why it wasn't.</summary>
+    public string? SetOptimiseTokens(bool on)
+    {
+        var why = TokenSaver.Set(on);
+        if (Usage.OptimiseTokens != on) Usage.OptimiseTokens = on; // comes back here, which does no harm
+        foreach (var a in Projects.SelectMany(p => p.Agents?.Agents ?? []).Concat(Mascot.Live()).Distinct().ToList()) a.ApplyTokenSaver();
+        return why;
+    }
 
     /// <summary>Agents in the middle of a turn, by name (Fettle's chats as "Fettle: name"): what a restart would cut off.</summary>
     IReadOnlyList<string> BusyAgents()

@@ -126,6 +126,8 @@ public static class Themes
 public sealed class AppSettings
 {
     [JsonPropertyName("theme")] public string Theme { get; set; } = Darg.Core.Themes.Dark.Id;
+    /// <summary>The header's Optimise tokens toggle (<see cref="TokenSaver"/>).</summary>
+    [JsonPropertyName("optimiseTokens")] public bool OptimiseTokens { get; set; }
 
     static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 

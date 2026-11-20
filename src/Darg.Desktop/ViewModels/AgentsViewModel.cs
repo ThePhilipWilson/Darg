@@ -629,23 +629,56 @@ public partial class AgentViewModel : ObservableObject
     string? _model, _effort, _mode;
     bool _fromSession;
 
-    partial void OnModelChoiceChanged(AgentChoice value) => Picked(ref _model, value, s => s.SetModel(value.Value));
-    partial void OnEffortChoiceChanged(AgentChoice value) => Picked(ref _effort, value, s => s.SetEffort(value.Value));
+    partial void OnModelChoiceChanged(AgentChoice value)
+    {
+        if (Picked(ref _model, value, s => s.SetModel(value.Value))) { _modelByHand = true; _runModel = _model; }
+    }
+    partial void OnEffortChoiceChanged(AgentChoice value)
+    {
+        if (Picked(ref _effort, value, s => s.SetEffort(value.Value))) { _effortByHand = true; _runEffort = _effort; }
+    }
     partial void OnModeChoiceChanged(AgentChoice value) => Picked(ref _mode, value, s => s.SetPermissionMode(value.Value));
 
-    void Picked(ref string? field, AgentChoice? value, Action<AgentSession> tell)
+    /// <summary>A pick made by hand: kept, and told to a running session. False when the session said so (nothing to tell it).</summary>
+    bool Picked(ref string? field, AgentChoice? value, Action<AgentSession> tell)
     {
-        if (_fromSession || value is null) return; // the session said so; nothing to tell it
+        if (_fromSession || value is null) return false;
         field = value.Value == AgentChoices.Default ? null : value.Value;
         _handPicked = true;
         if (_session is not null) tell(_session);
         Save();
+        return true;
+    }
+
+    // Optimise tokens (WOR-0159): what the session runs on, which is _model and _effort lowered while the
+    // header's toggle is on (a pick made by hand isn't). _model and _effort stay what it was given, so turning
+    // the toggle off puts it back.
+    bool _modelByHand, _effortByHand;
+    string? _runModel, _runEffort, _defaultModel;
+
+    (string? Model, string? Effort) Running() => TokenSaver.Running(_model, _effort, _defaultModel, _modelByHand, _effortByHand);
+
+    /// <summary>The Optimise tokens toggle changed: a running session switches from its next turn, with a line in the
+    /// transcript saying so; one not running picks it up when it starts.</summary>
+    public void ApplyTokenSaver()
+    {
+        if (_session is not { } session) return;
+        var (model, effort) = Running();
+        if (model == _runModel && effort == _runEffort) return;
+        if (model != _runModel) session.SetModel(model ?? AgentChoices.Default);
+        if (effort != _runEffort) session.SetEffort(effort ?? AgentChoices.Default);
+        _runModel = model;
+        _runEffort = effort;
+        Items.Add(new NoteItem(TokenSaver.On
+            ? $"Optimise tokens on: {TokenSaver.Describe(model, effort)} from the next turn (it was given {TokenSaver.Describe(_model, _effort)})"
+            : $"Optimise tokens off: back to {TokenSaver.Describe(model, effort)} from the next turn", false));
     }
 
     /// <summary>Say in the model picker what "default" is, keeping the pick as it was.</summary>
     void NameDefaultModel(string? model)
     {
         if (string.IsNullOrWhiteSpace(model)) return;
+        _defaultModel = model;
         var keep = ModelChoice;
         _fromSession = true;
         ModelChoices = AgentChoices.ModelsWithDefault(model);
@@ -903,10 +936,14 @@ public partial class AgentViewModel : ObservableObject
         try
         {
             List<string> args = resume && SessionId is not null ? ["--resume", SessionId, .. _args] : [.. _args];
-            args.AddRange(AgentChoices.LaunchArgs(_model, _effort, _mode));
+            var (runModel, runEffort) = Running();
+            args.AddRange(AgentChoices.LaunchArgs(runModel, runEffort, _mode));
+            if (runModel != _model || runEffort != _effort)
+                Items.Add(new NoteItem($"Optimise tokens is on: starting on {TokenSaver.Describe(runModel, runEffort)} (it was given {TokenSaver.Describe(_model, _effort)})", false));
             AgentSession session;
             using (StallWatch.Shared.Section("AgentSession.Start")) session = AgentSession.Start(Cwd, extraArgs: args, apiUrl: ArtifactHost.Server?.ApiUrl);
             _session = session;
+            (_runModel, _runEffort) = (runModel, runEffort);
             // a session closed on request still reports its last events and its exit: they're not news
             session.Event += e => Dispatcher.UIThread.Post(() => { if (_session == session) On(e); });
             session.Send(message); // queued: it never waits for claude to read (WOR-0076)
@@ -966,7 +1003,7 @@ public partial class AgentViewModel : ObservableObject
         {
             case SessionStarted s:
                 Model = s.Model;
-                if (_model is null && !_args.Contains("--model")) NameDefaultModel(s.Model); // on the default: this is what it is
+                if (_model is null && _runModel is null && !_args.Contains("--model")) NameDefaultModel(s.Model); // on the default: this is what it is
                 SessionId = s.SessionId;
                 OnSubscription = s.OnSubscription;
                 Billing = s.OnSubscription ? "on your subscription" : $"API key ({s.ApiKeySource})";

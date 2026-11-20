@@ -27,7 +27,16 @@ public partial class UsageViewModel : ObservableObject
         _tick.Start();
         Refresh();
         ReadWork();
+        TokenSaver.Load();
+        OptimiseTokens = TokenSaver.On; // before anyone listens: nothing to switch yet
     }
+
+    /// <summary>The Optimise tokens toggle beside the bar (WOR-0159, <see cref="TokenSaver"/>).</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OptimiseTip))] public partial bool OptimiseTokens { get; set; }
+    /// <summary>Told when the toggle is flipped (the app switches agents and saves it).</summary>
+    public Action<bool>? OptimiseChanged { get; set; }
+    partial void OnOptimiseTokensChanged(bool value) => OptimiseChanged?.Invoke(value);
+    public string OptimiseTip => (OptimiseTokens ? "On. " : "Off. ") + TokenSaver.Tip;
 
     /// <summary>"today 3h 12m": Claude time today; empty without claude-code-timer.</summary>
     [ObservableProperty] public partial string Today { get; set; } = "";
