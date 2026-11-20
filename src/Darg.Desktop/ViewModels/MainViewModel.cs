@@ -53,6 +53,7 @@ public partial class MainViewModel : ObservableObject
             artifacts.ListAgents = () => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ListAgents()).GetTask();
             artifacts.CloseAgents = ids => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => CloseAgents(ids)).GetTask();
             RegisterApi(artifacts.Api);
+            StartRemote(config, artifacts.Api);
         }
         ArtifactHost.OpenRequested += file => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenArtifact(file));
         Restart = new RestartViewModel(BusyAgents, SaveAll);

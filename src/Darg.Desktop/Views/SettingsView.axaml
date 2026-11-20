@@ -89,6 +89,51 @@
         </StackPanel>
         <SelectableTextBlock Classes="dim small" Text="{Binding PushState}" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"/>
         <TextBlock Classes="bad" Text="{Binding Status}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" TextWrapping="Wrap"/>
+
+        <!-- phone access (AND-0002): pair by QR, list and revoke paired phones -->
+        <StackPanel DataContext="{Binding Phone}" x:DataType="vm:PhoneViewModel" Spacing="10" Margin="0,18,0,0">
+          <TextBlock Text="Phone" FontSize="15" FontWeight="SemiBold"/>
+          <TextBlock Classes="dim small" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"
+                     Text="A paired phone reaches this app's projects, cards and agents, over an encrypted link on the home network or Tailscale. Each phone gets a token of its own; revoke one here and its next call is refused."/>
+          <TextBlock Classes="dim small" Text="{Binding State}" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"/>
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Allowed}">
+            <Button Content="📱 Pair a phone" Command="{Binding PairCommand}" IsVisible="{Binding !Pairing}"/>
+            <Button Content="Cancel pairing" Command="{Binding CancelPairCommand}" IsVisible="{Binding Pairing}"/>
+          </StackPanel>
+          <Border IsVisible="{Binding Pairing}" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1"
+                  CornerRadius="10" Padding="14" HorizontalAlignment="Left">
+            <StackPanel Orientation="Horizontal" Spacing="18">
+              <!-- a QR is black on white whatever the theme: scanners want that, so it's a fixed surface like the post-its -->
+              <Border Background="White" Padding="16" CornerRadius="6">
+                <Path Data="{Binding Qr}" Fill="Black" Stretch="Uniform" Width="220" Height="220" AutomationProperties.Name="Pairing QR code"/>
+              </Border>
+              <StackPanel Spacing="8" VerticalAlignment="Center" MaxWidth="360">
+                <TextBlock Text="Scan this with Darg on the phone" FontWeight="SemiBold"/>
+                <TextBlock Classes="dim small" Text="or type the code:" />
+                <SelectableTextBlock Text="{Binding Code}" FontSize="26" FontWeight="SemiBold" FontFamily="Consolas,Menlo,monospace"/>
+                <TextBlock Classes="dim small" Text="{Binding Countdown}"/>
+                <SelectableTextBlock Classes="dim small" Text="{Binding PairUri}" TextWrapping="Wrap"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+          <TextBlock Classes="dim small" Text="No phone paired yet." IsVisible="{Binding NoDevices}"/>
+          <ItemsControl ItemsSource="{Binding Devices}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:PhoneDevice">
+                <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8" Padding="12,8"
+                        Margin="0,0,0,6" HorizontalAlignment="Left" MinWidth="420">
+                  <DockPanel>
+                    <Button DockPanel.Dock="Right" Content="Revoke" Command="{Binding RevokeCommand}" AutomationProperties.Name="{Binding RevokeName}" Margin="12,0,0,0"/>
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                      <TextBlock Classes="dim small" Text="{Binding Seen}"/>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
       </StackPanel>
     </ScrollViewer>
   </DockPanel>

@@ -6,11 +6,13 @@ using Darg.Core;
 namespace Darg.Desktop.ViewModels;
 
 /// <summary>The app's own settings (the header's ⚙ Settings): the theme (a pick shows at once and is saved to
-/// settings.json in the instance folder) and phone notifications through ntfy (AND-0006, kept in instance.json).</summary>
+/// settings.json in the instance folder), phone notifications through ntfy (AND-0006, kept in instance.json), and phone access (<see cref="PhoneViewModel"/>, AND-0002).</summary>
 public partial class SettingsViewModel : ObservableObject
 {
     readonly MainViewModel _main;
     public IReadOnlyList<ThemeChoice> Themes { get; }
+    /// <summary>Pairing a phone and the paired ones (AND-0002).</summary>
+    public PhoneViewModel Phone { get; } = new();
     [ObservableProperty] public partial string? Status { get; set; }
 
     public SettingsViewModel(MainViewModel main)

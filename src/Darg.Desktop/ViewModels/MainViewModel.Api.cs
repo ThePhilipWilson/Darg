@@ -94,6 +94,7 @@ public partial class MainViewModel
         Add("fettle-answer", "for the phone app, not Fettle: answer what a Fettle chat waits on: {chat, answers} (question text to the label picked, or his own words) " +
                              "for a question, {chat, allow: true|false} for a tool it wants to use.", FettleAnswer);
         Add("fettle-chats", "for the phone app, not Fettle: a project's Fettle chats, newest first: {project}. Each: id, name, updated.", FettleChats);
+        RegisterPhoneApi(api);
     }
 
     static string Json(JsonNode n) => DargApi.Json(n);

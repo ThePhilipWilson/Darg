@@ -16,6 +16,9 @@ public sealed class InstanceConfig
     public string? Shell { get; set; }
     /// <summary>Phone notifications through ntfy (AND-0006): off when not set, so the work instance leaves them out.</summary>
     public PushConfig? Push { get; set; }
+    /// <summary>Phone access (AND-0002, <see cref="RemoteServer"/>): false leaves it out of this instance altogether (a
+    /// work machine), so nothing listens and no phone can pair. Not set means allowed: it still listens only once a phone is paired.</summary>
+    public bool? Remote { get; set; }
     public List<ToolConfig> ToolsOrDefaults() => Tools is { Count: > 0 } t ? t : ToolConfig.Defaults();
 
     static readonly JsonSerializerOptions Json = new()

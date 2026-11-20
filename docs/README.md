@@ -19,6 +19,7 @@ Darg is one app for everything in a project: boards, notes, docs, code, agents, 
 | [PLAN.md](PLAN.md) | The original plan (2026-11-16): the ask, the big technical calls and what was built in the first slices. Written when the app was called Workbench. |
 | [PHONE-PLAN.md](PHONE-PLAN.md) | Draft plan for phone and tablet. Nothing in it is built. |
 | [ANDROID.md](ANDROID.md) | The Android decision: thin remote client, native Avalonia app over the Darg API; v1 features and what stays desktop-only. |
+| [REMOTE.md](REMOTE.md) | How a phone reaches the desktop API (AND-0002): TLS with a pinned certificate, pairing by QR, per-phone tokens, what's exposed. |
 | [MORNING.md](MORNING.md) | A checklist from the first overnight build (2026-11-17). Kept as history. |
 | [mockup-v1.html](mockup-v1.html) | The first mockup, opened in a browser. |
 

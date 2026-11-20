@@ -72,6 +72,7 @@ public static class Sandbox
         Environment.SetEnvironmentVariable("FAKE_RATE", "4");
         Environment.SetEnvironmentVariable("FAKE_RESULT", "200");
         Environment.SetEnvironmentVariable("FAKE_TOUCH", "0");
+        Environment.SetEnvironmentVariable("DARG_REMOTE_PORT", "0"); // phone access on any free port, never the real app's 47818
 
         ChildProcesses.TieToThisProcess(); // fake agents die with the test run, as real ones die with the app
         Notifier.Capture = n => { lock (Notifications) Notifications.Add(n); };
