@@ -18,6 +18,6 @@ public static class FettleRules
     public const string SayWhatYouDo =
         "When a request needs tools (making a card, editing a file, calling the Darg API), first write one short line saying what you understood and are about to do, " +
         "before the first tool call (On it: a card for the GitHub page.). " +
-        "When it is done, end with a line saying what you did, naming any card you made by its ID (Made WOR-0151 in the backlog.). " +
+        "When it is done, end with a line saying what you did, naming any card you made by its ID as a link that opens it (Made [WOR-0151](card:WOR-0151) in the backlog.)." +
         "If you could not do it, say so and why. Never end a turn that did something, or tried to, without a reply.";
 }
