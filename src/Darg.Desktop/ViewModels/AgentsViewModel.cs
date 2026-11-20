@@ -691,8 +691,19 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>Its card is done (in Completed or the board's last column). Set by the project as boards load.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText))] public partial bool CardDone { get; set; }
 
-    /// <summary>Its last turn ended normally ("Turn done" is the transcript's last line), so it wasn't stopped partway.</summary>
-    public bool FinishedTurn => Items.LastOrDefault() is NoteItem { Bad: false } n && n.Text.StartsWith("Turn done", StringComparison.Ordinal);
+    /// <summary>Its last turn ended normally ("Turn done" is the transcript's last line), so it wasn't stopped partway.
+    /// A close after that turn (Darg closing a QA agent that's done, Close, Close idle) doesn't change how it ended
+    /// (WOR-0153: it hid the turn's end, so a QA agent that passed its card was never forgotten); a close mid-turn does.</summary>
+    public bool FinishedTurn =>
+        Items.LastOrDefault(i => !(i is NoteItem { Bad: false } c && ClosedAfterTurn(c.Text))) is NoteItem { Bad: false } n
+        && n.Text.StartsWith("Turn done", StringComparison.Ordinal);
+
+    const string ClosedTail = ". Send a message to carry on.";
+
+    /// <summary>The note <see cref="CloseSession"/> leaves when it closes a session that wasn't mid-turn.</summary>
+    static bool ClosedAfterTurn(string note) =>
+        note.StartsWith("Session closed", StringComparison.Ordinal) && note.EndsWith(ClosedTail, StringComparison.Ordinal)
+        && !note.EndsWith(" mid-turn" + ClosedTail, StringComparison.Ordinal);
 
     /// <summary>A turn starts: progress counts from nothing again.</summary>
     DateTime _turnStart = DateTime.MinValue; // when the turn began, for whether its end notifies (Decisions.LongTurn)
@@ -1155,7 +1166,7 @@ public partial class AgentViewModel : ObservableObject
         End(stopWaiting: false); // closed while waiting for the reset, it resumes its session then
         var who = by is null ? "Session closed" : $"Session closed by {by}";
         Items.Add(new NoteItem(SessionId is null ? $"{who} before it began; start a new agent to carry on."
-            : mid ? $"{who} mid-turn. Send a message to carry on." : $"{who}. Send a message to carry on.", false));
+            : mid ? $"{who} mid-turn{ClosedTail}" : who + ClosedTail, false)); // FinishedTurn reads past the second
         Save();
         return true;
     }

@@ -70,6 +70,52 @@ public class DoneCardTests
     }
 
     [AvaloniaFact]
+    public async Task A_QA_agent_that_passes_its_card_to_done_goes_once_its_turn_ends()
+    {
+        // WOR-0153: Run QA reloads the board as its agent's turn ends, which closes a QA agent that's done ("Session closed
+        // by Darg"); the forget waiting for that turn then saw a closed agent, not a finished one, and it stayed listed
+        Environment.SetEnvironmentVariable("FAKE_SECONDS", "4");
+        try
+        {
+            using var app = DargApp.Make();
+            var card = app.Card("check the logo", "QA Ready", "The logo.\n\n## How to check\n\nLook at the logo.\n");
+            await app.Start();
+            await app.Api("qa-all", new { project = "proj" });
+            var qa = app.Agents.Agents.Single(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Qa);
+            await app.Until(() => qa.State == AgentState.Working, "the QA agent to start working");
+
+            // it passes the card mid-turn, as a QA agent does before its closing message
+            BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("Done"));
+            await DargApp.Settle(1000);
+            Assert.Contains(qa, app.Agents.Agents); // not killed mid-turn
+
+            await app.Until(() => !app.Agents.Agents.Contains(qa), "the QA agent to go once its turn ended");
+            Assert.Equal("", app.Crashes());
+        }
+        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
+    }
+
+    [AvaloniaFact]
+    public async Task Clear_finished_takes_an_agent_closed_after_its_turn_on_a_done_card()
+    {
+        // WOR-0153: the leftovers from before the fix, closed by Darg after their turn, showed "saved" and Clear finished
+        // skipped them; they finished their turn, so they read "Complete, pending removal" and go
+        using var app = DargApp.Make();
+        var done = app.Card("finished long ago", "Done");
+        await app.Start();
+        await app.Api("work-on", new { project = "proj", card = done.Id }); // work-on leaves Done alone
+        var stranded = app.Agents.ForCard(done.Id)!;
+        await app.Until(() => stranded.State == AgentState.Idle, "the turn to end");
+        Assert.True(stranded.CloseSession("Darg"));
+        Assert.Equal("Complete, pending removal", stranded.StateText);
+
+        app.Agents.ClearFinishedCommand.Execute(null);
+
+        Assert.DoesNotContain(stranded, app.Agents.Agents);
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
     public async Task Clean_up_forgets_the_agents_left_on_done_cards()
     {
         using var app = DargApp.Make();
