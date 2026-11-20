@@ -113,7 +113,15 @@ public class RemoteAgentsTests
         Assert.Equal(TranscriptEntry.FoldLines, shown.Split('\n').Length);
         Assert.Equal(30 - TranscriptEntry.FoldLines, hidden);
         Assert.Equal(("short", 0), TranscriptEntry.FoldText("short"));
-        Assert.EndsWith("…", TranscriptEntry.FoldText(new string('x', 1000)).Shown);
+        // one long paragraph: cut at a word near the character budget, its rest counted as a line to show
+        var paragraph = string.Join(" ", Enumerable.Repeat("word", 600));
+        var (cut, rest) = TranscriptEntry.FoldText(paragraph);
+        Assert.EndsWith("word …", cut);
+        Assert.InRange(cut.Length, TranscriptEntry.FoldChars / 2, TranscriptEntry.FoldChars + 2);
+        Assert.Equal(1, rest);
+        // short lines but many characters: stops at a line's end before the budget
+        var wide = string.Join("\n", Enumerable.Repeat(new string('y', 500), 5));
+        Assert.Equal((string.Join("\n", Enumerable.Repeat(new string('y', 500), 2)), 3), TranscriptEntry.FoldText(wide));
 
         var list = RemoteAgent.List(JsonNode.Parse("""
             [{"id":"a","name":"done one","state":"idle","project":"P","projectId":"p"},

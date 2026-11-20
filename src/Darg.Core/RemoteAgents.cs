@@ -59,16 +59,31 @@ public sealed record TranscriptEntry(int Index, string Kind, string Text, string
     /// <summary>Whether there's more to a step than its line (a result, a diff, a written file's start).</summary>
     public bool HasDetail => Result is not null || Removed is not null || Added is not null || Preview is not null;
 
-    /// <summary>The text cut to <paramref name="lines"/> lines (and a line to 400 characters), with how many lines were left out;
-    /// whole when it fits.</summary>
-    public (string Shown, int Hidden) Fold(int lines = FoldLines) => FoldText(Text, lines);
+    /// <summary>Characters shown before "show more", however few lines they make: a long paragraph wraps to a screenful too.</summary>
+    public const int FoldChars = 1200;
 
+    /// <summary>The text cut to a screenful (<paramref name="lines"/> lines or <see cref="FoldChars"/> characters, at a line's end
+    /// where it can), with how many lines were left out, counting a line cut short; whole and 0 when it fits.</summary>
     public static (string Shown, int Hidden) FoldText(string text, int lines = FoldLines)
     {
         var all = text.Replace("\r\n", "\n").TrimEnd('\n').Split('\n');
-        var keep = all.Take(lines).Select(l => l.Length > 400 ? l[..400] + "…" : l);
-        var shown = string.Join("\n", keep);
-        return (shown, Math.Max(0, all.Length - lines));
+        var keep = new List<string>();
+        var chars = 0;
+        foreach (var line in all)
+        {
+            if (keep.Count == lines || (keep.Count > 0 && chars + line.Length > FoldChars)) break;
+            keep.Add(line);
+            chars += line.Length + 1;
+        }
+        var hidden = all.Length - keep.Count;
+        if (keep[0].Length > FoldChars)
+        {
+            // one paragraph longer than a screen: cut it at a word, and count its rest as a line left out
+            var cut = keep[0].LastIndexOf(' ', FoldChars);
+            keep[0] = keep[0][..(cut > FoldChars / 2 ? cut : FoldChars)] + " …";
+            hidden++;
+        }
+        return (string.Join("\n", keep), hidden);
     }
 
     public static TranscriptEntry From(JsonObject o) => new(
