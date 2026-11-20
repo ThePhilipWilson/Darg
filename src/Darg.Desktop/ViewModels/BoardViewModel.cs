@@ -1372,6 +1372,8 @@ public sealed partial class CardViewModel : ObservableObject
     public bool InDone { get; }
     /// <summary>Work on and Improve are offered: no agent on it, and it isn't in Done.</summary>
     public bool CanStart => !HasAgent && !InDone;
+    /// <summary>WOR-0162: an Improve button beside a thin card's score (under 3 stars), when Improve could start.</summary>
+    public bool ShowImprove => CanStart && Quality.Stars < TicketScore.Max;
     public IRelayCommand WorkOnCommand { get; }
     public IRelayCommand OpenAgentCommand { get; }
     public IRelayCommand ImproveCommand { get; }
@@ -1472,7 +1474,7 @@ public partial class CardEditor : ObservableObject
     public IReadOnlyList<string> TypeChoices { get; }
     [ObservableProperty] public partial string Type { get; set; }
     [ObservableProperty] public partial string Title { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Pictures), nameof(Quality))] public partial string Description { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Pictures), nameof(Quality), nameof(ShowImprove))] public partial string Description { get; set; }
     /// <summary>The ticket quality star by the heading (WOR-0156), from the description as typed and the card's
     /// later sections (## Where, ## Done when), so it moves as the box is filled in.</summary>
     public TicketScore Quality => TicketQuality.Score(TicketQuality.TicketText(Description ?? "", _card?.Card.Sections ?? ""));
@@ -1507,6 +1509,8 @@ public partial class CardEditor : ObservableObject
     /// <summary>The card's live agent, looked up now: the panel can outlast the agent (forgotten while it's open).</summary>
     bool HasAgent => _card is not null && (_board.AgentFor?.Invoke(_card.Id) is not null);
     public bool CanWorkOn => _card is not null && !HasAgent && !_card.InDone;
+    /// <summary>WOR-0162: Improve beside the panel's score while it is under 3 stars (follows the description as typed).</summary>
+    public bool ShowImprove => CanWorkOn && Quality.Stars < TicketScore.Max;
     /// <summary>The card is in the board's QA column: Work on gets it running to try, and it can be sent back.</summary>
     public bool InQa => _card is not null && _board.InQa(_card.Card);
     public bool InAttention => _card is not null && _board.InAttention(_card.Card);
@@ -1643,6 +1647,7 @@ public partial class CardEditor : ObservableObject
         FlowTargets = MakeFlowTargets();
         OnPropertyChanged(nameof(FlowTargets));
         OnPropertyChanged(nameof(CanWorkOn));
+        OnPropertyChanged(nameof(ShowImprove));
         OnPropertyChanged(nameof(CanSendBack)); OnPropertyChanged(nameof(CanRunQa)); OnPropertyChanged(nameof(CanQaVerdict)); OnPropertyChanged(nameof(CanToAttention)); OnPropertyChanged(nameof(HasReport)); OnPropertyChanged(nameof(InAttention));
     }
 

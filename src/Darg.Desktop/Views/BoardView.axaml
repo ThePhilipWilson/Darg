@@ -231,6 +231,8 @@
                                 <TextBlock Classes="quality" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
                                            FontSize="11" Text="{Binding Quality.Text}" VerticalAlignment="Center"
                                            ToolTip.Tip="{Binding Quality.Tip}" AutomationProperties.Name="{Binding Quality.Tip}"/>
+                                <Button Classes="workon" Content="✦ Improve" Command="{Binding ImproveCommand}" IsVisible="{Binding ShowImprove}"
+                                        AutomationProperties.Name="Improve card" ToolTip.Tip="An agent fills this thin card out: what's wanted, where, done when"/>
                               </StackPanel>
                             </DockPanel>
                             <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
@@ -295,6 +297,8 @@
               <TextBlock Classes="quality" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
                          FontSize="13" VerticalAlignment="Center" Text="{Binding Quality.Long}"
                          ToolTip.Tip="{Binding Quality.Tip}" AutomationProperties.Name="{Binding Quality.Tip}"/>
+              <Button Classes="workon" Content="✦ Improve" Command="{Binding ImproveCommand}" IsVisible="{Binding ShowImprove}"
+                      AutomationProperties.Name="Improve card" ToolTip.Tip="An agent fills this thin card out: what's wanted, where, done when"/>
             </StackPanel>
           </DockPanel>
           <TextBox Text="{Binding Title}" PlaceholderText="Title" FontSize="15" TextWrapping="Wrap"/>

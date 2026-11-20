@@ -76,4 +76,44 @@ public class TicketQualityTests
         Assert.Equal(Colour(new TextBlock { Foreground = Theme("Warn") }), Colour(star));
         app.Shot("board-amber");
     }
+
+    static Button? ImproveButton(DargApp app, string id) => app.Window.GetVisualDescendants().OfType<Button>()
+        .FirstOrDefault(b => b.IsEffectivelyVisible && b.Content as string == "✦ Improve" && b.DataContext is CardViewModel c && c.Id == id);
+
+    [AvaloniaFact] // WOR-0162: Improve beside the score of a thin card, and not beside a green one
+    public async Task A_thin_card_has_Improve_beside_its_score_and_a_green_one_has_none()
+    {
+        using var app = DargApp.Make();
+        var thin = app.Card("remember folded columns", description:
+            "When the board opens it should remember which columns were folded last time, so I don't have to fold them again after every restart.\n\n" +
+            "**Where:** the Board section's column headers.");
+        var full = app.Card("smooth logo", description:
+            "The Darg logo in the header has jagged edges at 100% scale; draw it smoothly at every scale so it looks crisp.\n\n" +
+            "**Where:** the header, `src/Darg.Desktop/Views/MainWindow.axaml`.\n\n**Done when:**\n- the logo's edges are smooth at 100%, 150% and 200%\n");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await DargApp.Settle();
+
+        Assert.Equal("★3", Star(app, full.Id)!.Text);
+        Assert.Null(ImproveButton(app, full.Id));
+        Assert.Equal("★2", Star(app, thin.Id)!.Text);
+        var button = ImproveButton(app, thin.Id);
+        Assert.NotNull(button);
+        app.Shot("improve-beside-score");
+
+        // the panel offers it too, and it goes as the description is typed to three stars
+        var tile = app.Board.Show(thin.Id)!;
+        app.Board.Open(tile);
+        await DargApp.Settle();
+        var editor = app.Board.Editor!;
+        Assert.True(editor.ShowImprove);
+        editor.Description += "\n\n**Done when:**\n- a folded column is still folded after a restart\n";
+        Assert.False(editor.ShowImprove);
+        app.Board.Editor = null;
+
+        // pressing it does what the card's Improve button does
+        tile.ImproveCommand.Execute(null);
+        await app.Until(() => app.Agents.ForCard(thin.Id)?.Purpose == AgentPurposes.Improve, "an Improve agent on the thin card");
+        Assert.False(app.Board.Show(thin.Id)!.ShowImprove); // an agent is on it now
+    }
 }
