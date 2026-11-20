@@ -24,7 +24,11 @@ public static class RemoteHost
     /// <summary>Raised (on any thread) when it starts or stops, a pairing starts or ends, or a phone pairs.</summary>
     public static event Action? Changed;
 
-    static int Port() => int.TryParse(Environment.GetEnvironmentVariable("DARG_REMOTE_PORT"), out var p) ? p : RemoteAccess.PreferredPort;
+    /// <summary>The port to listen on instead of 47818 (0: any free one). The integration tests set it, in code rather
+    /// than through DARG_REMOTE_PORT, since one of them clears every DARG_ variable mid-run.</summary>
+    public static int? PortOverride { get; set; }
+
+    static int Port() => PortOverride ?? (int.TryParse(Environment.GetEnvironmentVariable("DARG_REMOTE_PORT"), out var p) ? p : RemoteAccess.PreferredPort);
 
     public static RemoteDevices Devices => _server?.Devices ?? new RemoteDevices(InstanceConfig.Folder());
 
