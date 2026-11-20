@@ -1,6 +1,6 @@
 # Phone access to the Darg API (AND-0002)
 
-How a phone reaches the desktop app, built 2026-11-20 for the approach in [ANDROID.md](ANDROID.md); the phone app itself is AND-0003 onwards. The commands it calls are [the Darg API](architecture.md#the-darg-api)'s. Code: `src/Darg.Core/Remote.cs` (server, devices, pairing, certificate), `src/Darg.Core/QrCode.cs` (the pairing QR), `src/Darg.Desktop/ViewModels/PhoneViewModel.cs` (Settings' Phone part, `RemoteHost`).
+How a phone reaches the desktop app, built 2026-11-20 for the approach in [ANDROID.md](ANDROID.md); the phone app's shell (connection, project list, section bar) is in `src/Darg.Mobile` (AND-0003), with later cards filling in its sections. The commands it calls are [the Darg API](architecture.md#the-darg-api)'s. Code: `src/Darg.Core/Remote.cs` (server, devices, pairing, certificate), `src/Darg.Core/QrCode.cs` (the pairing QR), `src/Darg.Desktop/ViewModels/PhoneViewModel.cs` (Settings' Phone part, `RemoteHost`).
 
 ## The route
 

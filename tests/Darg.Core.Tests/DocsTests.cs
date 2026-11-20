@@ -57,7 +57,25 @@ public sealed class DocsTests
         Assert.True(bad.Count == 0, "named in the docs but read nowhere: " + string.Join(", ", bad));
     }
 
-    static readonly Regex Link = new(@"\]\(([^)\s]+)\)", RegexOptions.Compiled);
+    /// <summary>The other way round (QA round 3): a variable the code reads must have a row in getting-started.md, which promises "every
+    /// environment variable it reads". DARG_REMOTE_PORT and DARG_TEST_QR_PYTHON were read for a while with no row.</summary>
+    [Fact]
+    public void Every_environment_variable_the_code_reads_is_in_getting_started()
+    {
+        var src = string.Concat(new[] { "src", "tests", "tools" }.Select(d => Source(d, "*.cs", "*.ps1", "*.py", "*.csproj", "*.props", "*.targets", "*.axaml")));
+        var doc = File.ReadAllText(Path.Combine(Docs(), "getting-started.md"));
+        var name = new Regex(@"\bDARG_[A-Z][A-Z_0-9]*[A-Z0-9]\b");
+        // a name the tests invent to prove something else; families the table writes as `DARG_LIVE_TREE`, `_BRANCH` and so on
+        string[] invented = ["DARG_SOMETHING_NEW"];
+        string[] families = ["DARG_LIVE_", "DARG_ANDROID_KEYSTORE_"];
+        var missing = name.Matches(src).Select(m => m.Value).Distinct()
+            .Where(n => !invented.Contains(n) && !doc.Contains(n))
+            .Where(n => !families.Any(f => n.StartsWith(f) && doc.Contains("`_" + n[f.Length..] + "`")))
+            .OrderBy(n => n).ToList();
+        Assert.True(missing.Count == 0, "read by the code but not in getting-started.md's table: " + string.Join(", ", missing));
+    }
+
+    static readonly Regex Link =new(@"\]\(([^)\s]+)\)", RegexOptions.Compiled);
     static readonly Regex WholeLink = new(@"\[[^\]]*\]\([^)]*\)", RegexOptions.Compiled);
     static readonly Regex CodeSpan = new(@"`[^`\n]*`", RegexOptions.Compiled);
     static readonly Regex Scheme = new(@"^[a-zA-Z][a-zA-Z0-9+.-]+:", RegexOptions.Compiled);

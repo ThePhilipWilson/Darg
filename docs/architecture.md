@@ -6,6 +6,7 @@ How Darg's parts fit together: the two projects, instances and where each projec
 
 - **`src/Darg.Core`**: no UI. Everything that can be tested without a window: stores for boards, notes, reports, mistakes, flows and artifacts, the agent session, the local API, git and GitHub helpers, themes and settings.
 - **`src/Darg.Desktop`**: the Avalonia app, MVVM with CommunityToolkit.Mvvm. Views in `Views/`, view models in `ViewModels/`. Every project's view stays alive across tab switches, so agents and terminals keep running.
+- **`src/Darg.Mobile` and `src/Darg.Android`**: the phone app. Mobile is plain net10.0 (views, view models, `DargClient`, `Connection`/`ConnectionStore`) on Core's theme keys, in `Darg.sln`; Android is the `net10.0-android` head, outside the solution. See [getting-started.md](getting-started.md#the-phone-app) and [ANDROID.md](ANDROID.md).
 - **Tests**: `tests/Darg.Core.Tests` (unit) and `tests/Darg.Desktop.Tests` (integration, the real window headless). See [getting-started.md](getting-started.md#tests).
 
 Rule of thumb: put behaviour in Core with a unit test; keep the view model thin. `ColumnWatch` and `ReportFlow` (what happens when a card moves, [cards-and-qa.md](cards-and-qa.md#reports-darg-writes-itself)) are in Core for exactly that reason, not in the view models (WOR-0102).

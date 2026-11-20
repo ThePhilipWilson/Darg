@@ -68,7 +68,7 @@ The *why* behind Darg, the traps found and what was tried and dropped, harvested
 
 ## Not built or open
 
-- **Phone**: [ANDROID.md](ANDROID.md) sets the approach. The desktop half is coming in: phone access to the API ([REMOTE.md](REMOTE.md), AND-0002), notifications through ntfy (AND-0006), the phone's board (AND-0004) and Fettle from the phone (AND-0007). The phone app itself isn't built. [PHONE-PLAN.md](PHONE-PLAN.md) was the first draft.
+- **Phone**: [ANDROID.md](ANDROID.md) sets the approach. The desktop half is coming in: phone access to the API ([REMOTE.md](REMOTE.md), AND-0002), notifications through ntfy (AND-0006), the phone's board (AND-0004) and Fettle from the phone (AND-0007). The phone app is a shell so far (AND-0003: connection, project list, section bar), its sections still being filled in; it builds outside `Darg.sln` because the system dotnet has no Android workload ([getting-started.md](getting-started.md#the-phone-app)). [PHONE-PLAN.md](PHONE-PLAN.md) was the first draft.
 - **Work tools**: Jira for the work instance; starting Forge and ComfyUI from Darg.
 - **Git landing**: `landing` and MR settings ([cards-and-qa.md](cards-and-qa.md#known-gaps)).
 - **Live tests**: a live test of real agents and real Haiku-drafted decisions; the decision box in Light and Girlypop was only checked by a theme-switching shot test.

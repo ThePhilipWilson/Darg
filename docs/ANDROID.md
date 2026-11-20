@@ -1,6 +1,6 @@
 # Android: approach and scope (AND-0001)
 
-Decided 2026-11-20: how Darg reaches Android, what the phone does in v1 and what stays on the desktop. It replaces the open questions in [PHONE-PLAN.md](PHONE-PLAN.md). The desktop half is coming in (phone access in [REMOTE.md](REMOTE.md), AND-0002; AND-0004, AND-0006, AND-0007); the phone app isn't built yet.
+Decided 2026-11-20: how Darg reaches Android, what the phone does in v1 and what stays on the desktop. It replaces the open questions in [PHONE-PLAN.md](PHONE-PLAN.md). The desktop half is coming in (phone access in [REMOTE.md](REMOTE.md), AND-0002; AND-0004, AND-0006, AND-0007); the phone app's scaffold and shell are in (AND-0003, below); the cards under Order fill in its screens.
 
 ## Decision
 
@@ -17,6 +17,10 @@ Three options were weighed:
 "Thin" means: every read and action goes through the desktop's `POST /api/<token>/<command>` (the same code the desktop buttons use; [architecture.md](architecture.md#the-darg-api) lists the commands). The phone caches what it last saw for reading offline but never edits board or note files itself, so there is one source of truth and no sync conflicts.
 
 Risk to check first (AND-0003): that Avalonia's Android target builds against .NET 10 and that `MarkdownView` renders there. If it doesn't, the fallback is native Compose against the same API; the API boundary makes that a swap of the client, not a redesign.
+
+## Where it stands
+
+AND-0003 built the shell, and the risk above did not bite: Avalonia's Android target builds on .NET 10 (`src/Darg.Android`, app id `uk.co.philipwilson.darg`, outside `Darg.sln`; how to build and run it is in [getting-started.md](getting-started.md#the-phone-app)). `src/Darg.Mobile` holds the views and view models: a connection screen for the desktop's address and token (pasting the API address Darg gives fills the token in), the project list from the `projects` command, and a project page with its sections along the bottom (Board, Agents, Notes, Docs, Reports), each a placeholder naming the card that fills it, with a back stack wired to Android's back button. It was checked on the emulator against a running desktop, and `MobileShellTests` drives it headless against the real API.
 
 ## What the phone is for
 

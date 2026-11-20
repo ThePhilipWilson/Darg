@@ -47,6 +47,10 @@ Instances cannot see each other, by design: the work PC and home PC each run the
 | `DARG_LIVE_TREE`, `_BRANCH`, `_SCRIPT`, `_HOST`, `_REPO`, `_GH`, `_FORGE` | Set by `tools/live.ps1` and the live tests. Don't set by hand; `tools/test.ps1` clears them. |
 | `DARG_TEST_PYTHON` | Name the Python for the fake claude in integration tests. |
 | `DARG_TEST_SLOTS`, `DARG_TEST_COMMIT_PCT` | How many `tools/test.ps1` runs go at once on the machine (default 2), and the committed-memory percentage a run waits below before it builds (default 85). |
+| `DARG_REMOTE_PORT` | The port of the [phone server](REMOTE.md) (default 47818; `0` for any free one). |
+| `DARG_TEST_QR_PYTHON` | A Python with OpenCV (`cv2`) so the pairing-QR test decodes the QR; without it only its shape is checked ([REMOTE.md](REMOTE.md)). |
+| `DARG_ANDROID_ROOT` | Where `tools/android-setup.ps1` and `tools/android.ps1` keep the Android dotnet, SDK and emulator (default `D:\Android`); see [The phone app](#the-phone-app). |
+| `DARG_ANDROID_KEYSTORE`, `_ALIAS`, `_PASS` | Sign a Release build of the Android app with this keystore, alias and password (`Darg.Android.csproj`). Unset, Release is debug-signed. |
 | `DARG_MAX_COPIES` | How many agents' debug copies of Darg may run at once (default 4; 0 for no cap). The installed and live copies never count. A copy over the cap exits with code 3 and says why in `crash.log`. |
 
 ## Tests
@@ -77,6 +81,18 @@ pwsh -File tools/publish.ps1
 Builds Release into `D:\Apps\Darg`, makes Start menu and desktop shortcuts and writes `source.txt` (the repo) beside the exe. **Never run it from an agent inside Darg**: it closes the installed copy, which kills the agent's own host (it did, twice). The script refuses; run it from a terminal, or use the header's ⟳ menu.
 
 ⟳ Update builds the repo into `<install>.next` while the app runs, then a helper (`Updater`, started outside the app's job) waits for the app to close, copies the build in and restarts it. If the repo moved on after a build, the button reads Rebuild, the header shows `⟳ Update ready •` and Use last build restarts into the existing one. A copy without `source.txt` (a debug build) can only restart. Agents started before an update keep the old instructions until they are restarted.
+
+## The phone app
+
+`src/Darg.Mobile` (plain net10.0: views, view models, `DargClient` over the [Darg API](architecture.md#the-darg-api)) is in `Darg.sln` and tested headless against the real desktop API by `MobileShellTests`, so `tools/test.ps1` covers it. `src/Darg.Android` is the `net10.0-android` head and is **not** in the solution: the system dotnet has no Android workload and installing one needs admin.
+
+```powershell
+pwsh -File tools/android-setup.ps1 [-Emulator]        # once: a dotnet with the workload, an Android SDK and a "darg" AVD under D:\Android
+pwsh -File tools/android.ps1 [-Emulator] [-NoBuild]   # build, install over adb, adb reverse tcp:47817, write the token in, start it
+pwsh -File tools/android.ps1 -StopEmulator            # when done
+```
+
+`adb reverse` makes the phone's `localhost:47817` the desktop, so an emulator or a USB phone needs no pairing; a real phone away from the PC pairs through Settings' Phone part ([REMOTE.md](REMOTE.md)). `-Emulator` never starts a second emulator (it waits for the one running) and stops one that hasn't booted in 5 minutes. An agent that starts an emulator stops it with `-StopEmulator` once done: one left running beside several test suites helped run the PC out of memory ([architecture.md](architecture.md#agents)). The approach and scope are in [ANDROID.md](ANDROID.md).
 
 ## The live copy
 
