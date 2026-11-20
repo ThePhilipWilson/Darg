@@ -47,11 +47,11 @@ REPO = {"repository": {
         commit("c0ffee1234567", "Count the coins right", "FAILURE", "2026-11-19T09:59:00Z"),
         commit("abc1234567890", "First", "SUCCESS", "2026-11-18T09:59:00Z")]}}},
     "pullRequests": {"totalCount": 1, "nodes": [{"number": 7, "title": "Shiny new coin art", "url": "https://github.com/example-studio/proj/pull/7",
-        "isDraft": False, "updatedAt": "2026-11-19T08:00:00Z", "headRefName": "coin-art", "baseRefName": "main", "additions": 40, "deletions": 3,
+        "body": "<!-- What does this change? -->\nSwaps the placeholder coins for **painted** ones.", "isDraft": False, "updatedAt": "2026-11-19T08:00:00Z", "headRefName": "coin-art", "baseRefName": "main", "additions": 40, "deletions": 3,
         "reviewDecision": "CHANGES_REQUESTED", "author": {"login": "sam"}, "labels": {"nodes": [{"name": "art"}]}, "comments": {"totalCount": 2},
         "assignees": {"nodes": []}, "commits": {"nodes": [{"commit": {"statusCheckRollup": {"state": "SUCCESS"}}}]}}]},
     "issues": {"totalCount": 1, "nodes": [{"number": 3, "title": "Coins vanish on reload", "url": "https://github.com/example-studio/proj/issues/3",
-        "updatedAt": "2026-11-19T07:00:00Z", "author": {"login": "kim"}, "labels": {"nodes": [{"name": "bug"}]}, "comments": {"totalCount": 1},
+        "body": "<!-- Steps, then what you saw -->\nSave, reload: the purse is empty.", "updatedAt": "2026-11-19T07:00:00Z", "author": {"login": "kim"}, "labels": {"nodes": [{"name": "bug"}]}, "comments": {"totalCount": 1},
         "assignees": {"nodes": [{"login": "pat"}]}}]},
     "releases": {"totalCount": 1, "nodes": [{"tagName": "v0.1", "name": "First playable", "url": "https://github.com/example-studio/proj/releases/tag/v0.1",
         "isDraft": False, "isPrerelease": True, "publishedAt": "2026-11-10T12:00:00Z", "createdAt": "2026-11-10T12:00:00Z", "author": {"login": "pat"},
@@ -63,7 +63,7 @@ REPO = {"repository": {
 }}
 
 PULL = {"repository": {"pullRequest": {"number": 7, "title": "Shiny new coin art", "url": "https://github.com/example-studio/proj/pull/7",
-    "body": "Swaps the placeholder coins for **painted** ones.", "state": "OPEN", "isDraft": False, "createdAt": "2026-11-18T08:00:00Z",
+    "body": "<!-- What does this change? Delete this line. -->\nSwaps the placeholder coins for **painted** ones.", "state": "OPEN", "isDraft": False, "createdAt": "2026-11-18T08:00:00Z",
     "headRefName": "coin-art", "baseRefName": "main", "additions": 40, "deletions": 3, "changedFiles": 2, "reviewDecision": "CHANGES_REQUESTED",
     "mergeable": "MERGEABLE", "author": {"login": "sam"}, "labels": {"nodes": [{"name": "art"}]},
     "files": {"nodes": [{"path": "art/coin.png", "additions": 0, "deletions": 0, "changeType": "MODIFIED"},
@@ -95,7 +95,12 @@ LOG = "\n".join(
      "2026-11-19T10:02:00.1000000Z   Expected: 10",
      "2026-11-19T10:02:00.2000000Z   Actual:   9"] +
     [f"2026-11-19T10:03:{i:02d}.0000000Z   Passed Proj.Tests.Later{i}" for i in range(30)] +
-    ["2026-11-19T10:04:00.0000000Z Failed!  - Failed: 1, Passed: 70",
+    # dotnet pads its summaries: a passing project's "Failed:     0" isn't a failure
+    ["2026-11-19T10:04:00.0000000Z Failed!  - Failed:     1, Passed:    70, Skipped:     0, Total:    71, Duration: 1 s - Proj.Tests.dll (net8.0)",
+     "2026-11-19T10:04:00.1000000Z   Proj.Shop.Tests -> /home/runner/work/proj/proj/Shop.Tests/bin/Release/net8.0/Proj.Shop.Tests.dll",
+     "2026-11-19T10:04:00.2000000Z Test run for /home/runner/work/proj/proj/Shop.Tests/bin/Release/net8.0/Proj.Shop.Tests.dll (.NETCoreApp,Version=v8.0)",
+     "2026-11-19T10:04:00.3000000Z ",
+     "2026-11-19T10:04:00.4000000Z Passed!  - Failed:     0, Passed:    12, Skipped:     0, Total:    12, Duration: 90 ms - Proj.Shop.Tests.dll (net8.0)",
      "2026-11-19T10:04:00.5000000Z ##[error]Process completed with exit code 1."])
 
 COMMIT = {"sha": "c0ffee1234567", "html_url": "https://github.com/example-studio/proj/commit/c0ffee1234567",
@@ -114,7 +119,16 @@ if args[1] == "graphql":
         out({"data": PULL})
     if "issue(number" in query:
         out({"data": ISSUE})
-    out({"data": REPO})
+    # each repo says which it is, so a project with two can tell them apart
+    name = next((a[len("name="):] for a in args if a.startswith("name=")), "proj")
+    repo = json.loads(json.dumps(REPO).replace("A throwaway repo for Darg's tests", f"A throwaway repo for Darg's tests: {name}"))["repository"]
+    # as GitHub does, give only the fields asked for: a list query that stops asking for body gets none
+    for kind, ends in (("pullRequests", "issues("), ("issues", "releases(")):
+        part = query[query.find(kind + "("):query.find(ends)]
+        if " body " not in part:
+            for n in repo[kind]["nodes"]:
+                n.pop("body", None)
+    out({"data": {"repository": repo}})
 
 if "-X" in args and "PATCH" in args:
     out("")

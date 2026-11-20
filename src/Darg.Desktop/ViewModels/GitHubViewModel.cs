@@ -12,7 +12,8 @@ public enum HubTab { Overview, Actions, Pulls, Issues, Commits, Branches, Releas
 /// a tab per repo when there are several, then on the left a list per kind (CI runs, pull requests, issues,
 /// commits, branches, releases, notifications) and on the right the picked one in full: a run's jobs, steps
 /// and failed log lines, a pull request's checks, files and conversation, an issue's comments, a commit's
-/// diff, a release's notes and assets. Overview lists what's worth a look across them. GitLab repos fill
+/// diff, a release's notes and assets. Overview lists what's worth a look across them, each opening in its
+/// own tab, and says why the default branch is failing if it is. GitLab repos fill
 /// the tabs they have. Issues, pull requests and failed runs can become cards.</summary>
 public partial class GitHubViewModel(ProjectConfig project, Func<string?> boardFolder) : ObservableObject
 {
@@ -67,7 +68,47 @@ public partial class GitHubViewModel(ProjectConfig project, Func<string?> boardF
         Relabel();
         ShowRows();
         OnPropertyChanged(nameof(ShowSummary));
+        _ = ReadMainFailure(value);
     }
+
+    /// <summary>The default branch's latest run, when it failed: the summary says why without a click.</summary>
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasMainFailed), nameof(MainFailedTitle))] public partial HubRow? MainFailed { get; set; }
+    [ObservableProperty] public partial string MainWhy { get; set; } = "";
+    public bool HasMainFailed => MainFailed is not null;
+    public string MainFailedTitle => MainFailed is { } m ? $"✗ {Repo?.Repo.DefaultBranch} is failing: {m.Title}" : "";
+
+    async Task ReadMainFailure(HubRepoView? repo)
+    {
+        MainFailed = repo?.Main is { Bad: true } m && !repo.Repo.IsGitLab ? m : null;
+        MainWhy = "";
+        if (MainFailed is not { } row || repo is null) return;
+        MainWhy = "Reading why…";
+        var detail = await DetailFor(row, repo);
+        if (Repo != repo) return;
+        MainWhy = detail.Error.Length > 0 ? detail.Error : detail.Excerpt.Length > 0 ? detail.Excerpt : "GitHub says no more than that it failed.";
+    }
+
+    /// <summary>The picked row's tab with it picked there: a row on Overview opens in its own tab.</summary>
+    [RelayCommand]
+    void OpenInTab(HubRow? row)
+    {
+        if (row is null) return;
+        ShowTab(TabFor(row.Kind));
+        Selected = Rows.FirstOrDefault(r => r.Key == row.Key);
+    }
+
+    [RelayCommand] void OpenMainRun() => OpenInTab(MainFailed);
+
+    static HubTab TabFor(HubKind kind) => kind switch
+    {
+        HubKind.Run => HubTab.Actions,
+        HubKind.Pull => HubTab.Pulls,
+        HubKind.Issue => HubTab.Issues,
+        HubKind.Commit => HubTab.Commits,
+        HubKind.Branch => HubTab.Branches,
+        HubKind.Release => HubTab.Releases,
+        _ => HubTab.Notifications,
+    };
 
     bool _relabeling;
 
@@ -107,6 +148,12 @@ public partial class GitHubViewModel(ProjectConfig project, Func<string?> boardF
         Detail = null;
         DetailStatus = "";
         if (value is null || Repo is null) return;
+        if (Tab == HubTab.Overview)
+        {
+            // after the list's own selection change is done, since this swaps the list under it
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenInTab(value));
+            return;
+        }
         _ = Pick(value, Repo);
     }
 
@@ -120,17 +167,22 @@ public partial class GitHubViewModel(ProjectConfig project, Func<string?> boardF
                 "This notification is about something the page doesn't list. Open ↗ shows it on GitHub.")]));
             return;
         }
-        var key = $"{repo.Name}|{target.Key}";
-        if (!_details.TryGetValue(key, out var detail))
-        {
-            DetailStatus = "Asking GitHub…";
-            var account = project.GitHub;
-            detail = await Task.Run(() => Read(repo.Repo, account, target));
-            if (detail.Error.Length == 0) _details[key] = detail;
-        }
+        DetailStatus = "Asking GitHub…";
+        var detail = await DetailFor(target, repo);
         if (picking != _picking) return; // another row was picked meanwhile
         DetailStatus = detail.Error;
         Detail = new HubDetailView(detail);
+    }
+
+    /// <summary>A row's detail, read from GitHub once and kept until Refresh.</summary>
+    async Task<HubDetail> DetailFor(HubRow target, HubRepoView repo)
+    {
+        var key = $"{repo.Name}|{target.Key}";
+        if (_details.TryGetValue(key, out var detail)) return detail;
+        var account = project.GitHub;
+        detail = await Task.Run(() => Read(repo.Repo, account, target));
+        if (detail.Error.Length == 0) _details[key] = detail;
+        return detail;
     }
 
     static HubDetail Read(HubRepo repo, string? account, HubRow row) => row.Item switch
@@ -179,7 +231,8 @@ public partial class GitHubViewModel(ProjectConfig project, Func<string?> boardF
                 title = i.Title;
                 labels = i.Labels;
                 var what = row.Kind == HubKind.Pull ? "pull request" : "issue";
-                desc = (i.Body.Trim().Length > 0 ? i.Body.Trim() + "\n\n" : "") + $"From GitHub {what} {repo.Full}#{i.Number}: {i.Url}";
+                var body = GitHubDetail.Readable(i.Body);
+                desc = (body.Length > 0 ? body + "\n\n" : "") + $"From GitHub {what} {repo.Full}#{i.Number}: {i.Url}";
                 break;
             case HubRun r:
                 title = $"CI failed: {r.Title}";
@@ -246,6 +299,7 @@ public sealed class HubRepoView
         // what's worth a look: the default branch's CI, unread notifications, open work, the newest commit and release
         var overview = new List<HubRow>();
         var main = runs.FirstOrDefault(x => ((HubRun)x.Item).Branch == r.DefaultBranch) ?? runs.FirstOrDefault();
+        Main = main;
         if (main is not null) overview.Add(main.As("CI"));
         overview.AddRange(runs.Where(x => x.Bad && x != main).Take(2).Select(x => x.As("CI")));
         overview.AddRange(_rows[HubTab.Notifications].Where(n => n.Unread).DistinctBy(n => n.Title).Take(5).Select(n => n.As("Notice")));
@@ -255,6 +309,9 @@ public sealed class HubRepoView
         if (_rows[HubTab.Releases].FirstOrDefault() is { } rel) overview.Add(rel.As("Release"));
         _rows[HubTab.Overview] = overview;
     }
+
+    /// <summary>The default branch's latest run (else the latest of any).</summary>
+    public HubRow? Main { get; }
 
     public IReadOnlyList<HubRow> RowsFor(HubTab tab) => _rows.TryGetValue(tab, out var rows) ? rows : [];
 

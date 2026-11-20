@@ -82,16 +82,28 @@
       <!-- right: the repo when nothing is picked, else the picked thing in full -->
       <Panel Grid.Column="1">
         <ScrollViewer IsVisible="{Binding ShowSummary}">
-          <StackPanel Margin="20,16" Spacing="8" DataContext="{Binding Repo}" x:DataType="vm:HubRepoView">
-            <DockPanel>
-              <Button DockPanel.Dock="Right" Content="Open ↗" Command="{Binding $parent[views:GitHubView].((vm:GitHubViewModel)DataContext).OpenRepoCommand}"
-                      ToolTip.Tip="The repo on the web"/>
-              <SelectableTextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" Classes="mono"/>
-            </DockPanel>
-            <TextBlock Text="{Binding Repo.Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}"/>
-            <TextBlock Text="{Binding About}" Classes="dim"/>
-            <TextBlock Text="{Binding Counts}" Classes="dim"/>
-            <TextBlock Text="{Binding Error}" Classes="bad" IsVisible="{Binding HasError}" TextWrapping="Wrap"/>
+          <StackPanel Margin="20,16" Spacing="8">
+            <StackPanel Spacing="8" DataContext="{Binding Repo}" x:DataType="vm:HubRepoView">
+              <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Open ↗" Command="{Binding $parent[views:GitHubView].((vm:GitHubViewModel)DataContext).OpenRepoCommand}"
+                        ToolTip.Tip="The repo on the web"/>
+                <SelectableTextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" Classes="mono"/>
+              </DockPanel>
+              <TextBlock Text="{Binding Repo.Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}"/>
+              <TextBlock Text="{Binding About}" Classes="dim"/>
+              <TextBlock Text="{Binding Counts}" Classes="dim"/>
+              <TextBlock Text="{Binding Error}" Classes="bad" IsVisible="{Binding HasError}" TextWrapping="Wrap"/>
+            </StackPanel>
+            <!-- the default branch failing, and why, without a click -->
+            <Border Classes="card" Padding="12,8" Margin="0,8,0,0" IsVisible="{Binding HasMainFailed}">
+              <StackPanel Spacing="6">
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Content="See the run" Command="{Binding OpenMainRunCommand}" ToolTip.Tip="The run in Actions, with its jobs and whole log"/>
+                  <TextBlock Text="{Binding MainFailedTitle}" Classes="bad" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                </DockPanel>
+                <views:MarkdownView Markdown="{Binding MainWhy}" Loaded="OnMarkdownLoaded"/>
+              </StackPanel>
+            </Border>
             <TextBlock Text="Pick anything on the left to see it here in full." Classes="dim small" Margin="0,8,0,0"/>
           </StackPanel>
         </ScrollViewer>

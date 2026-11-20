@@ -97,13 +97,14 @@ public static class GitHub
         return code == 0 ? ParseRemote(output) : null;
     }
 
-    /// <summary>One GraphQL call for everything listed but runs and notifications.</summary>
-    const string RepoQuery = """
+    /// <summary>One GraphQL call for everything listed but runs and notifications. Pull requests and issues carry
+    /// their body, which a card made from one is given.</summary>
+    public const string RepoQuery = """
         query($owner:String!,$name:String!){repository(owner:$owner,name:$name){
           description url isPrivate
           defaultBranchRef{ name target{ ... on Commit{ history(first:30){ nodes{ oid messageHeadline messageBody committedDate url author{ name user{login} } statusCheckRollup{state} } } } } }
-          pullRequests(states:OPEN,first:30,orderBy:{field:UPDATED_AT,direction:DESC}){ totalCount nodes{ number title url isDraft updatedAt headRefName baseRefName additions deletions reviewDecision author{login} labels(first:10){nodes{name}} comments{totalCount} assignees(first:5){nodes{login}} commits(last:1){nodes{commit{statusCheckRollup{state}}}} } }
-          issues(states:OPEN,first:50,orderBy:{field:UPDATED_AT,direction:DESC}){ totalCount nodes{ number title url updatedAt author{login} labels(first:10){nodes{name}} comments{totalCount} assignees(first:5){nodes{login}} } }
+          pullRequests(states:OPEN,first:30,orderBy:{field:UPDATED_AT,direction:DESC}){ totalCount nodes{ number title url body isDraft updatedAt headRefName baseRefName additions deletions reviewDecision author{login} labels(first:10){nodes{name}} comments{totalCount} assignees(first:5){nodes{login}} commits(last:1){nodes{commit{statusCheckRollup{state}}}} } }
+          issues(states:OPEN,first:50,orderBy:{field:UPDATED_AT,direction:DESC}){ totalCount nodes{ number title url body updatedAt author{login} labels(first:10){nodes{name}} comments{totalCount} assignees(first:5){nodes{login}} } }
           releases(first:20,orderBy:{field:CREATED_AT,direction:DESC}){ totalCount nodes{ tagName name url isDraft isPrerelease publishedAt createdAt author{login} description releaseAssets(first:30){nodes{name downloadCount size downloadUrl}} } }
           refs(refPrefix:"refs/heads/",first:50,orderBy:{field:TAG_COMMIT_DATE,direction:DESC}){ totalCount nodes{ name target{ ... on Commit{ oid messageHeadline messageBody committedDate url author{name user{login}} statusCheckRollup{state} } } associatedPullRequests(first:1,states:OPEN){nodes{number}} } }
         }}

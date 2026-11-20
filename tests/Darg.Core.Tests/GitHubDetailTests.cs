@@ -50,7 +50,9 @@ public sealed class GitHubDetailTests
         Assert.DoesNotContain("2026-11-19T", clean);
 
         var cut = GitHubDetail.LogExcerpt(clean);
-        Assert.Contains("Passed T79\n  Failed Proj.Tests.Adds_up [3 ms]\nPassed T80", cut); // the failure with the lines around it
+        Assert.Contains("  Failed Proj.Tests.Adds_up [3 ms]", cut); // the failure
+        Assert.DoesNotContain("Passed T79", cut); // a passing test beside it says nothing
+        Assert.DoesNotContain("Passed T119", cut); // nor do the ones leading up to the last error
         Assert.EndsWith("✗ Process completed with exit code 1.", cut); // the runner's tidying up after it is left out
         Assert.DoesNotContain("0 errors", cut); // a line that only looks like an error
         Assert.DoesNotContain("Passed T30\n", cut);
@@ -82,6 +84,98 @@ public sealed class GitHubDetailTests
         Assert.Equal("No space left on device", d.Parts.First(p => p.Heading == "What GitHub says").Lines![0].Text); // failures first
         Assert.Contains("Failed Adds_up", d.Excerpt);
         Assert.Equal("CI · run 4 · main · failure", d.Sub);
+    }
+
+    [Theory]
+    [InlineData("Passed!  - Failed:     0, Passed:     7, Skipped:     0, Total:     7, Duration: 229 ms - Proj.Layout.Tests.dll (net8.0)")]
+    [InlineData("Tests: 0 failed, 12 passed, 12 total")]
+    [InlineData("Ran 40 tests: failures: 0, errors: 0")]
+    [InlineData("<testsuite name=\"proj\" tests=\"9\" failures=\"0\" errors=\"0\">")]
+    [InlineData("summary: Failed=0 Errors=0")]
+    [InlineData("    0 Warning(s)")]
+    [InlineData("    0 Error(s)")]
+    [InlineData("Build: 0 errors, 0 warnings")]
+    [InlineData("  Passed Proj.Tests.Shows_an_error when the save is gone [3 ms]")]
+    [InlineData("Run npm test -- --fail-on-empty --bail")]
+    [InlineData("  strategy: fail-fast: false, continue-on-error: true")]
+    public void A_count_of_no_failures_or_a_passing_test_doesnt_tell(string line) => Assert.False(GitHubDetail.Tells(line), line);
+
+    [Theory]
+    [InlineData("Failed!  - Failed:     1, Passed:    66, Skipped:     0, Total:    67, Duration: 1 s - Proj.Shared.Tests.dll (net8.0)")]
+    [InlineData("Tests: 2 failed, 0 errors, 10 passed")]
+    [InlineData("  Failed Proj.Tests.Coins_add_up [12 ms]")]
+    [InlineData("  Error Message:")]
+    [InlineData("src/Coins.cs(4,2): error CS1002: ; expected")]
+    [InlineData("Traceback (most recent call last):")]
+    [InlineData("✗ Process completed with exit code 1.")]
+    [InlineData("[xUnit.net 00:00:02.38]     Proj.Tests.DocsPathTests.Points_at_docs [FAIL]")]
+    public void A_failure_tells(string line) => Assert.True(GitHubDetail.Tells(line), line);
+
+    /// <summary>The shape of a real dotnet CI log (names changed): one project fails among many passing ones,
+    /// each with a padded "Failed:     0" summary and its build output.</summary>
+    [Fact]
+    public void A_dotnet_log_with_many_passing_projects_cuts_to_the_one_that_failed()
+    {
+        var lines = new List<string> { "▸ Run dotnet test core/Proj.sln -c Release", "  Determining projects to restore..." };
+        foreach (var p in new[] { "Storage", "Layout", "Shared" }) lines.Add($"  Restored /home/runner/work/proj/proj/core/{p}/Proj.{p}.csproj (in 2 ms).");
+        lines.Add("  Proj.Layout.Tests -> /home/runner/work/proj/proj/core/Tests/Proj.Layout.Tests/bin/Release/net8.0/Proj.Layout.Tests.dll");
+        lines.Add("Test run for /home/runner/work/proj/proj/core/Tests/Proj.Layout.Tests/bin/Release/net8.0/Proj.Layout.Tests.dll (.NETCoreApp,Version=v8.0)");
+        lines.Add("A total of 1 test files matched the specified pattern.");
+        lines.Add("");
+        lines.Add("Passed!  - Failed:     0, Passed:     7, Skipped:     0, Total:     7, Duration: 229 ms - Proj.Layout.Tests.dll (net8.0)");
+        lines.Add("[xUnit.net 00:00:02.38]     Proj.Tests.DocsPathTests.Points_at_docs [FAIL]");
+        lines.Add("  Failed Proj.Tests.DocsPathTests.Points_at_docs [373 ms]");
+        lines.Add("  Error Message:");
+        lines.Add("   These still point at the old folder:");
+        lines.Add("core/Tests/Proj.Shared.Tests/DocsPathTests.cs:18");
+        lines.Add("  Stack Trace:");
+        lines.Add("     at Proj.Tests.DocsPathTests.Points_at_docs() in /home/runner/work/proj/proj/core/Tests/Proj.Shared.Tests/DocsPathTests.cs:line 56");
+        lines.Add("");
+        lines.Add("Failed!  - Failed:     1, Passed:    66, Skipped:     0, Total:    67, Duration: 1 s - Proj.Shared.Tests.dll (net8.0)");
+        foreach (var p in new[] { "Meta", "Profile", "Storage", "Combat", "Agents", "Progress", "Text", "Harness", "App", "SaveGate" })
+        {
+            lines.Add($"  Proj.{p} -> /home/runner/work/proj/proj/core/{p}/bin/Release/netstandard2.1/Proj.{p}.dll");
+            lines.Add($"  Proj.{p}.Tests -> /home/runner/work/proj/proj/core/Tests/Proj.{p}.Tests/bin/Release/net8.0/Proj.{p}.Tests.dll");
+            lines.Add($"Test run for /home/runner/work/proj/proj/core/Tests/Proj.{p}.Tests/bin/Release/net8.0/Proj.{p}.Tests.dll (.NETCoreApp,Version=v8.0)");
+            lines.Add("A total of 1 test files matched the specified pattern.");
+            lines.Add("");
+            lines.Add($"Passed!  - Failed:     0, Passed:    30, Skipped:     0, Total:    30, Duration: 807 ms - Proj.{p}.Tests.dll (net8.0)");
+            if (p == "Text") lines.Add("⚠ /home/runner/work/proj/proj/core/App/AppAction.cs(18,16): warning RS0027: 'AppAction' violates the backcompat requirement");
+        }
+        lines.Add("✗ Process completed with exit code 1.");
+        lines.Add("Post job cleanup.");
+        lines.Add("[command]/usr/bin/git version");
+
+        var cut = GitHubDetail.LogExcerpt(string.Join("\n", lines));
+        Assert.Contains("Points_at_docs [FAIL]", cut);
+        Assert.Contains("These still point at the old folder:", cut);
+        Assert.Contains("Failed!  - Failed:     1", cut);
+        Assert.EndsWith("✗ Process completed with exit code 1.", cut);
+        Assert.DoesNotContain("Passed!", cut); // no passing project's summary, there or leading up to the error
+        Assert.DoesNotContain(" -> /home", cut); // nor build output
+        Assert.DoesNotContain("warning RS0027", cut);
+        Assert.DoesNotContain("\n\n", cut); // a blank line left between two … is noise too
+        Assert.True(cut.Split('\n').Length <= 16, cut);
+    }
+
+    [Fact]
+    public void A_body_drops_the_html_comments_a_template_leaves()
+    {
+        Assert.Equal("Swaps the coins.\n\nFixes #3", GitHubDetail.Readable("<!-- What does this change? -->\nSwaps the coins.\n\n<!--\n Link the issue\n-->Fixes #3"));
+        Assert.Equal("Half", GitHubDetail.Readable("Half<!-- never closed"));
+        var pr = JsonNode.Parse("""{"number":1,"title":"t","body":"<!-- only the template -->","author":{"login":"sam"},"comments":{"nodes":[{"author":{"login":"pat"},"body":"<!-- x -->ok"}]}}""")!;
+        var d = GitHubDetail.ParsePull(pr);
+        Assert.Equal("*No description.*", d.Parts[0].Text);
+        Assert.Equal("ok", d.Parts[1].Text);
+    }
+
+    [Fact]
+    public void The_repo_query_asks_for_pull_requests_and_issues_bodies()
+    {
+        // a card made from one carries its body; the list query is all it has until the item is picked
+        var q = System.Text.RegularExpressions.Regex.Replace(GitHub.RepoQuery, @"\s+", " ");
+        Assert.Contains(" body ", q[q.IndexOf("pullRequests(")..q.IndexOf("issues(")]);
+        Assert.Contains(" body ", q[q.IndexOf("issues(")..q.IndexOf("releases(")]);
     }
 
     [Fact]

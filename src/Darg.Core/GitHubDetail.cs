@@ -202,7 +202,7 @@ public static class GitHubDetail
     /// <summary>What a GitLab item has: its description.</summary>
     public static HubDetail Plain(HubItem i) =>
         new($"#{i.Number} {i.Title}", Join([i.Author, string.Join(", ", i.Labels)]), i.Url,
-            i.Body.Trim().Length > 0 ? [new HubPart("", HubPartKind.Markdown, i.Body)] : []);
+            Readable(i.Body) is { Length: > 0 } b ? [new HubPart("", HubPartKind.Markdown, b)] : []);
 
     /// <summary>A job log as people read it: no timestamps, no ##[group] markers, errors marked ✗.</summary>
     public static string CleanLog(string log)
@@ -219,49 +219,82 @@ public static class GitHubDetail
     }
 
     static readonly Regex Telling = new(@"✗ |\berror\b|\bFailed\b|\bFAIL(ED)?\b|Exception\b|Traceback|exit code [1-9]|Assert", RegexOptions.IgnoreCase);
-    static readonly Regex Harmless = new(@"\b0 (error|failed)|errors?: 0\b|Failed: 0\b|\berror(s)?\s*=\s*0|--fail|fail-fast|continue-on-error", RegexOptions.IgnoreCase);
+    /// <summary>What only looks like a failure: a count of none (dotnet pads it, <c>Failed:     0</c>; others write
+    /// <c>0 failed</c>, <c>failures: 0</c>, <c>errors=0</c>, <c>failures="0"</c>, <c>0 Error(s)</c>) and switches
+    /// that name failing (<c>--fail-on-empty</c>, <c>fail-fast</c>, <c>continue-on-error</c>). Taken out of a line
+    /// before it is read for <see cref="Telling"/> words, so "Failed: 1, Errors: 0" still tells.</summary>
+    static readonly Regex Harmless = new(
+        @"(?<![\w.])0\s+(?:error\(s\)|(?:fail(?:ed|ures?|ing)?|errors?)\b)" +
+        @"|\b(?:error\(s\)|fail(?:ed|ures?|ing)?|errors?)\s*[:=]?\s*""?0(?![\w.])" +
+        @"|--fail[\w-]*|fail-fast|continue-on-error", RegexOptions.IgnoreCase);
 
-    /// <summary>The lines of a failed job's (cleaned) log that say why: each telling line with two either
-    /// side, and the lines leading up to the job's last error (or the log's end when it marked none), which is
-    /// where a build or test run sums up what broke. What follows that error is the runner tidying up.</summary>
+    /// <summary>A test that passed, which says nothing about why a job failed, whatever it's called.</summary>
+    static readonly Regex Passing = new(@"^\s*(Passed|PASS|ok|✓|√)\b", RegexOptions.IgnoreCase);
+
+    /// <summary>The noise a run makes on the way to its last error: passing tests and summaries, build output
+    /// (<c>Proj -> bin/Proj.dll</c>), restores, test-run banners, warnings, blank lines.</summary>
+    static readonly Regex Quiet = new(
+        @"^\s*$|^\s*(Passed|PASS|ok|✓|√)\b|^\s*\S+ -> \S|^Test run for |^A total of \d+ test files|^⚠ |^\s*Restored |^\s*Determining projects|^\[command\]",
+        RegexOptions.IgnoreCase);
+
+    /// <summary>Whether a log line says something failed.</summary>
+    public static bool Tells(string line) => !Passing.IsMatch(line) && Telling.IsMatch(Harmless.Replace(line, " "));
+
+    /// <summary>The lines of a failed job's (cleaned) log that say why: each telling line with two either side
+    /// (leaving out noise: passing tests, build output), and the lines leading up to the job's last error (or the log's end when it
+    /// marked none) that aren't noise, which is where a build or test run sums up what broke. What follows that
+    /// error is the runner tidying up.</summary>
     public static string LogExcerpt(string log, int around = 2, int tail = 10, int max = 80)
     {
         var lines = log.Split('\n');
         var keep = new bool[lines.Length];
-        var hits = 0;
-        for (var i = 0; i < lines.Length && hits < 25; i++)
-            if (Telling.IsMatch(lines[i]) && !Harmless.IsMatch(lines[i]))
-            {
-                hits++;
-                for (var k = Math.Max(0, i - around); k <= Math.Min(lines.Length - 1, i + around); k++) keep[k] = true;
-            }
         var end = Array.FindLastIndex(lines, l => l.StartsWith("✗ "));
         if (end < 0) end = lines.Length - 1;
-        for (var k = Math.Max(0, end - tail); k <= end; k++) keep[k] = true;
-        for (var k = end + 1; k < lines.Length; k++) keep[k] = false;
+        var hits = 0;
+        for (var i = 0; i <= end && hits < 25; i++)
+            if (Tells(lines[i]))
+            {
+                hits++;
+                for (var k = Math.Max(0, i - around); k <= Math.Min(end, i + around); k++)
+                    if (k == i || !Quiet.IsMatch(lines[k])) keep[k] = true;
+            }
+        // the run-up to the last error, looking back a few screens at most
+        keep[end] = true;
+        var tailFrom = end;
+        for (int k = end - 1, n = 0; k >= 0 && k >= end - tail * 4 && n < tail; k--)
+            if (!Quiet.IsMatch(lines[k])) { keep[k] = true; tailFrom = k; n++; }
         var sb = new StringBuilder();
         var count = 0;
         var gap = false;
-        for (var i = 0; i < lines.Length; i++)
+        for (var i = 0; i <= end; i++)
         {
-            if (!keep[i]) { gap = true; continue; }
+            if (!keep[i] || (i < tailFrom && count >= max))
+            {
+                if (lines[i].Trim().Length > 0) gap = true; // a blank line left out isn't worth a …
+                continue;
+            }
             if (gap && sb.Length > 0) sb.Append("…\n");
             gap = false;
             sb.Append(lines[i]).Append('\n');
-            if (++count >= max && i < end - tail) { sb.Append("…\n"); i = end - tail - 1; count = 0; max = int.MaxValue; }
+            if (i < tailFrom) count++;
         }
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>A pull request's or issue's text as GitHub shows it: without the HTML comments a template leaves
+    /// in (<c>&lt;!-- Describe your change --&gt;</c>), an unclosed one running to the end.</summary>
+    public static string Readable(string body) => Regex.Replace(body, @"<!--.*?(-->|$)", "", RegexOptions.Singleline).Trim();
+
     static void Body(List<HubPart> parts, JsonNode n)
     {
-        var body = (string?)n["body"] ?? "";
+        var body = Readable((string?)n["body"] ?? "");
         parts.Add(new HubPart($"{(string?)n["author"]?["login"]} · {Day(GitHub.Date(n["createdAt"]))}", HubPartKind.Markdown,
-            body.Trim().Length > 0 ? body : "*No description.*"));
+            body.Length > 0 ? body : "*No description.*"));
     }
 
     static HubPart Said(JsonNode? c, string what, string body) =>
-        new($"{(string?)c?["author"]?["login"]} {what} · {Day(GitHub.Date(c?["createdAt"] ?? c?["submittedAt"]))}", HubPartKind.Markdown, body.Trim().Length > 0 ? body : "*(nothing written)*");
+        new($"{(string?)c?["author"]?["login"]} {what} · {Day(GitHub.Date(c?["createdAt"] ?? c?["submittedAt"]))}", HubPartKind.Markdown,
+            Readable(body) is { Length: > 0 } b ? b : "*(nothing written)*");
 
     static string Labels(JsonNode n) => string.Join(", ", GitHub.Nodes(n["labels"]).Select(l => (string?)l?["name"]).OfType<string>());
 

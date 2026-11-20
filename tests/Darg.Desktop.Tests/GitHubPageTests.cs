@@ -10,13 +10,30 @@ public class GitHubPageTests
 {
     static GitHubViewModel Open(DargApp app) => app.Project.Hub ?? throw new InvalidOperationException("The project has no GitHub page.");
 
-    static async Task<DargApp> Start(string test)
+    static void Git(string folder, params string[] args)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo("git") { WorkingDirectory = folder, RedirectStandardError = true };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        using var p = System.Diagnostics.Process.Start(psi)!;
+        p.WaitForExit();
+    }
+
+    /// <param name="secondRepo">Give the project a second repo, example-studio/site, as Site has Site and Workspace.</param>
+    static async Task<DargApp> Start(string test, bool secondRepo = false)
     {
         var app = DargApp.Make(test);
         Environment.SetEnvironmentVariable("FAKE_GH_LOG", Path.Combine(app.Folder, "fake-gh.jsonl"));
-        var psi = new System.Diagnostics.ProcessStartInfo("git") { WorkingDirectory = app.Repo, RedirectStandardError = true };
-        foreach (var a in new[] { "remote", "add", "origin", "https://github.com/example-studio/proj.git" }) psi.ArgumentList.Add(a);
-        using (var p = System.Diagnostics.Process.Start(psi)!) p.WaitForExit();
+        Git(app.Repo, "remote", "add", "origin", "https://github.com/example-studio/proj.git");
+        if (secondRepo)
+        {
+            var site = Directory.CreateDirectory(Path.Combine(app.Folder, "proj", "site")).FullName;
+            Git(site, "init", "-q", "-b", "main");
+            Git(site, "remote", "add", "origin", "https://github.com/example-studio/site.git");
+            var file = Path.Combine(app.Home, "instance.json");
+            var config = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(file))!;
+            config["projects"]![0]!["repos"]!.AsArray().Add(site);
+            File.WriteAllText(file, config.ToJsonString());
+        }
         await app.Start();
         await app.Api("show", new { project = "proj", section = "GitHub" });
         var hub = Open(app);
@@ -46,6 +63,10 @@ public class GitHubPageTests
         Assert.Contains("Actual:   9", log.LogText);
         Assert.DoesNotContain("Proj.Tests.Case5", log.LogText); // a passing line well away from the failure is left out
         Assert.Contains("✗ Process completed with exit code 1.", log.LogText);
+        Assert.Contains("Failed!  - Failed:     1", log.LogText);
+        Assert.DoesNotContain("Passed!", log.LogText); // a passing project's padded "Failed:     0" isn't a failure
+        Assert.DoesNotContain("Proj.Tests.Later", log.LogText); // nor are the passing tests leading up to the error
+        Assert.DoesNotContain(" -> /home", log.LogText); // nor build output
         log.ToggleLogCommand.Execute(null);
         Assert.Contains("Proj.Tests.Case5", log.LogText); // the whole log, a click away
         log.ToggleLogCommand.Execute(null);
@@ -74,6 +95,7 @@ public class GitHubPageTests
         await app.Until(() => hub.Detail is not null, "the pull request's detail");
         var headings = hub.Detail!.Parts.Select(p => p.Heading).ToList();
         Assert.Contains(hub.Detail.Parts, p => p.Text.Contains("**painted**"));
+        Assert.DoesNotContain(hub.Detail.Parts, p => p.Text.Contains("<!--")); // the template's comments, which GitHub hides too
         Assert.Contains(hub.Detail.Parts, p => p.Heading.StartsWith("Checks") && p.Lines.Single().Good);
         Assert.Contains(hub.Detail.Parts, p => p.Heading.StartsWith("Files changed") && p.Lines.Any(l => l.Text == "src/Coins.cs"));
         var comment = headings.FindIndex(h => h.StartsWith("pat commented"));
@@ -119,6 +141,71 @@ public class GitHubPageTests
         hub.ShowTab(HubTab.Branches);
         await DargApp.Settle();
         Assert.Equal("main (default)", hub.Rows[0].Title);
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
+    public async Task An_issue_becomes_a_card_carrying_its_description()
+    {
+        using var app = await Start(nameof(An_issue_becomes_a_card_carrying_its_description));
+        var hub = Open(app);
+        hub.ShowTab(HubTab.Issues);
+        await DargApp.Settle();
+        hub.Selected = hub.Rows.Single();
+        await app.Until(() => hub.Detail is not null, "the issue's detail");
+        Assert.True(hub.CanCard);
+        hub.ToCardCommand.Execute(null);
+        var card = BoardStore.Load(app.BoardFolder).Lists.Values.SelectMany(l => l).Single(c => c.Title == "Coins vanish on reload");
+        Assert.StartsWith("Save, reload: the purse is empty.", card.Description); // the body, read with the list
+        Assert.DoesNotContain("<!--", card.Description);
+        Assert.Contains("https://github.com/example-studio/proj/issues/3", card.Description);
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
+    public async Task Overview_says_why_the_default_branch_fails_and_opens_a_row_in_its_own_tab()
+    {
+        using var app = await Start(nameof(Overview_says_why_the_default_branch_fails_and_opens_a_row_in_its_own_tab));
+        var hub = Open(app);
+        Assert.Equal(HubTab.Overview, hub.Tab);
+        Assert.True(hub.ShowSummary);
+        await app.Until(() => hub.MainWhy.Contains("Failed Proj.Tests.Coins_add_up"), "why main fails, on the summary");
+        Assert.Contains("main is failing: Count the coins right", hub.MainFailedTitle);
+        await DargApp.Settle();
+        app.Shot("overview-failing");
+
+        hub.Selected = hub.Rows.First(r => r.Group == "PR");
+        await app.Until(() => hub.Tab == HubTab.Pulls && hub.Detail is not null, "the PR opened in Pull requests");
+        Assert.Equal("Shiny new coin art", hub.Selected?.Title);
+        Assert.Equal(hub.Rows.Single(), hub.Selected); // picked in that tab's own list
+
+        hub.ShowTab(HubTab.Overview);
+        await DargApp.Settle();
+        hub.OpenMainRunCommand.Execute(null);
+        await app.Until(() => hub.Tab == HubTab.Actions && hub.Detail?.Title == "Count the coins right", "the failing run opened in Actions");
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
+    public async Task A_project_with_two_repos_has_a_tab_for_each()
+    {
+        using var app = await Start(nameof(A_project_with_two_repos_has_a_tab_for_each), secondRepo: true);
+        var hub = Open(app);
+        await app.Until(() => hub.Repos.Count == 2, "both repos read");
+        Assert.True(hub.ManyRepos);
+        Assert.Equal(["example-studio/proj", "example-studio/site"], hub.Repos.Select(r => r.Name));
+        Assert.EndsWith(": proj", hub.Repo!.Repo.Description);
+        hub.ShowTab(HubTab.Issues);
+        await DargApp.Settle();
+        hub.Repo = hub.Repos[1];
+        await DargApp.Settle();
+        Assert.EndsWith(": site", hub.Repo.Repo.Description);
+        Assert.Equal(HubTab.Issues, hub.Tab); // the tab stays as the repo changes
+        Assert.Equal("Coins vanish on reload", hub.Rows.Single().Title);
+        hub.Selected = hub.Rows.Single();
+        await app.Until(() => hub.Detail is not null, "the second repo's issue");
+        Assert.Contains("site", File.ReadAllLines(Path.Combine(app.Folder, "fake-gh.jsonl")).Last(l => l.Contains("issue(number")));
+        app.Shot("two-repos");
         Assert.Equal("", app.Crashes());
     }
 }
