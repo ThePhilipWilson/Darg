@@ -7,10 +7,10 @@ How Darg helps plan a feature, or a whole project, before its cards exist, so a 
 The Android board was made by hand on 2026-11-19: nine cards, AND-0001 to AND-0009, written in one go. What happened next shows what a plan is for:
 
 - **The decision came after the cards:** AND-0001 ("decide the approach") sat on the board beside the cards that depended on its answer. Its agent then chose the approach on Philip's behalf and wrote [ANDROID.md](ANDROID.md).
-- **No order:** every card was moved to In Progress at the same second (their `Moved:` lines all read 2026-11-20 01:09:51). Five needed AND-0003's scaffold first: AND-0009 stopped three minutes later as blocked, AND-0004 ended in a work-in-progress commit "waiting on AND-0003's Darg.Mobile shell", and AND-0007 and AND-0008 each did their desktop half and stopped.
+- **No order:** every card was moved to In Progress at the same second, 2026-11-20 01:09:51 (six of the nine `Moved:` lines still read that; AND-0002, AND-0003 and AND-0006 moved again later). Five needed AND-0003's scaffold first: AND-0009 stopped three minutes later as blocked, AND-0004 ended in a work-in-progress commit "waiting on AND-0003's Darg.Mobile shell", and AND-0007 and AND-0008 each did their desktop half and stopped.
 - **Choices buried in build cards:** how the phone reaches the PC (AND-0002's agent picked Tailscale for him), how notifications arrive with the app closed (AND-0006 asked, ntfy), the app id (AND-0003's agent picked it for him).
 - **Gaps between cards:** the Needs you screen, which [ANDROID.md](ANDROID.md#v1-features) calls the first screen, has no card. Neither has pairing in the phone app: AND-0003's How to check says AND-0002's paired route "isn't wired into the app yet", and no card owns it.
-- **The doc went stale the same day:** [ANDROID.md](ANDROID.md) still says "the phone app isn't built yet" after AND-0003 built it.
+- **The doc went stale the same day:** [ANDROID.md](ANDROID.md) kept saying "the phone app isn't built yet" after AND-0003 built it, until a docs card (WOR-0154) caught it hours later. Nothing tied the doc to the cards made from it.
 
 ## The answer in short
 
@@ -141,7 +141,7 @@ Turned down:
 Philip, 2026-11-20: "we need a dependency system for tickets so that we can block on another ticket, and display this correctly." So dependencies belong to every card on every board, and a plan's Blocked by lines are just the first to use them.
 
 - **On disk:** a `- **Blocked by:** AND-0002, AND-0003` line among the card's properties, after Labels. Tatty and Obsidian ignore a field they don't know, as they do `Moved:`. Ids are found across the project's boards (`CardIndex`), so a card can wait on one elsewhere.
-- **Cleared when** every blocker is in the QA column, done or Completed. QA counts, because a card agent merges its branch before moving to QA, so the work is there to build on.
+- **Cleared when** every blocker is in the QA column, done or Completed (Philip's call when asked, 2026-11-20). QA counts, because a card agent merges its branch before moving to QA, so the work is there to build on and dependent cards can start while QA waits on him. The cost: a card built on work that QA then sends back may need its own rework. Turned down: clearing only at done, which is safer but leaves dependent cards idle for as long as QA does.
 - **On screen:** a tile with an open blocker shows a chip naming it (the `Warn` theme key) until it clears. The card panel lists Blocked by and Blocks as card links, and Blocked by can be edited there. The `boards` command carries both, so the phone shows them too. A cycle or an unknown id shows as a warning.
 - **Held back** (Philip's pick when asked, 2026-11-20): ▶ Work All starts only unblocked cards and says how many it left out. Work on a blocked card asks inline first. The API's `work-on` refuses one unless told `force`.
 - **Context for the agent:** a card agent's prompt lists its blockers with the path of each one's newest report, so AND-0004's agent would have started from AND-0003's report rather than from a guess.
