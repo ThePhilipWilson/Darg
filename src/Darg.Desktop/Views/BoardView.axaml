@@ -330,10 +330,11 @@
                       <StackPanel Spacing="2">
                         <DockPanel>
                           <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding ActionText}" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                          <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                          <!-- WOR-0168: a WrapPanel, not a horizontal StackPanel, so a long label is held to the width left of the action text and wraps -->
+                          <WrapPanel>
+                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,8,0"/>
                             <TextBlock Text="Recommended" Classes="small" Foreground="{DynamicResource Ok}" IsVisible="{Binding Recommended}" VerticalAlignment="Center"/>
-                          </StackPanel>
+                          </WrapPanel>
                         </DockPanel>
                         <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasDescription}"/>
                       </StackPanel>

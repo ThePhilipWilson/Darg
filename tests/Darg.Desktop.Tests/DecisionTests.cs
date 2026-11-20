@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Darg.Core;
@@ -41,6 +42,28 @@ public class DecisionTests
         Assert.True(editor.DecisionChoices[0].Recommended);
         Assert.Equal("a real microphone can't be tried from an agent.", editor.DecisionContext);
         app.Shot("decision");
+        Assert.Equal("", app.Crashes());
+    }
+
+    /// <summary>WOR-0168: a long option label ran under "→ send back" in its corner: the label sat in a horizontal
+    /// StackPanel, which lets a child be as wide as it likes, so it never wrapped. It wraps before the corner now.</summary>
+    [AvaloniaFact]
+    public async Task A_long_option_label_wraps_before_its_action_text()
+    {
+        using var app = DargApp.Make();
+        var longLabel = "Send it back because the long title still runs under the corner text and needs to wrap well before it reaches the edge";
+        var card = app.Card("long", BoardStore.AttentionName, Body(Decision().Replace("**Still fails**", $"**{longLabel}**")));
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board", card = card.Id });
+        app.Shot("long-label");
+
+        var label = app.Window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == longLabel);
+        var action = app.Window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Text == "→ send back" && t.DataContext is DecisionChoice c && c.Label == longLabel);
+        var labelRight = label.TranslatePoint(new Avalonia.Point(label.Bounds.Width, 0), app.Window)!.Value.X;
+        var actionLeft = action.TranslatePoint(new Avalonia.Point(0, 0), app.Window)!.Value.X;
+        Assert.True(labelRight <= actionLeft, $"label ends at {labelRight}, action text starts at {actionLeft}");
+        Assert.True(label.Bounds.Height > action.Bounds.Height * 1.5, "the long label should wrap onto more than one line");
         Assert.Equal("", app.Crashes());
     }
 
