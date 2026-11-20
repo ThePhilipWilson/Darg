@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using Darg.Desktop.ViewModels;
 
 namespace Darg.Desktop.Views;
@@ -23,6 +24,12 @@ public partial class AgentsView : UserControl
                 shown.SendCommand.Execute(null);
             }
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        // an agents tab pressed with Ctrl adds or removes its board (WOR-0150); the button's click reads the flag
+        AddHandler(PointerPressedEvent, (_, e) =>
+        {
+            if (_vm is not null && (e.Source as Avalonia.Visual)?.GetSelfAndVisualAncestors().OfType<Button>().Any(x => x.DataContext is AgentBoardTab) == true)
+                _vm.TabCtrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
     }
 
     protected override void OnDataContextChanged(EventArgs e)

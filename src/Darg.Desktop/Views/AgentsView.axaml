@@ -46,6 +46,16 @@
                   ToolTip.Tip="Continue all after reset: every agent here that ran out of usage carries on when the limit resets."/>
           <TextBlock Text="This project" Classes="dim small" VerticalAlignment="Center"/>
         </DockPanel>
+        <ItemsControl ItemsSource="{Binding Tabs}" IsVisible="{Binding HasTabs}" Margin="12,6,8,2">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:AgentBoardTab">
+              <Button Classes="chip boardtab" Classes.all="{Binding IsShown}" Content="{Binding Name}" Command="{Binding PickCommand}"
+                      Margin="0,0,4,4" Padding="10,2" FontSize="12" AutomationProperties.Name="{Binding Name, StringFormat='Agents tab {0}'}"
+                      ToolTip.Tip="Click: show only the agents on this board's cards. Ctrl+click: add it to the boards showing, or take it off."/>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
         <ListBox ItemsSource="{Binding Listed}" SelectedItem="{Binding Selected}" Background="Transparent"
                  ScrollViewer.VerticalScrollBarVisibility="Disabled">
           <ListBox.ItemTemplate>

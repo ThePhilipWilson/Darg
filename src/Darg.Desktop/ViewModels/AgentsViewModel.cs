@@ -63,10 +63,55 @@ public partial class AgentsViewModel : ObservableObject
         _ => 4, // saved
     };
 
+    /// <summary>Set by the project: each card's board by card id (<c>BoardViewModel.CardBoards</c>).</summary>
+    public Func<Dictionary<string, string>>? CardBoards { get; set; }
+    Dictionary<string, string> _cardBoards = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>The boards whose agents show; empty is all of them (the All tab lit).</summary>
+    readonly HashSet<string> _shownBoards = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Tabs above the list (WOR-0150), as the board's: All, then a tab per board, lit for each showing.</summary>
+    public ObservableCollection<AgentBoardTab> Tabs { get; } = [];
+    public bool HasTabs => Tabs.Count > 2; // All and one board is no choice
+    /// <summary>Set by the view as a tab is pressed: whether Ctrl was down.</summary>
+    public bool TabCtrl { get; set; }
+
+    bool InShownBoards(AgentViewModel a)
+    {
+        if (_shownBoards.Count == 0) return true;
+        if (a.CardId is null) return false;
+        if (!_cardBoards.ContainsKey(a.CardId) && CardBoards is not null) _cardBoards = CardBoards(); // a card made since
+        return _cardBoards.TryGetValue(a.CardId, out var b) && _shownBoards.Contains(b);
+    }
+
+    /// <summary>A tab's click: plain shows only that board (All: every board); Ctrl adds it to those showing or takes it off.
+    /// Taking off the last one goes back to All.</summary>
+    public void PickBoard(string? board, bool additive)
+    {
+        if (board is null) _shownBoards.Clear();
+        else if (!additive) { _shownBoards.Clear(); _shownBoards.Add(board); }
+        else if (!_shownBoards.Remove(board)) _shownBoards.Add(board);
+        SyncTabs();
+        Resort();
+    }
+
+    void SyncTabs()
+    {
+        var boards = _cardBoards.Values.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var b in _shownBoards) if (!boards.Contains(b, StringComparer.OrdinalIgnoreCase)) boards.Add(b);
+        var names = new[] { (string?)null }.Concat(boards).ToList();
+        if (!names.SequenceEqual(Tabs.Select(t => t.Board)))
+        {
+            Tabs.Clear();
+            foreach (var n in names) Tabs.Add(new AgentBoardTab(this, n));
+            OnPropertyChanged(nameof(HasTabs));
+        }
+        foreach (var t in Tabs) t.IsShown = t.Board is null ? _shownBoards.Count == 0 : _shownBoards.Contains(t.Board);
+    }
+
     /// <summary>Bring Listed into the wanted order by moving rows, so the selection and scroll stay put.</summary>
     void Resort()
     {
-        var want = SortByStatus ? Agents.OrderBy(Rank).ToList() : Agents.ToList(); // OrderBy is stable: ties keep list order
+        var visible = Agents.Where(InShownBoards);
+        var want = SortByStatus ? visible.OrderBy(Rank).ToList() : visible.ToList(); // OrderBy is stable: ties keep list order
         foreach (var gone in Listed.Where(a => !want.Contains(a)).ToList()) Listed.Remove(gone);
         for (var i = 0; i < want.Count; i++)
         {
@@ -264,6 +309,7 @@ public partial class AgentsViewModel : ObservableObject
     public void RefreshCards()
     {
         using var timing = StallWatch.Shared.Section("Agents.RefreshCards");
+        if (CardBoards is not null) { _cardBoards = CardBoards(); SyncTabs(); Resort(); }
         foreach (var a in Agents) if (a.CardId is not null) a.CardDone = IsCardDone(a.CardId);
         // a QA agent that has ended its turn has given its verdict: close it so it doesn't linger on the card
         foreach (var a in Agents.Where(a => a.IsDone && !a.LimitHit && a.ContinueAt is null && a.CardId is not null && a.Purpose == AgentPurposes.Qa).ToList()) a.CloseSession("Darg");
@@ -1391,4 +1437,14 @@ public sealed class PreviewImage(string path, Bitmap thumb)
     {
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true }); } catch (Exception) { }
     });
+}
+
+/// <summary>A board's tab above the agents list; a plain click shows only its agents, Ctrl+click adds or removes it. Board null is All.</summary>
+public sealed partial class AgentBoardTab(AgentsViewModel agents, string? board) : ObservableObject
+{
+    public string? Board { get; } = board;
+    public string Name => Board ?? "All";
+    [ObservableProperty] public partial bool IsShown { get; set; }
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    void Pick() { var ctrl = agents.TabCtrl; agents.TabCtrl = false; agents.PickBoard(Board, ctrl); }
 }
