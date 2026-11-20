@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             xmlns:m="using:Darg.Mobile"
+             x:Class="Darg.Mobile.Views.ProjectsView"
+             x:DataType="vm:ProjectsViewModel"
+             x:Name="Root">
+  <DockPanel Margin="16,12,16,0">
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+      <Button DockPanel.Dock="Right" Classes="icon" Content="⟳" Command="{Binding RefreshCommand}" AutomationProperties.Name="Refresh"/>
+      <TextBlock Text="{Binding Where, StringFormat='Connected to {0}'}" Classes="dim" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+    </DockPanel>
+    <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" Margin="0,0,0,8"
+               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Projects}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="m:ProjectInfo">
+            <Button Classes="row" Command="{Binding #Root.((vm:ProjectsViewModel)DataContext).OpenCommand}" CommandParameter="{Binding}"
+                    AutomationProperties.Name="{Binding Name}">
+              <StackPanel Spacing="2">
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding Summary}" Classes="dim"/>
+              </StackPanel>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

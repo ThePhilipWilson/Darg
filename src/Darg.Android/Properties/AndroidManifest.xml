@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" android:installLocation="auto">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <!-- cleartext: the desktop's API is plain http on the home network or through adb reverse (AND-0002 decides the encrypted route) -->
+  <application android:label="Darg" android:icon="@drawable/icon" android:usesCleartextTraffic="true" />
+</manifest>

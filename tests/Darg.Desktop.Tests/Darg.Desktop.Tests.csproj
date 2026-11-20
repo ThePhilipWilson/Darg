@@ -32,6 +32,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Darg.Desktop\Darg.Desktop.csproj" />
     <ProjectReference Include="..\..\src\Darg.Core\Darg.Core.csproj" />
+    <!-- the phone app's shell (AND-0003), driven against the real desktop API -->
+    <ProjectReference Include="..\..\src\Darg.Mobile\Darg.Mobile.csproj" />
   </ItemGroup>
 
 </Project>

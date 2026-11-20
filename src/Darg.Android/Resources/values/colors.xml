@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- the Dark theme's Bg, so the window doesn't flash white before Avalonia draws -->
+  <color name="darg_bg">#12111a</color>
+</resources>

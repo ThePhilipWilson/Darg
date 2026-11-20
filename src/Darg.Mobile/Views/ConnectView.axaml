@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             x:Class="Darg.Mobile.Views.ConnectView"
+             x:DataType="vm:ConnectViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="20" Spacing="12">
+      <TextBlock Text="Desktop address" Classes="dim"/>
+      <TextBox Text="{Binding Address}" PlaceholderText="http://localhost:47817" AutomationProperties.Name="Desktop address"/>
+      <TextBlock Text="Token" Classes="dim"/>
+      <TextBox Text="{Binding Token}" PlaceholderText="32 letters and digits from the desktop" AutomationProperties.Name="Token"/>
+      <Button Classes="primary" Content="Connect" Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Center" AutomationProperties.Name="Connect"/>
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+      <TextBlock Text="{Binding Help}" Classes="dim" TextWrapping="Wrap" Margin="0,12,0,0"/>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

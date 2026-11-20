@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             xmlns:views="using:Darg.Mobile.Views"
+             x:Class="Darg.Mobile.Views.ShellView"
+             x:DataType="vm:ShellViewModel"
+             Background="{DynamicResource Bg}">
+  <UserControl.Styles>
+    <StyleInclude Source="avares://Darg.Mobile/Views/MobileStyles.axaml"/>
+  </UserControl.Styles>
+  <UserControl.DataTemplates>
+    <DataTemplate DataType="vm:ConnectViewModel"><views:ConnectView/></DataTemplate>
+    <DataTemplate DataType="vm:ProjectsViewModel"><views:ProjectsView/></DataTemplate>
+    <DataTemplate DataType="vm:ProjectPageViewModel"><views:ProjectPageView/></DataTemplate>
+  </UserControl.DataTemplates>
+
+  <DockPanel>
+    <!-- the header: back, the screen's title, the connection screen -->
+    <Border DockPanel.Dock="Top" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1"
+            Padding="4,0" MinHeight="56">
+      <DockPanel>
+        <Button DockPanel.Dock="Left" Classes="icon" Content="←" Command="{Binding GoBackCommand}"
+                IsVisible="{Binding CanGoBack}" AutomationProperties.Name="Back"/>
+        <Button DockPanel.Dock="Right" Classes="icon" Content="⚙" Command="{Binding OpenSettingsCommand}"
+                IsVisible="{Binding CanOpenSettings}" AutomationProperties.Name="Connection"/>
+        <TextBlock Text="{Binding Title}" Classes="title" VerticalAlignment="Center" Margin="12,0" TextTrimming="CharacterEllipsis"/>
+      </DockPanel>
+    </Border>
+    <ContentControl Content="{Binding Page}"/>
+  </DockPanel>
+</UserControl>

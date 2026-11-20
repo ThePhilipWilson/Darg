@@ -1,0 +1,74 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Net.Sockets;
+using System.Text.Json.Nodes;
+
+namespace Darg.Mobile;
+
+/// <summary>A project as the desktop's <c>projects</c> command lists it: what the phone needs to show and open it.</summary>
+public sealed record ProjectInfo(string Id, string Name, IReadOnlyList<string> Sections, string? Board, bool OnScreen)
+{
+    public string Summary => Board is { Length: > 0 } b ? $"{b} board" : "no board";
+}
+
+/// <summary>A call to the desktop that didn't work, with a message fit to show on the phone as it is.</summary>
+public sealed class DargClientException(string message, Exception? inner = null) : Exception(message, inner);
+
+/// <summary>Talks to the desktop app's Darg API (<c>POST /api/&lt;token&gt;/&lt;command&gt;</c>): every read and action
+/// the phone makes goes through it, the same code the desktop's buttons run (docs/ANDROID.md).</summary>
+public sealed class DargClient(Connection connection, HttpMessageHandler? handler = null) : IDisposable
+{
+    readonly HttpClient _http = new(handler ?? new HttpClientHandler()) { Timeout = TimeSpan.FromSeconds(10) };
+
+    public Connection Connection { get; } = connection;
+
+    /// <summary>Runs a command with its arguments as a JSON object and gives back what it answered.</summary>
+    public async Task<JsonNode?> Call(string command, object? args = null, CancellationToken ct = default)
+    {
+        HttpResponseMessage res;
+        try { res = await _http.PostAsJsonAsync($"{Connection.ApiBase}/{command}", args ?? new { }, ct); }
+        catch (HttpRequestException e) { throw new DargClientException(Unreachable(e), e); }
+        catch (TaskCanceledException e) when (!ct.IsCancellationRequested)
+        {
+            throw new DargClientException($"{Connection.Address} didn't answer in {_http.Timeout.TotalSeconds:0} seconds.", e);
+        }
+        using (res)
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            if (res.StatusCode is HttpStatusCode.Forbidden)
+                throw new DargClientException("Darg refused the token. Copy it again from the desktop (over USB, tools/android.ps1 -NoBuild on the PC does it).");
+            if (res.StatusCode is HttpStatusCode.NotFound)
+                throw new DargClientException($"{Connection.Address} answered, but not as Darg does (no {command} command there). Is that the right address?");
+            if (!res.IsSuccessStatusCode)
+                throw new DargClientException(body.Length > 0 ? body : $"Darg answered {(int)res.StatusCode} {res.ReasonPhrase}.");
+            try { return body.Length == 0 ? null : JsonNode.Parse(body); }
+            catch (System.Text.Json.JsonException e) { throw new DargClientException($"{Connection.Address} answered with something that isn't JSON.", e); }
+        }
+    }
+
+    /// <summary>The desktop's projects, in its tab order.</summary>
+    public async Task<IReadOnlyList<ProjectInfo>> Projects(CancellationToken ct = default)
+    {
+        var list = new List<ProjectInfo>();
+        if (await Call("projects", null, ct) is not JsonArray arr) throw new DargClientException("Darg's project list didn't come back as a list.");
+        foreach (var p in arr.OfType<JsonObject>())
+        {
+            var sections = p["sections"] is JsonArray s ? s.Select(x => x?.GetValue<string>() ?? "").Where(x => x.Length > 0).ToList() : [];
+            list.Add(new ProjectInfo(
+                p["id"]?.GetValue<string>() ?? "", p["name"]?.GetValue<string>() ?? p["id"]?.GetValue<string>() ?? "?",
+                sections, p["board"]?.GetValue<string>(), p["onScreen"]?.GetValue<bool>() ?? false));
+        }
+        return list;
+    }
+
+    string Unreachable(HttpRequestException e)
+    {
+        var refused = e.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionRefused } || e.Message.Contains("refused", StringComparison.OrdinalIgnoreCase);
+        var local = Uri.TryCreate(Connection.Address, UriKind.Absolute, out var u) && u.IsLoopback;
+        return refused && local
+            ? $"Nothing answered at {Connection.Address}. On USB, run tools/android.ps1 -NoBuild on the PC (it sets up adb reverse; a re-plugged cable loses it), and check Darg is running there."
+            : $"Can't reach {Connection.Address}: {e.InnerException?.Message ?? e.Message}. Check Darg is running on the PC and the phone can see it.";
+    }
+
+    public void Dispose() => _http.Dispose();
+}

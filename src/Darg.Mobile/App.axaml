@@ -1,0 +1,11 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Darg.Mobile.App"
+             RequestedThemeVariant="Dark">
+  <!-- The colours (Bg, Panel, Accent…) are Darg.Core's Themes, put here as brushes in App.axaml.cs, so the phone
+       wears the desktop's look and views take them by the same keys with DynamicResource (AND-0009 adds the picker). -->
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://Darg.Mobile/Views/MobileStyles.axaml" />
+  </Application.Styles>
+</Application>
