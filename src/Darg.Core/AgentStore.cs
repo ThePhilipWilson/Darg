@@ -47,6 +47,9 @@ public sealed class AgentRecord
     public string? Model { get; set; }
     public string? Effort { get; set; }
     public string? Mode { get; set; }
+    /// <summary>The model / effort above was picked by hand, so Optimise tokens leaves it alone (WOR-0159).</summary>
+    public bool ModelByHand { get; set; }
+    public bool EffortByHand { get; set; }
     /// <summary>Out of usage, and set to carry on at this time (when the limit resets); null: not waiting.</summary>
     public DateTimeOffset? ContinueAt { get; set; }
     public DateTime Created { get; set; }

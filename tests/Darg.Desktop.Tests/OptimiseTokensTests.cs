@@ -74,4 +74,21 @@ public class OptimiseTokensTests
         }
         finally { TokenSaver.Set(false, app.Home); }
     }
+
+    [AvaloniaFact]
+    public void A_hand_pick_survives_a_restart()
+    {
+        using var app = DargApp.Make();
+        var dir = Directory.CreateTempSubdirectory("wb-hand-").FullName;
+        try
+        {
+            var record = new AgentRecord { Id = "h1", Name = "x", Cwd = dir, Model = "opus", Effort = "high", ModelByHand = true };
+            var agent = new AgentViewModel(record, dir);
+            agent.Save();
+            var saved = AgentStore.List(dir).Single();
+            Assert.True(saved.ModelByHand);
+            Assert.False(saved.EffortByHand);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 }

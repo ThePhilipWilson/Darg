@@ -906,6 +906,7 @@ public partial class AgentViewModel : ObservableObject
         Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; Purpose = r.Purpose; SessionId = r.SessionId; Project = r.Project;
         _args = r.Args; _created = r.Created; StoreFolder = storeFolder;
         _model = r.Model; _effort = r.Effort; _mode = r.Mode;
+        _modelByHand = r.ModelByHand; _effortByHand = r.EffortByHand;
         NameDefaultModel(AgentChoices.DefaultModel(Cwd));
         _fromSession = true;
         ModelChoice = AgentChoices.Find(ModelChoices, r.Model);
@@ -970,7 +971,7 @@ public partial class AgentViewModel : ObservableObject
             AgentStore.SaveLater(StoreFolder, new AgentRecord
             {
                 Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Purpose = Purpose, Project = Project, SessionId = SessionId, Args = [.. _args],
-                Model = _model, Effort = _effort, Mode = _mode, ContinueAt = ContinueAt,
+                Model = _model, Effort = _effort, Mode = _mode, ModelByHand = _modelByHand, EffortByHand = _effortByHand, ContinueAt = ContinueAt,
                 Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
             });
         }

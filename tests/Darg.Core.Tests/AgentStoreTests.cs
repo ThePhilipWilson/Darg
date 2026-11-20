@@ -17,6 +17,16 @@ public sealed class AgentStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_pick_made_by_hand_is_saved_so_Optimise_tokens_leaves_it_alone_after_a_restart()
+    {
+        AgentStore.Save(_dir, new AgentRecord { Id = "h", Model = "opus", ModelByHand = true });
+        AgentStore.Save(_dir, new AgentRecord { Id = "g", Model = "opus", Effort = "high", EffortByHand = true });
+        var list = AgentStore.List(_dir);
+        Assert.Equal((true, false), (list.Single(r => r.Id == "h").ModelByHand, list.Single(r => r.Id == "h").EffortByHand));
+        Assert.Equal((false, true), (list.Single(r => r.Id == "g").ModelByHand, list.Single(r => r.Id == "g").EffortByHand));
+    }
+
+    [Fact]
     public void Saves_lists_newest_first_and_deletes()
     {
         AgentStore.Save(_dir, new AgentRecord { Id = "a", Name = "old", SessionId = "s1", Updated = new DateTime(2026, 11, 1), Items = [new() { Kind = "user", Text = "hi" }] });
