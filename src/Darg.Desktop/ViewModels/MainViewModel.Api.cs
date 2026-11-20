@@ -61,7 +61,13 @@ public partial class MainViewModel
                             "Refused without a question and two options.", ToAttention);
         Add("new-card", "make a card in a project's backlog, on its inbox board (Inbox, Main or Backlog), as + Card does: {project, title, description?, " +
                         "type?: " + string.Join("|", CardTypes.All) + " (else guessed from the words), labels? (a list, or separated by commas), priority?}. " +
-                        "Returns its id, board, file and link (markdown that opens the card when clicked: put it in your reply); Haiku then moves it to the story board it fits, if the project has others. Use this rather than writing card files.", NewCard);
+                        "Returns its id, board, file and link (markdown that opens the card when clicked: put it in your reply); Haiku then moves it to the story board it fits, if the project has others. Use this rather than writing card files. " +
+                        "board? and column? (a name, or backlog, qa, attention, rework, done) put it straight there instead, with no placing (the phone's quick-add).", NewCard);
+        Add("boards", "a project's boards column by column, empty columns too, as the phone draws them: {project}. Each board: name, inbox (where new-card puts a card), " +
+                      "lists in order, each with id, name, kind (" + string.Join(", ", BoardLayouts.Kinds) + ", or empty for a plain column) and its cards " +
+                      "(id, title, type, labels, priority, quality 0-3, agent: the live one's id and state, or null).", BoardsLayout);
+        Add("move-card", "move a card to another column of its board, as dragging it on the board does: {project, card, column, before?}. column is a column's name, " +
+                         "or backlog, qa, attention, rework, done or completed; before a card in that column to land above (else the end). Only when Philip asks.", MoveCard);
         Add("say","send a message to a project's agent, as if Philip typed it: {id, text}. A saved agent resumes its session.", Say);
         Add("close-agents", "close agents' sessions: {ids} (a list, or ids separated by spaces). They stay listed and carry on when sent a message.", a => CloseAgents(a.List("ids")));
         Add("forget-agents", "forget agents, as the × in the Agents list does: {ids}. Each one's session ends, it leaves the list and its saved file goes " +
@@ -380,6 +386,22 @@ public partial class MainViewModel
             ? CardTypes.All.FirstOrDefault(x => x.Equals(t.Trim(), StringComparison.OrdinalIgnoreCase))
               ?? throw new ApiError($"No card type \"{t}\". Types: {string.Join(", ", CardTypes.All)}.")
             : CardTypes.Guess(title + "\n" + description, labels);
+        if ((a.Get("board") ?? a.Get("column")) is not null)
+        {
+            // the phone's quick-add (AND-0004): it knows the board and column it's showing, so the card goes there, unplaced
+            var boardName = a.Get("board") ?? Path.GetFileName(inbox.TrimEnd('\\', '/'));
+            Card added;
+            try { added = BoardLayouts.Add(p.Config.Boards!, boardName, a.Get("column"), title, description, labels, (a.Get("priority") ?? "").Trim(), type); }
+            catch (ArgumentException e) { throw new ApiError(e.Message); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new ApiError($"Couldn't make the card: {e.Message}"); }
+            var at = CardIndex.Find(p.Config.Boards, added.Id)!;
+            p.Board.ReloadAll();
+            return Json(new JsonObject
+            {
+                ["id"] = added.Id, ["title"] = added.Title, ["type"] = added.Type, ["board"] = at.Board, ["column"] = at.Column,
+                ["file"] = at.File, ["link"] = CardLinks.For(added.Id), ["placing"] = false,
+            });
+        }
         Card card;
         try { card = BoardStore.Create(inbox, title, description, labels, (a.Get("priority") ?? "").Trim(), type); }
         catch (ArgumentException e) { throw new ApiError(e.Message); }
@@ -393,6 +415,48 @@ public partial class MainViewModel
             ["link"] = CardLinks.For(card.Id), // WOR-0158: Fettle's reply links the card it made
             ["placing"] = p.Board.Boards.Count > 1,
         });
+    }
+
+    /// <summary>The project's boards column by column for the phone (AND-0004): <c>cards</c> leaves out empty columns and
+    /// the order of the lists, which a board drawn on a phone needs.</summary>
+    string BoardsLayout(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (p.Config.Boards is null) throw new ApiError($"{p.Name} has no boards.");
+        var boards = new JsonArray();
+        foreach (var b in BoardLayouts.Read(p.Config.Boards))
+            boards.Add(new JsonObject
+            {
+                ["name"] = b.Name, ["inbox"] = b.Inbox,
+                ["lists"] = new JsonArray(b.Lists.Select(l => (JsonNode?)new JsonObject
+                {
+                    ["id"] = l.Id, ["name"] = l.Name, ["kind"] = l.Kind,
+                    ["cards"] = new JsonArray(l.Cards.Select(c =>
+                    {
+                        var live = AgentsOn(p, c.Id).FirstOrDefault(x => x.IsLiveOnCard);
+                        return (JsonNode?)new JsonObject
+                        {
+                            ["id"] = c.Id, ["title"] = c.Title, ["type"] = c.Kind, ["priority"] = c.Priority,
+                            ["labels"] = new JsonArray(c.Labels.Select(x => (JsonNode?)x).ToArray()), ["quality"] = c.Quality.Stars,
+                            ["agent"] = live is null ? null : new JsonObject { ["id"] = live.Id, ["state"] = live.StateText },
+                        };
+                    }).ToArray()),
+                }).ToArray()),
+            });
+        return Json(boards);
+    }
+
+    string MoveCard(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (p.Config.Boards is null || p.Board is null) throw new ApiError($"{p.Name} has no boards.");
+        var id = a.Need("card");
+        (string Board, string List) to;
+        try { to = BoardLayouts.Move(p.Config.Boards, id, a.Need("column"), a.Get("before")); }
+        catch (ArgumentException e) { throw new ApiError(e.Message); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new ApiError($"Couldn't move {id}: {e.Message}"); }
+        p.Board.ReloadAll(); // the board on screen shows it now, not when the watcher's debounce runs
+        return $"Moved {id.Trim().ToUpperInvariant()} to {to.List} on {to.Board}.";
     }
 
     string Say(ApiArgs a)
