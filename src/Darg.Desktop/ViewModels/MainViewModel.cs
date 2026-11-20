@@ -645,7 +645,38 @@ public partial class ProjectViewModel : ObservableObject
             {
                 Reports!.SettledFromBoard(card, decision, notes);
                 CardSettled?.Invoke(card);
+                // WOR-0169: and on the agent that showed it
+                var how = decision == DecisionReport.Approved ? "approved, moved to done" : decision == DecisionReport.SentBack ? "sent back" : "answered";
+                foreach (var a in Agents.Agents) a.CloseDecision(card, $"Settled on the card: {how}");
             };
+            // WOR-0169: a card's open decision shows on the agent responsible for it (the one that asked, else the
+            // card's newest), linked: picking there answers the card through Decide, and answering the card, or the
+            // card leaving the attention column, closes it there. Kept in step on every board read, which a card
+            // file changing triggers, and when an agent joins the list (a restored one included).
+            AgentViewModel? DecisionAgent(Card card, CardDecision d) =>
+                (d.AgentId is { } aid ? Agents.Find(aid) : null)
+                ?? Agents.Agents.Where(a => a.CardId == card.Id).MaxBy(a => a.Created);
+            void SyncDecisions()
+            {
+                var owners = Board.OpenDecisions().Select(x => (x.Card, x.Decision, Agent: DecisionAgent(x.Card, x.Decision))).ToList();
+                foreach (var a in Agents.Agents.ToList())
+                    foreach (var item in a.OpenDecisions.ToList())
+                    {
+                        if (owners.Any(o => o.Card.Id == item.CardId && o.Agent == a)) continue;
+                        if (owners.Any(o => o.Card.Id == item.CardId)) { item.Close("Now shown on the card's newer agent"); continue; }
+                        // posted: when Decide moved the card, this read runs inside it, and DecisionSettled, just after,
+                        // closes it first saying how (approved, sent back); this is for a card moved or edited by hand
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() => item.Close("Settled on the card: it has no open decision now"));
+                    }
+                foreach (var (card, d, agent) in owners) agent?.ShowDecision(card.Id, d, Board.Decide);
+            }
+            Board.Reloaded += SyncDecisions;
+            Agents.Agents.CollectionChanged += (_, e) =>
+            {
+                if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+                    Avalonia.Threading.Dispatcher.UIThread.Post(SyncDecisions);
+            };
+            SyncDecisions();
             Board.EnteredQa = (card, file) =>
             {
                 QaAfterRework(card, file);

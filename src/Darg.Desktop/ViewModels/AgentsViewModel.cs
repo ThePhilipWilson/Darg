@@ -993,6 +993,8 @@ public partial class AgentViewModel : ObservableObject
             Images = t.Gallery.Count > 0 ? t.Gallery.Select(g => g.Path).ToList() : null },
         QuestionItem q => new() { Kind = "note", Text = "Asked: " + string.Join(" / ", q.Questions.Select(g => g.Question + (g.Chosen is null ? "" : $" → {g.Chosen}"))) },
         PermissionItem p => new() { Kind = "note", Text = $"Wanted {p.Tool}: {p.Decision ?? "no answer"}" },
+        // an open card decision isn't kept (the board shows it again on its next read); a closed one stays as a line
+        CardDecisionItem { Open: false } d => new() { Kind = "note", Text = $"{d.CardId} asked: {d.Question} → {d.Outcome}" },
         _ => null,
     };
 
@@ -1244,6 +1246,82 @@ public partial class AgentViewModel : ObservableObject
     }
 
     internal static bool IsImage(string? path) => path is not null && ImageExts.Contains(Path.GetExtension(path));
+
+    // WOR-0169: the decision this agent's card waits on, shown in its transcript too and linked to the card's, so
+    // answering either closes both. Not an IPending: the agent isn't waiting on it (its turn has ended), so it
+    // neither holds the card nor sets "needs you"; it isn't saved either, the board puts it back on the next read.
+
+    /// <summary>The card decisions shown here that haven't been answered or closed.</summary>
+    public IEnumerable<CardDecisionItem> OpenDecisions => Items.OfType<CardDecisionItem>().Where(i => i.Open);
+
+    /// <summary>Show the card's open decision here, answered through <paramref name="decide"/> (the board's Decide:
+    /// card id, answer, notes; returns what went wrong or null). One already shown for the card stays if it is the
+    /// same decision, and is swapped for this one if the card's was rewritten.</summary>
+    public CardDecisionItem ShowDecision(string cardId, CardDecision decision, Func<string, string, string, string?> decide)
+    {
+        var shown = OpenDecisions.FirstOrDefault(i => i.CardId == cardId);
+        if (shown is not null && shown.Decision.Format() == decision.Format()) return shown;
+        if (shown is not null) Items.Remove(shown);
+        var item = new CardDecisionItem(cardId, decision, decide, this);
+        Items.Add(item);
+        if (!Working && !NeedsYou) Activity = OneLine($"{cardId} waits on your decision: {decision.Question}");
+        return item;
+    }
+
+    /// <summary>The card's decision was answered or closed elsewhere: its item here closes, saying how.</summary>
+    public void CloseDecision(string cardId, string how)
+    {
+        foreach (var item in OpenDecisions.Where(i => i.CardId == cardId).ToList()) item.Close(how);
+    }
+}
+
+/// <summary>A card's decision shown in its agent's transcript (WOR-0169): the same question and options as the card
+/// panel's, and picking one here answers the card, as the panel, the API's decide and the phone do. It closes when
+/// the card's decision is answered anywhere, or leaves the attention column.</summary>
+public sealed partial class CardDecisionItem : TranscriptItem
+{
+    readonly Func<string, string, string, string?> _decide;
+    readonly AgentViewModel _agent;
+    public string CardId { get; }
+    public CardDecision Decision { get; }
+    public string Header => $"{CardId} waits on your decision";
+    public string Question => Decision.Question;
+    public string Context => Decision.Context;
+    public bool HasContext => Context.Length > 0;
+    /// <summary>Recommended first, as the card panel has them; each says what picking it does.</summary>
+    public IReadOnlyList<QuestionOption> Options { get; }
+    /// <summary>How it was closed ("Answered: Works"); null while it is open.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Open))] public partial string? Outcome { get; set; }
+    public bool Open => Outcome is null;
+    /// <summary>What went wrong with the last pick, or a stay's note; "" when nothing.</summary>
+    [ObservableProperty] public partial string Note { get; set; } = "";
+    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(SendOwnCommand))] public partial string OwnAnswer { get; set; } = "";
+
+    public CardDecisionItem(string cardId, CardDecision decision, Func<string, string, string, string?> decide, AgentViewModel agent)
+    {
+        CardId = cardId; Decision = decision; _decide = decide; _agent = agent;
+        Options = decision.Options.OrderByDescending(o => o.Recommended)
+            .Select(o => new QuestionOption(o.Recommended ? o.Label + " (recommended)" : o.Label,
+                (o.Description.Length > 0 ? o.Description + " " : "") + o.ActionText, false, () => Pick(o.Label))).ToList();
+    }
+
+    /// <summary>Answer the card's decision with this label (or words of the person's own).</summary>
+    public void Pick(string answer)
+    {
+        if (!Open) return;
+        var option = Decision.OptionFor(answer);
+        if (_decide(CardId, answer, "") is { } error) { Note = error; return; }
+        // a stay leaves the decision open on the card, so it stays open here too
+        if (option?.Action == DecisionAction.Stay) { Note = $"{option.Label}: it stays in the attention column for now."; return; }
+        Outcome = $"You picked: {option?.Label ?? answer.Trim()}";
+        Note = "";
+        _agent.Activity = $"{CardId}: you picked {option?.Label ?? answer.Trim()}";
+    }
+
+    public void Close(string how) { if (Open) { Outcome = how; Note = ""; } }
+
+    bool CanSendOwn => Open && !string.IsNullOrWhiteSpace(OwnAnswer);
+    [RelayCommand(CanExecute = nameof(CanSendOwn))] void SendOwn() => Pick(OwnAnswer.Trim());
 }
 
 public abstract class TranscriptItem : ObservableObject;

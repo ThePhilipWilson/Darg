@@ -130,6 +130,36 @@
         </ItemsControl>
       </Border>
     </DataTemplate>
+    <!-- WOR-0169: the card's decision, linked to the card panel's: a pick here answers the card -->
+    <DataTemplate DataType="vm:CardDecisionItem">
+      <Border BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="8" Background="{DynamicResource AccentWash}" Padding="12,10">
+        <StackPanel Spacing="6">
+          <TextBlock Classes="dim small" Text="{Binding Header}"/>
+          <TextBlock Text="{Binding Question}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+          <TextBlock Text="{Binding Context}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasContext}"/>
+          <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding Open}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:QuestionOption">
+                <Button Command="{Binding Command}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding Open}">
+            <TextBox Text="{Binding OwnAnswer}" PlaceholderText="Or type your own answer…" AcceptsReturn="True" TextWrapping="Wrap"
+                     MinHeight="60" MaxHeight="200" views:EnterSends.Command="{Binding SendOwnCommand}"/>
+            <Button Grid.Column="1" Classes="primary" Content="Send" VerticalAlignment="Bottom" Command="{Binding SendOwnCommand}"/>
+          </Grid>
+          <TextBlock Text="{Binding Note}" TextWrapping="Wrap" Classes="dim small" IsVisible="{Binding Note, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+          <TextBlock IsVisible="{Binding !Open}" TextWrapping="Wrap" Text="{Binding Outcome}" Foreground="{DynamicResource Accent}"/>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
   </Application.DataTemplates>
 
   <Application.Styles>

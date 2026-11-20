@@ -982,6 +982,13 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
+    /// <summary>Every card in an attention column, on any row, with the open decision it waits on (WOR-0169: what its
+    /// agent shows too). Read from the card files now.</summary>
+    public IReadOnlyList<(Card Card, CardDecision Decision)> OpenDecisions() =>
+        Root.Rows.Where(r => r._board is not null).SelectMany(r => r._board!.AllCards.Where(r.InAttention)
+                .Select(c => (Card: c, Decision: r.DecisionOf(c))))
+            .Where(x => x.Decision is not null).Select(x => (x.Card, x.Decision!)).DistinctBy(x => x.Card.Id).ToList();
+
     /// <summary>What a card in For Human Attention with no decision recorded asks (WOR-0124): is it right as it stands?</summary>
     public static CardDecision Fallback(Card card) => new($"Is {card.Id} right as it stands?",
         [new("Approve", "Move it to done.", DecisionAction.Done, false), new("Send back", "Say what's wrong in the notes.", DecisionAction.Back, false)], "", "");

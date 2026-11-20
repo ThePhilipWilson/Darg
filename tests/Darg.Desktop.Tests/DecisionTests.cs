@@ -289,6 +289,96 @@ public class DecisionTests
         Assert.Equal("In Progress", app.Read(card.Id).Status);
     }
 
+    /// <summary>WOR-0169: a card with its agent, which has written the decision and moved the card to For Human
+    /// Attention, as a card agent's rules say.</summary>
+    static async Task<(Card Card, AgentViewModel Agent)> AgentAsks(DargApp app)
+    {
+        var card = app.Card("voice mode", "In Progress", Body());
+        await app.Start();
+        await app.Api("work-on", new { project = "proj", card = card.Id });
+        var agent = app.Agents.ForCard(card.Id)!;
+        await app.Until(() => agent.State == AgentState.Idle, "the card agent's turn to end");
+        File.WriteAllText(FileOf(app, card), File.ReadAllText(FileOf(app, card)).Replace("## How to check", Decision(agent.Id) + "\n## How to check"));
+        Assert.Null(app.Board.MoveToAttention(card.Id));
+        return (card, agent);
+    }
+
+    [AvaloniaFact]
+    public async Task The_cards_decision_shows_on_its_agent_and_picking_there_answers_the_card()
+    {
+        using var app = DargApp.Make();
+        var (card, agent) = await AgentAsks(app);
+        await app.Until(() => agent.OpenDecisions.Any(), "the card's decision to show on its agent");
+        var item = agent.OpenDecisions.Single();
+        Assert.Equal(card.Id, item.CardId);
+        Assert.Equal("Does dictation work for you?", item.Question);
+        Assert.Equal(["Works (recommended)", "Still fails", "Not tried yet"], item.Options.Select(o => o.Label));
+        app.Agents.Selected = agent;
+        await app.Api("show", new { project = "proj", section = "Agents" });
+        await DargApp.Settle(200);
+        app.Shot("decision-on-agent");
+
+        item.Options[0].Command.Execute(null); // Works → done
+        Assert.False(item.Open);
+        Assert.Equal("You picked: Works", item.Outcome);
+        Assert.Equal("Done", app.Read(card.Id).Status);
+        var text = File.ReadAllText(FileOf(app, card));
+        Assert.Contains("**Answer:** Works", text);
+        Assert.Null(CardDecision.Read(text));
+        await DargApp.Settle(300);
+        Assert.Empty(agent.OpenDecisions); // and the board's next read doesn't put it back
+        // a saved agent keeps the answered decision as a line in its transcript
+        agent.Save();
+        AgentStore.Flush();
+        var saved = AgentStore.List(agent.StoreFolder!).Single(r => r.Id == agent.Id);
+        Assert.Contains(saved.Items, i => i.Kind == "note" && i.Text == $"{card.Id} asked: Does dictation work for you? → You picked: Works");
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
+    public async Task Answering_the_cards_decision_closes_it_on_the_agent()
+    {
+        using var app = DargApp.Make();
+        var (card, agent) = await AgentAsks(app);
+        await app.Until(() => agent.OpenDecisions.Any(), "the card's decision to show on its agent");
+        var item = agent.OpenDecisions.Single();
+
+        await app.Api("decide", new { project = "proj", card = card.Id, answer = "Still fails", notes = "nothing landed" });
+
+        Assert.False(item.Open);
+        Assert.Equal("Settled on the card: sent back", item.Outcome); // says how, not only that it's gone
+        Assert.Empty(agent.OpenDecisions);
+    }
+
+    [AvaloniaFact]
+    public async Task A_stay_picked_on_the_agent_leaves_the_decision_open_on_both()
+    {
+        using var app = DargApp.Make();
+        var (card, agent) = await AgentAsks(app);
+        await app.Until(() => agent.OpenDecisions.Any(), "the card's decision to show on its agent");
+        var item = agent.OpenDecisions.Single();
+
+        item.Pick("Not tried yet");
+        Assert.True(item.Open);
+        Assert.Contains("stays", item.Note);
+        Assert.NotNull(CardDecision.Read(File.ReadAllText(FileOf(app, card))));
+        Assert.Equal(BoardStore.AttentionName, app.Read(card.Id).Status);
+    }
+
+    [AvaloniaFact]
+    public async Task A_card_moved_out_of_attention_closes_its_decision_on_the_agent()
+    {
+        using var app = DargApp.Make();
+        var (card, agent) = await AgentAsks(app);
+        await app.Until(() => agent.OpenDecisions.Any(), "the card's decision to show on its agent");
+        var item = agent.OpenDecisions.Single();
+
+        await app.Api("move-card", new { project = "proj", card = card.Id, column = "In Progress" });
+
+        await app.Until(() => !item.Open, "the agent's decision to close once the card left the attention column");
+        Assert.Contains("no open decision", item.Outcome);
+    }
+
     [AvaloniaFact]
     public async Task A_card_landing_with_a_decision_notifies_and_asks_nobody()
     {
