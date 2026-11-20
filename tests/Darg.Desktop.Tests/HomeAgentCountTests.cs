@@ -21,6 +21,6 @@ public class HomeAgentCountTests
             var running = app.Agents.Agents.Count(a => a.Working);
             await app.Until(() => app.Project.Home.AgentsTitle.StartsWith($"Agents · {running} running"), "Home's heading counting it");
         }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", null); }
+        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); } // the Sandbox default: unset, fake claude turns run 60 s
     }
 }
