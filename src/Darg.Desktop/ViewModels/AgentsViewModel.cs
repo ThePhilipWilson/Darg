@@ -1122,7 +1122,7 @@ public partial class AgentViewModel : ObservableObject
     }
 
     /// <summary>The first non-empty line of some text, without markdown heading marks, cut to fit a list row.</summary>
-    static string OneLine(string? s, int max = 90)
+    internal static string OneLine(string? s, int max = 90)
     {
         var line = (s ?? "").Split(NewLines, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
         line = line.TrimStart('#', '*', ' ');
@@ -1320,7 +1320,15 @@ public sealed partial class CardDecisionItem : TranscriptItem
         _agent.Activity = $"{CardId}: you picked {option?.Label ?? answer.Trim()}";
     }
 
-    public void Close(string how) { if (Open) { Outcome = how; Note = ""; } }
+    /// <summary>Closed from outside (answered on the card, moved out of attention, shown on a newer agent): the
+    /// agent's row stops saying the card waits on a decision, if that is still what it says.</summary>
+    public void Close(string how)
+    {
+        if (!Open) return;
+        Outcome = how; Note = "";
+        if (_agent.Activity.StartsWith($"{CardId} waits on your decision", StringComparison.Ordinal))
+            _agent.Activity = AgentViewModel.OneLine($"{CardId}: {char.ToLowerInvariant(how[0])}{how[1..]}");
+    }
 
     bool CanSendOwn => Open && !string.IsNullOrWhiteSpace(OwnAnswer);
     [RelayCommand(CanExecute = nameof(CanSendOwn))] void SendOwn() => Pick(OwnAnswer.Trim());

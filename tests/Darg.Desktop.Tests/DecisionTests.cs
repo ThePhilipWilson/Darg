@@ -342,12 +342,14 @@ public class DecisionTests
         var (card, agent) = await AgentAsks(app);
         await app.Until(() => agent.OpenDecisions.Any(), "the card's decision to show on its agent");
         var item = agent.OpenDecisions.Single();
+        Assert.StartsWith($"{card.Id} waits on your decision", agent.Activity);
 
         await app.Api("decide", new { project = "proj", card = card.Id, answer = "Still fails", notes = "nothing landed" });
 
         Assert.False(item.Open);
         Assert.Equal("Settled on the card: sent back", item.Outcome); // says how, not only that it's gone
         Assert.Empty(agent.OpenDecisions);
+        Assert.Equal($"{card.Id}: settled on the card: sent back", agent.Activity); // the row stops saying it waits
     }
 
     [AvaloniaFact]
@@ -377,6 +379,7 @@ public class DecisionTests
 
         await app.Until(() => !item.Open, "the agent's decision to close once the card left the attention column");
         Assert.Contains("no open decision", item.Outcome);
+        Assert.DoesNotContain("waits on your decision", agent.Activity);
     }
 
     [AvaloniaFact]
