@@ -29,9 +29,10 @@ public static class Stories
     /// <param name="storiesFolder">Where the story docs go (<see cref="Folder"/>); null for none.</param>
     /// <param name="reportsFolder">The project's agent reports (WOR-0061), read for what each card did.</param>
     /// <param name="repos">The project's repos, for the commits.</param>
+    /// <param name="plans">Plan files (WOR-0178) some of the cards were made from: a story doc links the plan its cards came from.</param>
     public static string Prompt(string projectName, string boardFolder, Column done, IReadOnlyList<Card> cards, IReadOnlyList<Card> stories,
         IReadOnlyList<string> busy, string? storiesFolder, string? reportsFolder, IReadOnlyList<string> repos,
-        CommitRule? boardCommits = null, CommitRule? docsCommits = null)
+        CommitRule? boardCommits = null, CommitRule? docsCommits = null, IReadOnlyList<string>? plans = null)
     {
         var today = DateTime.Now.ToString("yyyy-MM-dd");
         var lines = new List<string>
@@ -64,7 +65,10 @@ public static class Stories
                 "added to, not rewritten). Obsidian properties between --- lines: type: story, card: <the story card's id>, " +
                 $"cards: <the card ids, space-separated>, updated: {today}. Then # <story name>, a paragraph or two on what was built and how " +
                 "it works now (written for someone who wasn't there, from the cards, reports and commits, not a list of tickets), " +
-                "## Cards (each: id, title, one line on what it did, its short commit ids) and ## Left (open threads the reports name, or None).");
+                "## Cards (each: id, title, one line on what it did, its short commit ids) and ## Left (open threads the reports name, or None)." +
+                (plans is { Count: > 0 } ? $" Plans: these plan files hold some of the cards ({string.Join("; ", plans.Select(p => p.Replace('\\', '/')))}). " +
+                    "A story whose cards came from a plan gets a property plan: <the plan's file name without .md> and a line Plan: <its full path> under the heading, " +
+                    "so the plan says what was meant and the story what was made. Don't edit the plan." : ""));
         lines.AddRange([
             "   - Its card, made exactly as Darg makes one: the next id is board.json's nextId (one past the highest number any board with " +
             "this prefix uses, if that's higher), the file is items/<ID> - <title>.md (title with / \\ : * ? \" < > | taken out, cut to 60 " +

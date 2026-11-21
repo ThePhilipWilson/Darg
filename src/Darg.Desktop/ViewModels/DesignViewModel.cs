@@ -39,6 +39,8 @@ public sealed partial class DesignViewModel : ObservableObject
     public Func<string, bool>? OpenCard { get; set; }
     /// <summary>Show a board by name in the Board section.</summary>
     public Action<string>? OpenBoard { get; set; }
+    /// <summary>Send a card back with notes (the board's send-back); returns why it couldn't, or null.</summary>
+    public Func<string, string, string?>? SendBack { get; set; }
     /// <summary>Open a report in the Reports section.</summary>
     public Action<string>? OpenReport { get; set; }
     /// <summary>The project's reports folder, for the Log (null without agents).</summary>
@@ -142,8 +144,18 @@ public sealed partial class DesignViewModel : ObservableObject
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Couldn't write the answer: {e.Message}"; return; }
         Status = $"Answered \"{q.Question}\": {answer.Trim()}. Saved to {Path.GetFileName(page.File)}, not committed.";
+        // changing what an agent chose: its card goes back with the new answer as the notes (WOR-0178)
+        if (q.ByAgent && q.DecidedCard is { } card && !answer.Trim().Equals(q.Chosen, StringComparison.OrdinalIgnoreCase))
+        {
+            var failed = SendBack?.Invoke(card, $"I changed a choice made on this card. In {Path.GetFileName(page.File)}, the question \"{q.Question}\" " +
+                $"was answered \"{q.Chosen}\" by its agent; the answer is now \"{answer.Trim()}\". Change the work to match, and leave the plan's answer as it is.");
+            Status += failed is null ? $" {card} sent back with the new answer." : $" {card} not sent back: {failed}";
+        }
         Reload();
     }
+
+    /// <summary>Keep what an agent chose: the answer stays, now with the person's name on it instead of the agent's.</summary>
+    internal void Keep(PlanQuestionRow q) => Answer(q, q.Chosen);
 
     /// <summary>Write a part edited as text back into the plan.</summary>
     internal bool Save(PlanTextPart part, string text)
@@ -318,6 +330,11 @@ public sealed partial class PlanQuestionRow : ObservableObject
     public bool HasContext => Context.Length > 0;
     public string Answer { get; }
     public bool Answered => Answer.Length > 0;
+    /// <summary>An agent's choice, not the person's: shown with Keep and Change (WOR-0178).</summary>
+    public bool ByAgent { get; }
+    public string? DecidedCard { get; }
+    public string Chosen { get; }
+    public string DecidedText => $"Decided by {(DecidedCard is null ? "an agent" : DecidedCard + "'s agent")}: {Chosen}. Keep it, or change it and its card goes back with your answer.";
     public IReadOnlyList<PlanOptionRow> Options { get; }
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Asking))] public partial bool Changing { get; set; }
     /// <summary>The options show while it's open, or while an answer is being changed.</summary>
@@ -330,6 +347,9 @@ public sealed partial class PlanQuestionRow : ObservableObject
         Question = q.Question;
         Context = q.Context;
         Answer = q.Answer;
+        ByAgent = q.ByAgent;
+        DecidedCard = q.DecidedCard;
+        Chosen = q.Pick;
         Options = q.Options.OrderByDescending(o => o.Recommended).Select(o => new PlanOptionRow(this, o)).ToList();
     }
 
@@ -340,6 +360,9 @@ public sealed partial class PlanQuestionRow : ObservableObject
 
     [RelayCommand]
     void Change() => Changing = !Changing;
+
+    [RelayCommand]
+    void Keep() => _owner.Keep(this);
 }
 
 public sealed partial class PlanOptionRow(PlanQuestionRow question, DecisionOption option)

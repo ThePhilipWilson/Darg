@@ -9,6 +9,46 @@ namespace Darg.Core;
 public sealed record PlanQuestion(string Question, IReadOnlyList<DecisionOption> Options, string Context, string Answer)
 {
     public bool Open => Answer.Length == 0;
+    /// <summary>The answer was a card agent's choice, not the person's (WOR-0178): <c>**Answer:** X (decided by agent,
+    /// AND-0002, 2026-11-20)</c>, which <see cref="PlanRules.Prompt"/> tells the agent to write.</summary>
+    public bool ByAgent => PlanRules.DecidedBy(Answer) is not null;
+    /// <summary>The card whose agent chose, when the answer names it.</summary>
+    public string? DecidedCard => PlanRules.DecidedBy(Answer)?.Card;
+    /// <summary>The answer without its trailing <c>(by, date)</c> note.</summary>
+    public string Pick => PlanRules.Pick(Answer);
+}
+
+/// <summary>What a card agent is told about the plan its card came from, and how a choice it made is read back
+/// (WOR-0178, docs/FEATURE-PLANNING.md "Keeping it current"): the plan holds intent, the board holds state, and only a
+/// change of intent (a choice the plan didn't settle) is written to the plan.</summary>
+public static partial class PlanRules
+{
+    public sealed record Decided(string? Card);
+
+    /// <summary>The plan holding a made card, if any plan has it.</summary>
+    public static PlanDoc? PlanOf(IEnumerable<PlanDoc> plans, string cardId) =>
+        plans.FirstOrDefault(p => p.Cards.Any(c => c.Made && c.Id.Equals(cardId, StringComparison.OrdinalIgnoreCase)));
+
+    /// <summary>Lines for a card agent's prompt: where the plan is and the rule for a choice it settled.</summary>
+    public static IReadOnlyList<string> Prompt(string planFile, string cardId) =>
+    [
+        $"This card was made from the plan {planFile.Replace(Path.DirectorySeparatorChar, '/')} (intent only: the board holds progress, so never write how far along the work is into it).",
+        "If you make a choice the plan did not settle (a tool, a name, an id, an approach that had other options), add it to the plan's ## Questions as a ### heading " +
+        "with the options you weighed and the line `**Answer:** <your pick> (decided by agent, " + cardId + ", yyyy-MM-dd)`, in the same commit as the work. " +
+        "A question the plan already answers, or a detail nobody would weigh in on, doesn't go there. If the choice is mine to make rather than yours, ask with AskUserQuestion instead.",
+    ];
+
+    /// <summary>Set when the text records an agent's choice: "decided by agent", with the card after it when named.</summary>
+    public static Decided? DecidedBy(string answer)
+    {
+        var m = DecidedRx().Match(answer);
+        return m.Success ? new Decided(m.Groups[1].Success ? m.Groups[1].Value.ToUpperInvariant() : null) : null;
+    }
+
+    public static string Pick(string answer) => NoteRx().Replace(answer, "").Trim();
+
+    [GeneratedRegex(@"\bdecided\s+by\s+(?:an\s+)?(?:card\s+)?agent\b(?:[\s,:]+(?:on\s+)?([A-Za-z][A-Za-z0-9]*-\d+))?", RegexOptions.IgnoreCase)] private static partial Regex DecidedRx();
+    [GeneratedRegex(@"\s*\([^()]*\)\s*$")] private static partial Regex NoteRx();
 }
 
 /// <summary>A card the plan proposes: a <c>###</c> heading (with its id once made), a description, and the Where,

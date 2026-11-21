@@ -559,7 +559,7 @@ public partial class AgentsViewModel : ObservableObject
     /// null: move the card to done.</param>
     /// <param name="blockers">Lines naming the cards it waits on, their columns and newest reports (<see cref="BlockedStart.PromptLines"/>).</param>
     public static string CardPrompt(string projectName, Card card, string file, IReadOnlyList<string>? alongside = null, string? repo = null, string? commits = null,
-        string? finish = null, IReadOnlyList<string>? blockers = null)
+        string? finish = null, IReadOnlyList<string>? blockers = null, IReadOnlyList<string>? plan = null)
     {
         var lines = new List<string> { $"Work on this card from the {projectName} board.", "", $"{card.Id}: {card.Title}" };
         if (card.IsBug) lines.Add("Type: Bug. First check it still happens (if it doesn't, see CNR below). Find the cause before changing anything, and add a test that fails without the fix where one can be written.");
@@ -569,6 +569,7 @@ public partial class AgentsViewModel : ObservableObject
         lines.Add($"Card file: {file}");
         if (card.Description.Length > 0) { lines.Add(""); lines.Add(card.Description); }
         if (blockers is { Count: > 0 }) { lines.Add(""); lines.AddRange(blockers); }
+        if (plan is { Count: > 0 }) { lines.Add(""); lines.AddRange(plan); }
         lines.Add("");
         lines.Add("Read the project's CLAUDE.md first. Use AskUserQuestion when a choice is mine to make. " +
                   "When you stop, say what is done and what is left. " + (finish ??

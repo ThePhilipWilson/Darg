@@ -139,6 +139,11 @@
                         <StackPanel Spacing="6">
                           <SelectableTextBlock Text="{Binding Question}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                           <TextBlock Text="{Binding Context}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasContext}"/>
+                          <DockPanel IsVisible="{Binding ByAgent}">
+                            <Button DockPanel.Dock="Right" Content="Keep" Command="{Binding KeepCommand}" Margin="8,0,0,0" VerticalAlignment="Top"
+                                    Classes="primary" AutomationProperties.Name="Keep agent's choice"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Warn}" Text="{Binding DecidedText}"/>
+                          </DockPanel>
                           <DockPanel IsVisible="{Binding Answered}">
                             <Button DockPanel.Dock="Right" Content="{Binding Changing, Converter={x:Static views:DesignView.ChangeLabel}}" Command="{Binding ChangeCommand}"
                                     Margin="8,0,0,0" VerticalAlignment="Top" AutomationProperties.Name="Change answer"/>

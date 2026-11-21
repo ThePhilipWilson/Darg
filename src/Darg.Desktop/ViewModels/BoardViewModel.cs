@@ -167,8 +167,10 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         var stories = Directory.Exists(_project.Docs) ? Stories.Folder(_project) : null;
         string? reports = ReportStore.FolderFor(_project.Id);
         if (!Directory.Exists(reports)) reports = null;
+        var planFiles = PlanStore.FolderFor(_project) is { } pf
+            ? PlanStore.List(pf).Where(p => cards.Any(c => PlanRules.PlanOf([p], c.Id) is not null)).Select(p => p.File).ToList() : [];
         StartAgent(Stories.Prompt(_project.Name, folder, done, cards, inColumn.Where(c => c.IsStory).ToList(), busy, stories, reports,
-                _project.ExistingRepos(), Core.Commits.For(_project, folder), stories is null ? null : Core.Commits.For(_project, stories)),
+                _project.ExistingRepos(), Core.Commits.For(_project, folder), stories is null ? null : Core.Commits.For(_project, stories), planFiles),
             folder, $"Wrap up {_project.Name}'s {done.Name} into stories", stories is null ? [] : [_project.Docs!]);
     }
 

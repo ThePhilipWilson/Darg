@@ -54,6 +54,16 @@ public sealed class StoriesTests
     }
 
     [Fact]
+    public void A_wrap_up_prompt_names_the_plan_the_cards_came_from()
+    {
+        var p = Stories.Prompt("Darg", "C:/b/Main", Done, [C(1, "Logo")], [], [], "D:/docs/Stories", null, [], plans: ["D:/docs/design/phone.md"]);
+        Assert.Contains("D:/docs/design/phone.md", p);
+        Assert.Contains("Plan: <its full path>", p);
+        Assert.Contains("Don't edit the plan", p);
+        Assert.DoesNotContain("Plans: these plan files", Stories.Prompt("Darg", "C:/b/Main", Done, [C(1, "Logo")], [], [], "D:/docs/Stories", null, []));
+    }
+
+    [Fact]
     public void Without_a_docs_folder_the_story_card_holds_the_write_up()
     {
         var p = Stories.Prompt("Darg", "C:/b/Main", Done, [C(1, "Logo")], [], [], null, null, []);

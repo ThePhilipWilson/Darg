@@ -200,5 +200,31 @@ public class PlansTests : IDisposable
         Assert.Empty(PlanStore.List(Path.Combine(_dir, "missing")));
     }
 
+    [Fact]
+    public void A_question_an_agent_answered_is_marked_with_its_card_and_pick()
+    {
+        var doc = PlanDoc.Parse("# P\n\n## Questions\n\n### How?\n- **Tailscale**: a\n- **Relay**: b\n\n**Answer:** Tailscale (decided by agent, and-0002, 2026-11-20)\n\n### Which id?\n- **x**: a\n\n**Answer:** x (Philip, 2026-11-20)\n\n### Open?\n- **y**: a\n");
+        var q = doc.Questions[0];
+        Assert.True(q.ByAgent);
+        Assert.Equal("AND-0002", q.DecidedCard);
+        Assert.Equal("Tailscale", q.Pick);
+        Assert.False(doc.Questions[1].ByAgent);
+        Assert.False(doc.Questions[2].ByAgent);
+        Assert.True(PlanRules.DecidedBy("Relay (decided by an agent)") is { Card: null });
+    }
+
+    [Fact]
+    public void A_card_agent_is_given_its_plan_and_the_rule_for_a_choice_the_plan_left_open()
+    {
+        var doc = PlanDoc.Parse("# P\n\n## Cards\n\n### AND-0002: Remote\nd\n**Where:** w\n**Done when:** x\n");
+        Assert.Same(doc, PlanRules.PlanOf([doc], "and-0002"));
+        Assert.Null(PlanRules.PlanOf([doc], "AND-0009"));
+        var lines = string.Join("\n", PlanRules.Prompt("D:/docs/design/phone.md", "AND-0002"));
+        Assert.Contains("D:/docs/design/phone.md", lines);
+        Assert.Contains("## Questions", lines);
+        Assert.Contains("(decided by agent, AND-0002,", lines);
+        Assert.Contains("same commit", lines);
+    }
+
     static int Count(List<PlanStore.Node> nodes) => nodes.Sum(n => 1 + Count(n.Children));
 }

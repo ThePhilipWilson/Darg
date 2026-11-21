@@ -547,6 +547,7 @@ public partial class ProjectViewModel : ObservableObject
                 ReportsFolder = Reports?.Folder,
                 OpenReport = file => { if (Reports is null) return; Reports.Show(file); Section = Section.Reports; },
                 OpenCard = id => { if (Board?.OpenById(id) != true) return false; Section = Section.Board; return true; },
+                SendBack = (id, notes) => Board?.SendBackById(id, notes),
                 OpenBoard = name => { if (Board is null) return; if (Board.Boards.Contains(name)) Board.SelectedBoard = name; Section = Section.Board; },
             };
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
@@ -744,7 +745,9 @@ public partial class ProjectViewModel : ObservableObject
                 var blockers = card.BlockedBy.Count == 0 ? [] : BlockedStart.PromptLines(
                     Blockers.Of(card, Blockers.Index(CardIndex.Read(Config.Boards))),
                     id => CardIndex.ReportsFor(reports, id).FirstOrDefault()?.File is { } f ? Path.GetFullPath(f).Replace('\\', '/') : null);
-                return AgentsViewModel.CardPrompt(Name, card, file, others, repo, commits, finish, blockers);
+                // the plan it was made from, and the rule for a choice the plan didn't settle (WOR-0178)
+                var plan = PlanStore.FolderFor(Config) is { } pf && PlanRules.PlanOf(PlanStore.List(pf), card.Id) is { } pd ? PlanRules.Prompt(pd.File, card.Id) : null;
+                return AgentsViewModel.CardPrompt(Name, card, file, others, repo, commits, finish, blockers, plan);
             }
             // what picks a card agent's model profile: the card's words, type and labels, not the house rules around them
             static AgentJob CardJob(Card card) => new(JobKinds.Card, $"{card.Title}\n\n{card.Description}".Trim(), card.Type, card.Labels);

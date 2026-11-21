@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Darg.Core;
 using Darg.Desktop.ViewModels;
 
 namespace Darg.Desktop.Tests;
@@ -153,6 +154,79 @@ public class DesignPageTests
             Assert.Equal("", app.Crashes());
         }
         finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); } // the Sandbox default: unset, fake claude turns run 60 s
+    }
+
+    /// <summary>WOR-0178: a card made from a plan gets the plan's path and the rule for a choice the plan didn't settle;
+    /// a choice an agent wrote into the plan shows with Keep and Change, Change sends its card back with the new answer,
+    /// and the Log lists a finished card's report, all without the page writing anything but the answer line.</summary>
+    [AvaloniaFact]
+    public async Task A_choice_an_agent_wrote_into_the_plan_shows_with_keep_and_change_and_the_log_lists_reports()
+    {
+        using var app = DargApp.Make();
+        var first = app.Card("Remote access", "To Do");
+        var second = app.Card("Pairing", "QA Ready");
+        var design = Directory.CreateDirectory(Path.Combine(app.Docs, "design")).FullName;
+        var file = Path.Combine(design, "phone.md");
+        File.WriteAllText(file, FeaturePlan(first.Id));
+        // the second made card too, so the plan holds both
+        File.WriteAllText(file, File.ReadAllText(file).Replace("### Pairing in the app", $"### {second.Id}: Pairing in the app"));
+        await app.Start();
+
+        // the card agent is told which plan its card came from and what to do with a choice the plan left open
+        await app.Api("work-on", new { project = "proj", card = first.Id });
+        await app.Until(() => app.Prompts().Any(p => p.Contains("Work on this card")), "the card agent's prompt");
+        var prompt = app.Prompts().First(p => p.Contains("Work on this card"));
+        Assert.Contains(file.Replace('\\', '/'), prompt);
+        Assert.Contains("decided by agent, " + first.Id, prompt);
+
+        // the agent writes its choice into the plan's Questions
+        var agentsAnswer = $"**Answer:** Tailscale (decided by agent, {second.Id}, 2026-11-20)";
+        File.WriteAllText(file, File.ReadAllText(file).TrimEnd() + "\n\n## Questions\n\n### Which relay?\n- **Tailscale** (recommended): none\n- **Own server**: more work\n\n" + agentsAnswer + "\n");
+        // a finished card's report is in the Log
+        var reports = ReportStore.FolderFor("proj");
+        Directory.CreateDirectory(reports);
+        File.WriteAllText(Path.Combine(reports, $"20261120-1200-{second.Id}.md"),
+            $"---\ncard: {second.Id}\ntitle: Pairing in the app\nagent: a1\ncommits: abc1234\ndate: 2026-11-20 12:00\nread: false\n---\n## Asked\nx\n## Done\ny\n## Left\nNone\n");
+
+        await app.Api("show", new { project = "proj", section = "Design" });
+        var d = app.Project.Design!;
+        await app.Until(() => d.Page is { } p && p.Title == "Phone" && p.Questions.Any(q => q.ByAgent), "the decided question on the page");
+        var q = d.Page!.Questions.Single(x => x.ByAgent);
+        Assert.Equal("Tailscale", q.Chosen);
+        Assert.Equal(second.Id, q.DecidedCard);
+        Assert.Contains(second.Id, q.DecidedText);
+        Assert.Contains(d.Page.Log, r => r.Text.StartsWith(second.Id));
+        var before = File.ReadAllText(file);
+        d.Page.Log[0].OpenCommand.Execute(null);   // opening a report writes nothing to the plan
+        Assert.Equal(before, File.ReadAllText(file));
+
+        // Change: the card goes back to its agent with the new answer as notes
+        q.ChangeCommand.Execute(null);
+        q.Options.First(o => o.Label.StartsWith("Own server")).PickCommand.Execute(null);
+        Assert.Contains("Own server", File.ReadAllText(file));
+        await app.Until(() => app.Prompts().Any(p => p.Contains("Own server") && p.Contains("Which relay?")), "the card sent back with the new answer");
+        Assert.Contains("sent back", d.Status);
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
+    public async Task Keeping_an_agents_choice_puts_the_persons_name_on_it_and_sends_nothing_back()
+    {
+        using var app = DargApp.Make();
+        var card = app.Card("Remote access", "QA Ready");
+        var design = Directory.CreateDirectory(Path.Combine(app.Docs, "design")).FullName;
+        var file = Path.Combine(design, "phone.md");
+        File.WriteAllText(file, FeaturePlan(card.Id) + $"\n\n## Questions\n\n### Which relay?\n- **Tailscale**: none\n- **Own server**: more\n\n**Answer:** Tailscale (decided by agent, {card.Id}, 2026-11-20)\n");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Design" });
+        var d = app.Project.Design!;
+        await app.Until(() => d.Page is { } p && p.Questions.Any(x => x.ByAgent), "the decided question");
+        var calls = app.ClaudeCalls().Count;
+        d.Page!.Questions.Single(x => x.ByAgent).KeepCommand.Execute(null);
+        await app.Until(() => d.Page is { } p && p.Questions.All(x => !x.ByAgent), "the question kept");
+        Assert.Contains($"**Answer:** Tailscale ({Environment.UserName}, {DateTime.Now:yyyy-MM-dd})", File.ReadAllText(file));
+        Assert.DoesNotContain("decided by agent", File.ReadAllText(file));
+        Assert.Equal(calls, app.ClaudeCalls().Count);
     }
 
     [AvaloniaFact]
