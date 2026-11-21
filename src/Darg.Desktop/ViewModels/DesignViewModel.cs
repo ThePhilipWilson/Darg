@@ -82,7 +82,7 @@ public sealed partial class DesignViewModel : ObservableObject
         var expanded = Flatten(Tree).Where(n => !n.IsExpanded).Select(n => n.Plan.File).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var index = Blockers.Index(cards);
         PlanNode Node(PlanStore.Node n) =>
-            new(n.Plan, Progress(n.Plan, index), n.Children.Select(Node)) { IsExpanded = !expanded.Contains(n.Plan.File) };
+            new(n.Plan, Progress(n, index), n.Children.Select(Node)) { IsExpanded = !expanded.Contains(n.Plan.File) };
         var roots = PlanStore.Tree(plans).Select(Node).ToList();
         Tree.Clear();
         foreach (var r in roots) Tree.Add(r);
@@ -116,9 +116,18 @@ public sealed partial class DesignViewModel : ObservableObject
     internal static (int Done, int Total) Count(PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index) =>
         (plan.Cards.Count(c => c.Made && index.TryGetValue(c.Id, out var b) && b.Done), plan.Cards.Count);
 
-    static string Progress(PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index)
+    /// <summary>A plan's cards done of its cards, plus those of every feature plan under it (WOR-0179: a project plan
+    /// has no cards of its own, its progress is its features'), or "" with none.</summary>
+    static string Progress(PlanStore.Node node, IReadOnlyDictionary<string, BoardCard> index)
     {
-        var (done, total) = Count(plan, index);
+        int done = 0, total = 0;
+        void Add(PlanStore.Node n)
+        {
+            var (d, t) = Count(n.Plan, index);
+            done += d; total += t;
+            foreach (var c in n.Children) Add(c);
+        }
+        Add(node);
         return total == 0 ? "" : $"{done}/{total}";
     }
 
@@ -186,7 +195,7 @@ public sealed partial class PlanNode : ObservableObject
     public bool HasMark => Mark.Length > 0;
     public bool Dropped => Plan.Status == "dropped";
     public string Progress { get; }
-    public string Tip => $"{(Plan.IsProject ? "Project" : "Feature")} plan · {Plan.Status}" + (Progress.Length > 0 ? $" · {Progress} cards done" : "") + $"\n{Plan.File}";
+    public string Tip => $"{(Plan.IsProject ? "Project" : "Feature")} plan · {Plan.Status}" + (Progress.Length > 0 ? $" · {Progress} cards done" + (Plan.IsProject ? ", with its features'" : "") : "") + $"\n{Plan.File}";
     public ObservableCollection<PlanNode> Children { get; }
     [ObservableProperty] public partial bool IsExpanded { get; set; } = true;
 

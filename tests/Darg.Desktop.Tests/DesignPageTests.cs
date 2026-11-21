@@ -93,6 +93,8 @@ public class DesignPageTests
             var phone = d.Tree[0].Children[0];
             Assert.Equal("Phone", phone.Title);
             Assert.Equal("0/2", phone.Progress);
+            // WOR-0179: the project has no cards of its own, so it shows its features' rolled up
+            Assert.Equal("0/2", d.Tree[0].Progress);
 
             // the project plan's page has Features, one linked to its plan
             Assert.Equal("Proj", d.Page!.Title);
