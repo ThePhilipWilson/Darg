@@ -1,5 +1,7 @@
 # Android: approach and scope (AND-0001)
 
+History: the plan for this feature now lives in [design/android.md](design/android.md) (WOR-0180, on 2026-11-21), which the Design section shows beside each card's live column. This doc is the decision as made, and is not updated as cards finish.
+
 Decided 2026-11-20: how Darg reaches Android, what the phone does in v1 and what stays on the desktop. It replaces the open questions in [PHONE-PLAN.md](PHONE-PLAN.md). The desktop half is coming in (phone access in [REMOTE.md](REMOTE.md), AND-0002; AND-0004, AND-0006, AND-0007); the phone app's scaffold and shell are in (AND-0003, below); the cards under Order fill in its screens.
 
 ## Decision

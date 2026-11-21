@@ -19,6 +19,7 @@ Darg is one app for everything in a project: boards, notes, docs, code, agents, 
 | Doc | What it is |
 |---|---|
 | [ANDROID.md](ANDROID.md) | The Android decision (2026-11-20): a thin remote client, a native Avalonia app over the Darg API; v1 features and what stays desktop-only. Being built. |
+| [design/android.md](design/android.md) | The Android feature as a plan (WOR-0180, on 2026-11-21): goals, what it isn't doing, the choices made, the design and its eleven cards with what each is blocked by. The first plan in the Design section, so it shows each card's live column. |
 | [FEATURE-PLANNING.md](FEATURE-PLANNING.md) | The design for planning a feature or a whole project before its cards exist (2026-11-20, WOR-0171): the Design section, plan files, Blocked by on every card, and the Android feature replayed through it. Not built yet; WOR-0172 onwards build it. |
 | [PLAN.md](PLAN.md) | The original plan (2026-11-16): the ask, the big technical calls and what was built in the first slices. Written when the app was called Workbench. |
 | [PHONE-PLAN.md](PHONE-PLAN.md) | The first draft for phone and tablet (2026-11-16), replaced by [ANDROID.md](ANDROID.md). |

@@ -193,5 +193,28 @@ public sealed class DocsTests
             .Select(Path.GetFileName).Where(n => n is not null && n != "README.md" && (n.EndsWith(".md") || n.EndsWith(".html")))
             .Where(n => !index.Contains($"]({n})")).ToList();
         Assert.True(missing.Count == 0, "not in docs/README.md: " + string.Join(", ", missing));
+        var plans = Directory.GetFiles(Path.Combine(Docs(), "design"), "*.md").Select(f => "design/" + Path.GetFileName(f))
+            .Where(n => !index.Contains($"]({n})")).ToList();
+        Assert.True(plans.Count == 0, "plans not in docs/README.md: " + string.Join(", ", plans));
+    }
+
+    /// <summary>The Android plan (WOR-0180) is the first plan file: it must parse, name every Android card with a live id, and
+    /// carry the blockers the board has (AND-0004, 0005, 0007, 0008 and 0009 wait on the scaffold or on each other), with its
+    /// two cards the board lacked (Needs you; pairing in the phone app).</summary>
+    [Fact]
+    public void The_android_plan_parses_with_every_card_and_its_blockers()
+    {
+        var plan = PlanDoc.Load(Path.Combine(Docs(), "design", "android.md"));
+        Assert.Equal("feature", plan.Kind);
+        Assert.Equal("Android", plan.Board);
+        Assert.Equal(5, plan.Questions.Count);
+        Assert.All(plan.Questions, q => Assert.False(q.Open, q.Question));
+        Assert.Equal(Enumerable.Range(1, 11).Select(n => $"AND-{n:0000}"), plan.Cards.Select(c => c.Id).OrderBy(i => i));
+        Assert.All(plan.Cards, c => Assert.True(c.Ready, c.Id + " scores " + string.Join("|", c.Score.Missing)));
+        Assert.Empty(plan.UnknownBlockers());
+        string Blocked(string id) => string.Join(",", plan.Cards.Single(c => c.Id == id).BlockedBy);
+        foreach (var id in new[] { "AND-0004", "AND-0005", "AND-0007", "AND-0008", "AND-0010" }) Assert.Equal("AND-0003", Blocked(id));
+        Assert.Equal("AND-0004,AND-0005", Blocked("AND-0009"));
+        Assert.Equal("AND-0002,AND-0003", Blocked("AND-0011"));
     }
 }
