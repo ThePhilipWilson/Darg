@@ -1,4 +1,6 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Darg.Core;
 using Darg.Desktop.ViewModels;
 
@@ -10,6 +12,13 @@ namespace Darg.Desktop.Tests;
 public class BlockedStartTests
 {
     static ListViewModel Column(DargApp app, string id) => app.Board.Lists.Single(l => l.Id == id);
+
+    /// <summary>Whether the window draws <paramref name="text"/> whole: some visible text block holds it with no line cut
+    /// short by an ellipsis (WOR-0173 QA: the header trimmed the status at 260 px, so the left-out cards never showed).</summary>
+    static bool DrawnWhole(DargApp app, string text) =>
+        app.Window.GetVisualDescendants().OfType<TextBlock>().Any(t =>
+            t.IsEffectivelyVisible && t.Bounds.Width > 0 && (t.Text ?? "").Contains(text, StringComparison.Ordinal)
+            && !t.TextLayout.TextLines.Any(l => l.HasCollapsed));
 
     /// <summary>Give a card a Blocked by line among its properties, as WOR-0172's panel writes it.</summary>
     static void BlockedBy(DargApp app, Card card, params string[] ids)
@@ -61,6 +70,13 @@ public class BlockedStartTests
             Assert.Equal("Backlog", app.Read(blocked.Id).Status);
             Assert.Contains($"left out 1 blocked: {blocked.Id} (waits on {scaffold.Id})", app.Board.Status);
             Assert.Equal("▶ Work All (0, 1 blocked)", Column(app, Board.Backlog).BulkText);
+            // and the screen shows it whole, the cards left out and what they wait on, not cut off in the header
+            Assert.True(DrawnWhole(app, $"left out 1 blocked: {blocked.Id} (waits on {scaffold.Id})"), $"drawn whole: {app.Board.Status}");
+            app.Shot("work-all-notice");
+            app.Board.DismissNoticeCommand.Execute(null);
+            await DargApp.Settle(100);
+            Assert.False(app.Board.ShowsNotice);
+            Assert.False(DrawnWhole(app, "left out"));
 
             // the API says the same, and starts it with force
             Assert.Contains($"Nothing to start: left out 1 blocked: {blocked.Id}", await app.Api("work-all", new { project = "proj" }));

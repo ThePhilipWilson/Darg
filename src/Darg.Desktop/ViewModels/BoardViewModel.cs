@@ -104,7 +104,17 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial string? SelectedBoard { get; set; }
     [ObservableProperty] public partial string Filter { get; set; } = "";
     [ObservableProperty] public partial bool ShowCompleted { get; set; }
-    [ObservableProperty] public partial string Status { get; set; } = "";
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowsNotice), nameof(ShowsRowNotice))] public partial string Status { get; set; } = "";
+    /// <summary>The card count ("12 of 30 cards"), which the header shows while <see cref="Status"/> says something else
+    /// in full on a line of its own below it (WOR-0173 QA: a notice cut off at the header's width lost which cards were
+    /// left out and what they wait on).</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowsNotice), nameof(ShowsRowNotice))] public partial string CountText { get; set; } = "";
+    /// <summary>Status says more than the count: a notice or an error, shown whole and wrapped below the header.</summary>
+    public bool ShowsNotice => Status.Length > 0 && Status != CountText;
+    /// <summary>A further row's notice shows under its own header; the first row's is the section header's.</summary>
+    public bool ShowsRowNotice => ShowsNotice && IsExtraRow;
+    /// <summary>The notice line's ✕: back to the count.</summary>
+    [RelayCommand] void DismissNotice() { _notice = null; Status = CountText; }
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(IsEditing))] public partial CardEditor? Editor { get; set; }
     public bool IsEditing => Editor is not null;
     [RelayCommand] void NewCard() { if (Folder is not null) Root.Editor = new CardEditor(this, null); }
@@ -936,7 +946,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _picked.IntersectWith(Shown().Select(c => c.Id));
         PickedChanged();
         foreach (var l in Lists) { l.BulkChanged(); l.SortChanged(); } // Work All counts across two columns, so every count is read again
-        Status = _notice ?? $"{total} of {_board.AllCards.Count()} cards";
+        CountText = $"{total} of {_board.AllCards.Count()} cards";
+        Status = _notice ?? CountText;
     }
 
     /// <summary>Start an agent on a card: it goes to the board's working column ("In Progress", else

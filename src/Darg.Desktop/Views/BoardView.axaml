@@ -82,6 +82,12 @@
   <Grid RowDefinitions="Auto,Auto,*">
     <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
       <DockPanel>
+        <!-- what just happened, whole and wrapped (WOR-0173 QA: cut off in the header, it lost which cards were left out) -->
+        <DockPanel DockPanel.Dock="Bottom" IsVisible="{Binding ShowsNotice}" Margin="0,6,0,0">
+          <Button DockPanel.Dock="Right" Classes="head" Opacity="1" Content="✕" Command="{Binding DismissNoticeCommand}" VerticalAlignment="Top"
+                  ToolTip.Tip="Dismiss" AutomationProperties.Name="Dismiss the board's notice"/>
+          <SelectableTextBlock x:Name="Notice" Classes="dim" Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+        </DockPanel>
         <Button DockPanel.Dock="Left" Content="+ Board" Command="{Binding NewBoardCommand}" Margin="0,0,12,0"
                 ToolTip.Tip="Make a new board, or have an agent sort the cards into a board per story"/>
         <ItemsControl DockPanel.Dock="Left" x:Name="BoardTabs" ItemsSource="{Binding Tabs}" Margin="0,0,12,0">
@@ -96,7 +102,7 @@
         </ItemsControl>
         <Button DockPanel.Dock="Right" Classes="primary" Content="+ Card" Command="{Binding NewCardCommand}" Margin="12,0,0,0"/>
         <CheckBox DockPanel.Dock="Right" Content="Show completed" IsChecked="{Binding ShowCompleted}" Margin="12,0,0,0"/>
-        <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding Status}" VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
+        <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding CountText}" VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0">
           <TextBlock Text="{Binding PickedText}" IsVisible="{Binding HasPicked}" VerticalAlignment="Center" Foreground="{DynamicResource Accent}"/>
           <Button Classes="primary" Content="{Binding WorkOnPickedText}" Command="{Binding WorkOnPickedCommand}" IsVisible="{Binding CanWorkOnPicked}"
@@ -131,9 +137,11 @@
     <DockPanel Height="{Binding RowHeight}">
       <Border DockPanel.Dock="Top" IsVisible="{Binding ShowsHeader}" Padding="16,8,14,0">
         <DockPanel>
+          <!-- a further row's notice, whole (the first row's shows under the section's header) -->
+          <SelectableTextBlock DockPanel.Dock="Bottom" Classes="dim small" Text="{Binding Status}" TextWrapping="Wrap" IsVisible="{Binding ShowsRowNotice}" Margin="0,4,0,0"/>
           <Button DockPanel.Dock="Right" Classes="head" Opacity="1" Content="✕" Command="{Binding HideRowCommand}" IsVisible="{Binding IsExtraRow}"
                   ToolTip.Tip="Stop showing this board here" AutomationProperties.Name="{Binding SelectedBoard, StringFormat='Hide {0}'}"/>
-          <TextBlock Classes="dim small" Text="{Binding Status}" VerticalAlignment="Center" Margin="10,0" TextTrimming="CharacterEllipsis" DockPanel.Dock="Right"/>
+          <TextBlock Classes="dim small" Text="{Binding CountText}" VerticalAlignment="Center" Margin="10,0" TextTrimming="CharacterEllipsis" DockPanel.Dock="Right"/>
           <TextBlock Text="{Binding SelectedBoard}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center"/>
         </DockPanel>
       </Border>
