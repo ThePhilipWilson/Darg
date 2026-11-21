@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Darg.Core;
 
 namespace Darg.Core.Tests;
@@ -142,7 +143,7 @@ public sealed class RemoteTests : IDisposable
     {
         string fingerprint;
         int port;
-        using (var server = RemoteServer.Start(Api(), () => _home, port: 0)) { fingerprint = server.Fingerprint; port = server.Port; }
+        using (var server = RemoteServer.Start(Api(), () => _home, port: 0, loopbackOnly: true)) { fingerprint = server.Fingerprint; port = server.Port; }
         using var again = RemoteServer.Start(Api(), () => _home, port: 0, loopbackOnly: true);
         Assert.Equal(fingerprint, again.Fingerprint); // a paired phone's pin stays good
 
@@ -170,6 +171,35 @@ public sealed class RemoteTests : IDisposable
             Assert.Equal(IPAddress.Loopback, local.LocalEndpoint.Address);
         // the default isn't started here: binding every address is what makes Windows ask about the firewall
         Assert.Equal(IPAddress.IPv6Any, RemoteServer.BindAddress(loopbackOnly: false));
+    }
+
+    /// <summary>WOR-0182, the class not the instance: a test that listens beyond loopback makes Windows ask about the
+    /// firewall. Every RemoteServer a test starts passes loopbackOnly, every TcpListener binds a loopback address and no
+    /// HttpListener prefix takes every host (+ or *). A new test that forgets fails here instead of raising a prompt.</summary>
+    [Fact]
+    public void No_test_listens_beyond_loopback()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (d is not null && !File.Exists(Path.Combine(d.FullName, "Darg.sln"))) d = d.Parent;
+        Assert.NotNull(d);
+        var sep = Path.DirectorySeparatorChar;
+        var files = Directory.EnumerateFiles(Path.Combine(d!.FullName, "tests"), "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{sep}bin{sep}") && !f.Contains($"{sep}obj{sep}")).ToList();
+        Assert.Contains(files, f => f.EndsWith("RemoteTests.cs"));
+        var bad = new List<string>();
+        foreach (var f in files)
+        {
+            var lines = File.ReadAllLines(f);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var l = lines[i];
+                var wide = (Regex.IsMatch(l, @"RemoteServer\.Start\(") && !l.Contains("loopbackOnly: true"))
+                    || (Regex.IsMatch(l, @"new (System\.Net\.Sockets\.)?TcpListener\(") && !Regex.IsMatch(l, @"IPAddress\.(IPv6)?Loopback"))
+                    || Regex.IsMatch(l, @"https?://[+*][:/]");
+                if (wide) bad.Add($"{Path.GetRelativePath(d.FullName, f)}:{i + 1}: {l.Trim()}");
+            }
+        }
+        Assert.True(bad.Count == 0, "Listens beyond loopback (a firewall prompt):\n" + string.Join("\n", bad));
     }
 
     static StringContent Json(object o) => new(System.Text.Json.JsonSerializer.Serialize(o), Encoding.UTF8, "application/json");
