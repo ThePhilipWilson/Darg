@@ -346,10 +346,12 @@ public class DecisionTests
 
         await app.Api("decide", new { project = "proj", card = card.Id, answer = "Still fails", notes = "nothing landed" });
 
-        Assert.False(item.Open);
-        Assert.Equal("Settled on the card: sent back", item.Outcome); // says how, not only that it's gone
-        Assert.Empty(agent.OpenDecisions);
-        Assert.Equal($"{card.Id}: settled on the card: sent back", agent.Activity); // the row stops saying it waits
+        // sent back starts a rework agent on the card, which replaces the asker (WOR-0183): its decision goes with it, and
+        // the answer lives on in the card and the rework agent's prompt
+        Assert.DoesNotContain(agent, app.Agents.Agents);
+        Assert.Contains(app.Agents.Agents, a => a.CardId == card.Id && a.Purpose == AgentPurposes.Rework);
+        Assert.Equal("In Progress", app.Read(card.Id).Status);
+        await app.Until(() => app.Prompts().Any(p => p.Contains("nothing landed")), "the rework agent to be sent the notes");
     }
 
     [AvaloniaFact]

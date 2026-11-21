@@ -207,7 +207,29 @@ public partial class AgentsViewModel : ObservableObject
 
     /// <summary>Whether the agent has finished its work and is only sitting in the list.</summary>
     public bool IsFinished(AgentViewModel a) =>
-        a.IsDone || (a.State == AgentState.Saved && a.CardDone && a.FinishedTurn);
+        a.IsDone || (a.State == AgentState.Saved && a.CardDone && a.FinishedTurn)
+        || ((Replaced(a) || a.Purpose == AgentPurposes.Improve) && Settled(a));
+
+    /// <summary>Whether a card agent's work has been taken over (WOR-0183): a newer work, rework or QA agent is on its card.
+    /// What it did is in the card, its reports and the newer agent's prompt; it only clutters the list.</summary>
+    public bool Replaced(AgentViewModel a) =>
+        a.CardId is not null && a.Purpose is null or AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa or AgentPurposes.Improve
+        && Agents.Any(b => b != a && b.CardId == a.CardId && b.Purpose is AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa && b.Created > a.Created);
+
+    /// <summary>Finished its turn well and holds no claim on its card: nothing left for it to do.</summary>
+    static bool Settled(AgentViewModel a) => Finished(a) && !a.IsLiveOnCard;
+
+    /// <summary>A new work, rework or QA agent has started on a card (WOR-0183): the older agents on it that have settled
+    /// leave the list; one still at work, waiting on the person or out of usage goes once its turn ends well, and a failed
+    /// one stays. A QA agent's verdict stays readable until this point, when something has replaced it.</summary>
+    void ForgetReplacedBy(AgentViewModel newer)
+    {
+        foreach (var a in Agents.Where(a => a != newer && a.CardId == newer.CardId && a.Purpose is null or AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa or AgentPurposes.Improve).ToList())
+        {
+            if (Settled(a)) Forget(a);
+            else if (a.IsLiveOnCard) _goWhenFinished.Add(a.Id);
+        }
+    }
 
     // ---- Finished agent reports (WOR-0061): an agent that filed a report is forgotten once its turn ends well.
 
@@ -489,6 +511,8 @@ public partial class AgentsViewModel : ObservableObject
         var agent = new AgentViewModel(folder, prompt, cardId, name ?? ChatTitle.Guess(prompt),
             args: [.. ArtifactArgs(id), .. RepoArgs(folder), .. (dirs ?? []).SelectMany(d => new[] { "--add-dir", d })], id: id, profile: profile) { StoreFolder = _store, Purpose = purpose };
         Add(agent, select: true);
+        if (purpose == AgentPurposes.Improve) _goWhenFinished.Add(agent.Id); // writes no report: it goes once its turn ends well
+        if (cardId is not null && purpose is AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa) ForgetReplacedBy(agent);
         agent.Save();
         if (name is null) _ = Retitle(agent, prompt); // a card's agent is already named for the card
         return agent;
