@@ -1049,7 +1049,7 @@ public partial class AgentViewModel : ObservableObject
                 tool.SetResult(r, Cwd);
                 break;
             case PermissionAsked { ToolName: "AskUserQuestion" } q:
-                var question = new QuestionItem(q, this);
+                var question = new QuestionItem(q, this, Cwd);
                 Items.Add(question);
                 Activity = OneLine(question.Questions.FirstOrDefault()?.Question ?? "has a question");
                 State = AgentState.NeedsYou;
@@ -1494,7 +1494,7 @@ public sealed partial class QuestionItem : TranscriptItem, IPending
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Pending))] public partial bool Sent { get; set; }
     public bool Pending => !Sent;
 
-    public QuestionItem(PermissionAsked ask, AgentViewModel agent)
+    public QuestionItem(PermissionAsked ask, AgentViewModel agent, string? cwd = null)
     {
         _ask = ask; _agent = agent;
         foreach (var q in ask.Input["questions"] as JsonArray ?? [])
@@ -1508,6 +1508,11 @@ public sealed partial class QuestionItem : TranscriptItem, IPending
                 return new QuestionOption(label, (string?)o?["description"] ?? "", multi, () => group!.Choose(label));
             }).ToList();
             group = new QuestionGroup((string?)q?["header"] ?? "", text, opts, multi, this);
+            // WOR-0184: a picture the question, its options or their descriptions point at shows above it
+            var about = text + "\n" + string.Join("\n", (q?["options"] as JsonArray ?? []).Select(o => (string?)o?["label"] + "\n" + (string?)o?["description"]));
+            foreach (var path in ImagePaths.Find(about, cwd, 4))
+                try { using var f = File.OpenRead(path); group.Pictures.Add(new DecisionPicture(Bitmap.DecodeToWidth(f, 720), path)); }
+                catch (Exception) { }
             Questions.Add(group);
         }
     }
@@ -1533,6 +1538,8 @@ public sealed partial class QuestionGroup(string header, string question, IReadO
     public string Question { get; } = question;
     public IReadOnlyList<QuestionOption> Options { get; } = options;
     public bool MultiSelect { get; } = multiSelect;
+    public List<DecisionPicture> Pictures { get; } = [];
+    public bool HasPictures => Pictures.Count > 0;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowSendPicks))] public partial string? Chosen { get; set; }
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(SendOwnCommand))] public partial string OwnAnswer { get; set; } = "";
 

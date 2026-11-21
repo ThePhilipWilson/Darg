@@ -18,5 +18,6 @@ public static class Decisions
     public const string Briefing =
         "Darg tells the person when you need a decision from them: an AskUserQuestion or a permission prompt. " +
         "A reply that ends your turn reaches them only after a long turn. So any question for the person, however small, goes through " +
-        "AskUserQuestion, never written as prose at the end of a reply.";
+        "AskUserQuestion, never written as prose at the end of a reply. " +
+        "When a question is about how something looks, put the full path of a screenshot of it in the question text (for example C:/path/shot.png): Darg shows the picture above the question.";
 }

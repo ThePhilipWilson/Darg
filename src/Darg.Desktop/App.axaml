@@ -97,6 +97,13 @@
             <DataTemplate x:DataType="vm:QuestionGroup">
               <StackPanel Spacing="6">
                 <TextBlock Classes="dim small" Text="{Binding Header}"/>
+                <!-- WOR-0184: what the question is about, from image paths in it -->
+                <ItemsControl ItemsSource="{Binding Pictures}" IsVisible="{Binding HasPictures}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DecisionPicture"><Image Source="{Binding Picture}" Stretch="Uniform" MaxHeight="360" HorizontalAlignment="Left"/></DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <TextBlock Text="{Binding Question}" TextWrapping="Wrap" FontWeight="SemiBold"/>
                 <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNull}}">
                   <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>

@@ -83,12 +83,12 @@ touch_every = float(os.environ.get("FAKE_TOUCH_EVERY", "10"))
 sid = "fake-%d" % os.getpid()
 waiting = {}  # request id -> [event, response]: questions asked of the host, until it answers
 
-def ask(n):
+def ask(n, image=None):
     rid = "ask-%d-%d" % (os.getpid(), n)
     slot = [threading.Event(), None]
     waiting[rid] = slot
     emit({"type": "control_request", "request_id": rid, "request": {"subtype": "can_use_tool", "tool_name": "AskUserQuestion",
-          "input": {"questions": [{"question": "Which board?", "header": "Board", "multiSelect": False,
+          "input": {"questions": [{"question": "Which board?" + (" Look at " + image if image else ""), "header": "Board", "multiSelect": False,
                                    "options": [{"label": "Main", "description": "the inbox"}, {"label": "Elsewhere", "description": "another board"}]}]},
           "tool_use_id": "tq%d" % n, "requires_user_interaction": True}})
     slot[0].wait()
@@ -113,8 +113,9 @@ def work(text):
           "apiKeySource": "none", "permissionMode": "auto"})
     if "FAKE_ASK" in text:
         asks += 1
-        answer = ask(asks)
-        picked = ((answer.get("updatedInput") or {}).get("answers") or {}).get("Which board?", "nothing")
+        img = re.search(r"FAKE_ASK_IMAGE (\S+)", text)
+        answer = ask(asks, img.group(1) if img else None)
+        picked = next(iter(((answer.get("updatedInput") or {}).get("answers") or {}).values()), "nothing")
         emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Picked: " + picked}]}})
     made = re.search(r"FAKE_CARD (\S+): (.+)", text)
     if made:
