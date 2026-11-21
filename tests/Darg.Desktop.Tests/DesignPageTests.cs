@@ -77,7 +77,9 @@ public class DesignPageTests
             var design = Directory.CreateDirectory(Path.Combine(app.Docs, "design")).FullName;
             File.WriteAllText(Path.Combine(design, "proj.md"), ProjectPlan());
             var phoneFile = Path.Combine(design, "phone.md");
-            File.WriteAllText(phoneFile, FeaturePlan(made.Id));
+            // CRLF whatever the checkout (a raw string takes the source file's line endings, which autocrlf makes
+            // CRLF here and LF elsewhere), so the edit below always checks that a typed \n becomes the file's own
+            File.WriteAllText(phoneFile, FeaturePlan(made.Id).ReplaceLineEndings("\r\n"));
             await app.Start();
             await app.Api("work-on", new { project = "proj", card = made.Id });
             await app.Until(() => app.Agents.ForCard(made.Id) is not null, "an agent on the made card");
@@ -137,7 +139,7 @@ public class DesignPageTests
             Assert.Equal("- Answer agents from the sofa.", goals.Draft);
             goals.Draft = "- Answer agents from anywhere.\n- Never miss a decision.";
             goals.SaveCommand.Execute(null);
-            Assert.Equal(before.Replace("- Answer agents from the sofa.", "- Answer agents from anywhere.\n- Never miss a decision."), File.ReadAllText(phoneFile));
+            Assert.Equal(before.Replace("- Answer agents from the sofa.", "- Answer agents from anywhere.\r\n- Never miss a decision."), File.ReadAllText(phoneFile));
             await app.Until(() => d.Page!.Goals.Markdown.Contains("Never miss"), "the page read again with the new goals");
             await AvaloniaSettle();
             app.Shot("design-answered");
