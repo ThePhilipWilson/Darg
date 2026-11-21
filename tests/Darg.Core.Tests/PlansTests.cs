@@ -152,6 +152,34 @@ public class PlansTests : IDisposable
     }
 
     [Fact]
+    public void Writing_a_part_replaces_only_its_body_and_adds_a_missing_one_in_its_place()
+    {
+        // WOR-0175: Goals, Not doing and Design are edited as text on the Design page
+        var text = WorkedPlan();
+        var f = Save(text);
+        Assert.True(PlanStore.SetSection(f, "Goals", "- Answer agents from the sofa.\r\n- Never miss a decision.\n\n"));
+        Assert.Equal(text.Replace("## Goals\n- Answer agent questions and card decisions away from the PC.\n",
+            "## Goals\n- Answer agents from the sofa.\n- Never miss a decision.\n"), File.ReadAllText(f));
+        Assert.Equal(["Answer agents from the sofa.", "Never miss a decision."], PlanDoc.Load(f).Goals);
+        Assert.Equal(PlanDoc.Parse(text).Cards.Count, PlanDoc.Load(f).Cards.Count);
+
+        // the last part, in a CRLF file: the final newline and the line endings stay
+        var crlf = Save("# P\r\n\r\n## Goals\r\n- a\r\n\r\n## Design\r\nold\r\n", "crlf.md");
+        PlanStore.SetSection(crlf, "Design", "new\nlines");
+        Assert.Equal("# P\r\n\r\n## Goals\r\n- a\r\n\r\n## Design\r\nnew\r\nlines\r\n", File.ReadAllText(crlf));
+
+        // missing: before the part that follows it, or at the end; emptied: the heading stays
+        var bare = Save("# P\n\n## Goals\n- a\n\n## Design\nd\n", "bare.md");
+        PlanStore.SetSection(bare, "Not doing", "- b");
+        Assert.Equal("# P\n\n## Goals\n- a\n\n## Not doing\n- b\n\n## Design\nd\n", File.ReadAllText(bare));
+        PlanStore.SetSection(bare, "Features", "- c");
+        Assert.Equal("# P\n\n## Goals\n- a\n\n## Not doing\n- b\n\n## Design\nd\n\n## Features\n- c\n", File.ReadAllText(bare));
+        PlanStore.SetSection(bare, "Goals", "  ");
+        Assert.Equal("# P\n\n## Goals\n\n## Not doing\n- b\n\n## Design\nd\n\n## Features\n- c\n", File.ReadAllText(bare));
+        Assert.Empty(PlanDoc.Load(bare).Goals);
+    }
+
+    [Fact]
     public void The_store_lists_a_projects_plans_and_builds_the_tree_by_parent()
     {
         Save("---\nkind: project\n---\n# Darg\n\n## Features\n- Android\n", "darg.md");

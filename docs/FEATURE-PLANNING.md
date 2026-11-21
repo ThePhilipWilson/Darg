@@ -216,5 +216,8 @@ WOR-0172 and WOR-0173 stand on their own: they are worth having before any of th
 
 ## Open
 
-- **Who commits an edit made on the page:** an answer tapped or a goal edited changes a file in the main checkout. Darg doesn't commit anything itself today; whether the page commits its own edits under the project's commit rule, or leaves them for the next agent, is for WOR-0175 to ask.
-- **The section's name and icon:** Design, as Philip called it, unless the rail says otherwise.
+- **The section's name and icon:** Design, as Philip called it, unless the rail says otherwise. It shipped as Design with a ◇ (WOR-0175).
+
+Settled since:
+
+- **Who commits an edit made on the page:** nobody, from the page. An answer tapped or a part edited changes the file in the main checkout and is left uncommitted, for Philip or the next agent in the repo to commit (Philip's pick when WOR-0175 asked, 2026-11-20). The status line says so after each edit.

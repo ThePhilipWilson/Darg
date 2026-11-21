@@ -34,7 +34,7 @@ Instances cannot see each other, by design: the work PC and home PC each run the
 |---|---|
 | `DARG_HOME` | Use this folder as the instance. Use a throwaway one (`.shots/home`) for anything that writes cards or notes. |
 | `DARG_INSTANCE` | Instance name under `%APPDATA%\Darg\` (default `home`). |
-| `DARG_SECTION` | Open this section on start: Home, Board, Notes, Docs, Agents, Flows, Reports, Artifacts, Mistakes, Context, Code, GitHub, Preview, Terminal (each described in [guide.md](guide.md)). |
+| `DARG_SECTION` | Open this section on start: Home, Board, Notes, Docs, Design, Agents, Flows, Reports, Artifacts, Mistakes, Context, Code, GitHub, Preview, Terminal (each described in [guide.md](guide.md)). |
 | `DARG_AGENT` | Start an agent with this prompt (in `DARG_AGENT_CWD` if set). |
 | `DARG_FLOW` | With `DARG_AGENT`, run this [flow](guide.md#flows) instead. |
 | `DARG_ADD_FOLDER` | Open Setup with this folder added as a project (unsaved). |

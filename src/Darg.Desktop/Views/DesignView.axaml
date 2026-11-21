@@ -1,0 +1,266 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             xmlns:views="using:Darg.Desktop.Views"
+             x:Class="Darg.Desktop.Views.DesignView"
+             x:DataType="vm:DesignViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.part">
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Border.part">
+      <Setter Property="Background" Value="{DynamicResource Panel}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="Padding" Value="14,10"/>
+    </Style>
+    <!-- a card's row: the whole row opens the card once it's made -->
+    <Style Selector="Button.row">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0,0,0,1"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Padding" Value="4,8"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="TextBlock.quality"><Setter Property="Foreground" Value="{DynamicResource Bad}"/></Style>
+    <Style Selector="TextBlock.quality.zero"><Setter Property="Foreground" Value="{DynamicResource Zero}"/></Style>
+    <Style Selector="TextBlock.quality.amber"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
+    <Style Selector="TextBlock.quality.green"><Setter Property="Foreground" Value="{DynamicResource Ok}"/></Style>
+    <Style Selector="TextBlock.blocker"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
+    <Style Selector="TextBlock.blocker.bad"><Setter Property="Foreground" Value="{DynamicResource Bad}"/></Style>
+    <Style Selector="Border.column">
+      <Setter Property="Background" Value="{DynamicResource LabelBg}"/>
+      <Setter Property="CornerRadius" Value="4"/>
+      <Setter Property="Padding" Value="6,1"/>
+    </Style>
+    <Style Selector="Border.column.done"><Setter Property="Background" Value="{DynamicResource AccentWash}"/></Style>
+    <Style Selector="TextBlock.dropped"><Setter Property="TextDecorations" Value="Strikethrough"/></Style>
+  </UserControl.Styles>
+
+  <UserControl.DataTemplates>
+    <!-- Goals, Not doing and Design: markdown to read, ✎ Edit for a box with Save and Cancel -->
+    <DataTemplate DataType="vm:PlanTextPart">
+      <Border Classes="part">
+        <StackPanel Spacing="6">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+              <Button Content="✎ Edit" Command="{Binding EditCommand}" IsVisible="{Binding Reading}" AutomationProperties.Name="{Binding Label, StringFormat='Edit {0}'}"/>
+              <Button Classes="primary" Content="Save" Command="{Binding SaveCommand}" IsVisible="{Binding Editing}" AutomationProperties.Name="{Binding Label, StringFormat='Save {0}'}"/>
+              <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding Editing}"/>
+            </StackPanel>
+            <TextBlock Classes="part" Text="{Binding Label}" VerticalAlignment="Center"/>
+          </DockPanel>
+          <views:MarkdownView Markdown="{Binding Markdown}" IsVisible="{Binding Reading}"/>
+          <TextBlock Classes="dim" Text="{Binding Hint}" TextWrapping="Wrap">
+            <TextBlock.IsVisible>
+              <MultiBinding Converter="{x:Static BoolConverters.And}">
+                <Binding Path="IsEmpty"/>
+                <Binding Path="Reading"/>
+              </MultiBinding>
+            </TextBlock.IsVisible>
+          </TextBlock>
+          <TextBox Text="{Binding Draft}" IsVisible="{Binding Editing}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="520"
+                   FontFamily="Consolas,Menlo,monospace" FontSize="13" PlaceholderText="{Binding Hint}"/>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+  </UserControl.DataTemplates>
+
+  <Grid ColumnDefinitions="300,*" RowDefinitions="*,Auto">
+    <!-- the plans as a tree: a project plan with its feature plans under it -->
+    <Border Grid.RowSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
+      <DockPanel>
+        <DockPanel DockPanel.Dock="Top" Margin="12,10,8,6">
+          <Button DockPanel.Dock="Right" Content="⟳" Command="{Binding RefreshCommand}" ToolTip.Tip="Read the plans and the boards again" AutomationProperties.Name="Refresh plans"/>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="Plans" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding Folder}" Classes="dim small" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Folder}"/>
+          </StackPanel>
+        </DockPanel>
+        <TreeView ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedNode}" Background="Transparent">
+          <TreeView.Styles>
+            <Style Selector="TreeViewItem" x:DataType="vm:PlanNode">
+              <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+              <Setter Property="MinHeight" Value="28"/>
+              <Setter Property="AutomationProperties.Name" Value="{Binding Title}"/>
+            </Style>
+          </TreeView.Styles>
+          <TreeView.ItemTemplate>
+            <TreeDataTemplate DataType="vm:PlanNode" ItemsSource="{Binding Children}">
+              <DockPanel ToolTip.Tip="{Binding Tip}">
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Progress}" Classes="dim small" Margin="8,0,6,0" VerticalAlignment="Center"/>
+                <Border DockPanel.Dock="Right" Classes="column" Margin="6,0,0,0" VerticalAlignment="Center" IsVisible="{Binding HasMark}">
+                  <TextBlock Text="{Binding Mark}" Classes="small"/>
+                </Border>
+                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Classes.dropped="{Binding Dropped}"/>
+              </DockPanel>
+            </TreeDataTemplate>
+          </TreeView.ItemTemplate>
+        </TreeView>
+      </DockPanel>
+    </Border>
+
+    <Panel Grid.Column="1">
+      <DockPanel IsVisible="{Binding HasPage}">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
+          <DockPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Button Content="{Binding Page.BoardText, FallbackValue=''}" Command="{Binding Page.OpenBoardCommand, FallbackValue={x:Null}}"
+                      IsVisible="{Binding Page.HasBoard, FallbackValue=False}" ToolTip.Tip="Show the plan's story board"/>
+              <Button Content="Open file" Command="{Binding OpenFileCommand}" ToolTip.Tip="{Binding Page.File, FallbackValue=''}"/>
+            </StackPanel>
+            <StackPanel VerticalAlignment="Center" Spacing="2">
+              <SelectableTextBlock Text="{Binding Page.Title, FallbackValue=''}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap"/>
+              <TextBlock Text="{Binding Page.Summary, FallbackValue=''}" Classes="dim small" TextWrapping="Wrap"/>
+            </StackPanel>
+          </DockPanel>
+        </Border>
+
+        <ScrollViewer>
+          <StackPanel Margin="18,14" MaxWidth="980" HorizontalAlignment="Left" Spacing="12">
+            <views:MarkdownView Markdown="{Binding Page.Intro, FallbackValue=''}" IsVisible="{Binding Page.HasIntro, FallbackValue=False}"/>
+            <ContentControl Content="{Binding Page.Goals, FallbackValue={x:Null}}"/>
+            <ContentControl Content="{Binding Page.NotDoing, FallbackValue={x:Null}}"/>
+
+            <!-- the questions only Philip can answer: tap an option and it's written as the Answer line -->
+            <Border Classes="part">
+              <StackPanel Spacing="8">
+                <TextBlock Classes="part" Text="{Binding Page.QuestionsHeading, FallbackValue='Questions'}"/>
+                <TextBlock Classes="dim" Text="No questions: nothing in this plan waits on a choice." IsVisible="{Binding !Page.HasQuestions, FallbackValue=False}"/>
+                <ItemsControl ItemsSource="{Binding Page.Questions, FallbackValue={x:Null}}">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="10"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PlanQuestionRow">
+                      <Border BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6" Padding="10,8" Background="{DynamicResource Bg}">
+                        <StackPanel Spacing="6">
+                          <SelectableTextBlock Text="{Binding Question}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                          <TextBlock Text="{Binding Context}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasContext}"/>
+                          <DockPanel IsVisible="{Binding Answered}">
+                            <Button DockPanel.Dock="Right" Content="{Binding Changing, Converter={x:Static views:DesignView.ChangeLabel}}" Command="{Binding ChangeCommand}"
+                                    Margin="8,0,0,0" VerticalAlignment="Top" AutomationProperties.Name="Change answer"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Accent}" Text="{Binding Answer, StringFormat='Answer: {0}'}"/>
+                          </DockPanel>
+                          <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding Asking}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="vm:PlanOptionRow">
+                                <Button Command="{Binding PickCommand}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                        Classes.primary="{Binding Recommended}" AutomationProperties.Name="{Binding Label}">
+                                  <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding Description}" Classes="small" TextWrapping="Wrap" Opacity="0.85" IsVisible="{Binding HasDescription}"/>
+                                  </StackPanel>
+                                </Button>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" IsVisible="{Binding Asking}">
+                            <TextBox Text="{Binding OwnAnswer}" PlaceholderText="Or type your own answer…" AcceptsReturn="True" TextWrapping="Wrap"
+                                     MinHeight="36" MaxHeight="160" views:EnterSends.Command="{Binding SendOwnCommand}"/>
+                            <Button Grid.Column="1" Content="Answer" VerticalAlignment="Bottom" Command="{Binding SendOwnCommand}"/>
+                          </Grid>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <ContentControl Content="{Binding Page.Design, FallbackValue={x:Null}}"/>
+
+            <!-- a project plan's features, each linked to its own plan once there is one -->
+            <Border Classes="part" IsVisible="{Binding Page.ShowFeatures, FallbackValue=False}">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="part" Text="Features"/>
+                <TextBlock Classes="dim" Text="No features listed yet." IsVisible="{Binding !Page.HasFeatures, FallbackValue=False}"/>
+                <ItemsControl ItemsSource="{Binding Page.Features, FallbackValue={x:Null}}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PlanFeatureRow">
+                      <Button Classes="row" Command="{Binding OpenCommand}" IsHitTestVisible="{Binding HasLink}" AutomationProperties.Name="{Binding Title}">
+                        <StackPanel Spacing="2">
+                          <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="plan ›" Classes="dim small" IsVisible="{Binding HasLink}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                          </DockPanel>
+                          <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasDescription}"/>
+                        </StackPanel>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <!-- the cards: proposed ones with their ticket score, made ones as the board has them now -->
+            <Border Classes="part" IsVisible="{Binding Page.ShowCards, FallbackValue=False}">
+              <StackPanel Spacing="4">
+                <TextBlock Classes="part" Text="Cards"/>
+                <TextBlock Classes="dim" Text="No cards proposed yet." IsVisible="{Binding !Page.HasCards, FallbackValue=False}"/>
+                <ItemsControl ItemsSource="{Binding Page.Cards, FallbackValue={x:Null}}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PlanCardRow">
+                      <Button Classes="row" Command="{Binding OpenCommand}" IsHitTestVisible="{Binding Made}" ToolTip.Tip="{Binding Tip}"
+                              AutomationProperties.Name="{Binding Heading}">
+                        <StackPanel Spacing="3">
+                          <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top" Margin="8,0,0,0">
+                              <TextBlock Text="{Binding Agent}" Foreground="{DynamicResource Info}" Classes="small" VerticalAlignment="Center" IsVisible="{Binding HasAgent}"/>
+                              <Border Classes="column" Classes.done="{Binding IsDone}" IsVisible="{Binding Made}">
+                                <TextBlock Text="{Binding Column}" Classes="small"/>
+                              </Border>
+                              <TextBlock Text="proposed" Classes="dim small" VerticalAlignment="Center" IsVisible="{Binding Proposed}"/>
+                            </StackPanel>
+                            <TextBlock DockPanel.Dock="Left" Classes="quality" Classes.zero="{Binding Quality.Zero, FallbackValue=False}"
+                                       Classes.amber="{Binding Quality.Amber, FallbackValue=False}" Classes.green="{Binding Quality.Green, FallbackValue=False}"
+                                       Text="★" Margin="0,0,6,0" IsVisible="{Binding HasQuality}" ToolTip.Tip="{Binding Quality.Tip, FallbackValue=''}"/>
+                            <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                          </DockPanel>
+                          <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"
+                                     IsVisible="{Binding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                          <TextBlock Text="{Binding Where, StringFormat='Where: {0}'}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasWhere}"/>
+                          <TextBlock Text="{Binding Done, StringFormat='Done when: {0}'}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasDone}"/>
+                          <TextBlock Text="{Binding Blockers}" Classes="blocker small" Classes.bad="{Binding BlockerWarning}" TextWrapping="Wrap" IsVisible="{Binding HasBlockers}"/>
+                        </StackPanel>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+
+            <!-- what has happened since: the made cards' reports, read each time, never written into the plan -->
+            <Border Classes="part">
+              <StackPanel Spacing="4">
+                <TextBlock Classes="part" Text="Log"/>
+                <TextBlock Classes="dim" Text="Nothing yet: the plan's cards' reports show here as they come in." TextWrapping="Wrap" IsVisible="{Binding !Page.HasLog, FallbackValue=False}"/>
+                <ItemsControl ItemsSource="{Binding Page.Log, FallbackValue={x:Null}}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PlanLogRow">
+                      <Button Classes="row" Command="{Binding OpenCommand}" AutomationProperties.Name="{Binding Text}">
+                        <StackPanel>
+                          <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                          <TextBlock Text="{Binding Meta}" Classes="dim small"/>
+                        </StackPanel>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+      <TextBlock Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" MaxWidth="520" TextWrapping="Wrap"
+                 IsVisible="{Binding Empty}" Text="{Binding EmptyText}"/>
+    </Panel>
+
+    <Border Grid.Row="1" Grid.Column="1" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+      <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}"/>
+    </Border>
+  </Grid>
+</UserControl>

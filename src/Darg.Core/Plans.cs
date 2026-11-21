@@ -273,6 +273,52 @@ public static class PlanStore
             return true;
         });
 
+    /// <summary>The parts a plan has, in the order a file holds them: where <see cref="SetSection"/> puts a missing one.</summary>
+    public static readonly IReadOnlyList<string> Parts = ["Goals", "Not doing", "Questions", "Design", "Cards", "Features"];
+
+    /// <summary>Replace the body of a <c>##</c> part (Goals, Not doing, Design: the ones edited as text on the Design
+    /// page, WOR-0175) with <paramref name="text"/>, its heading and every other part left as they were. A part the file
+    /// lacks is added before the first part that follows it in <see cref="Parts"/>, else at the end.</summary>
+    public static bool SetSection(string file, string part, string text) =>
+        Edit(file, lines =>
+        {
+            var body = text.Replace("\r\n", "\n").Trim('\n').Split('\n').Select(l => l.TrimEnd()).ToList();
+            var start = PlanDoc.FrontMatterEnd(lines);
+            int heading = -1, end = lines.Count;
+            for (var i = start; i < lines.Count; i++)
+            {
+                if (!Regex.IsMatch(lines[i], @"^##[ \t]+\S")) continue;
+                if (heading >= 0) { end = i; break; }
+                if (Regex.IsMatch(lines[i], @"^##[ \t]+" + Regex.Escape(part) + @"\s*#*\s*$", RegexOptions.IgnoreCase)) heading = i;
+            }
+            var block = new List<string>();
+            if (body.Any(l => l.Length > 0)) block.AddRange(body);
+            if (heading >= 0)
+            {
+                // the body, then one blank line before the next part (none at the end of the file)
+                var next = end < lines.Count ? new List<string> { "" } : [];
+                if (end == lines.Count && lines.Count > 0 && lines[^1].Length == 0) next.Add("");
+                lines.RemoveRange(heading + 1, end - heading - 1);
+                lines.InsertRange(heading + 1, block.Count > 0 ? [.. block, .. next] : next);
+                return true;
+            }
+            var later = Parts.SkipWhile(p => !p.Equals(part, StringComparison.OrdinalIgnoreCase)).Skip(1).ToList();
+            var at = lines.Count;
+            for (var i = start; i < lines.Count; i++)
+                if (Regex.Match(lines[i], @"^##[ \t]+(.+?)\s*#*\s*$") is { Success: true } m && later.Contains(m.Groups[1].Value.Trim(), StringComparer.OrdinalIgnoreCase)) { at = i; break; }
+            var insert = new List<string> { $"## {part}" };
+            insert.AddRange(block);
+            if (at < lines.Count) { insert.Add(""); lines.InsertRange(at, insert); return true; }
+            // at the end: after one blank line, keeping a final newline if the file had one
+            var finalNewline = lines.Count > 0 && lines[^1].Length == 0;
+            if (finalNewline) lines.RemoveAt(lines.Count - 1);
+            while (lines.Count > 0 && lines[^1].Trim().Length == 0) lines.RemoveAt(lines.Count - 1);
+            if (lines.Count > 0) lines.Add("");
+            lines.AddRange(insert);
+            if (finalNewline) lines.Add("");
+            return true;
+        });
+
     static bool AnswerLine(string l) => Regex.IsMatch(l, @"^\s*(?:[-*+]\s+)?\**\s*Answer(?:ed)?\s*\**\s*:", RegexOptions.IgnoreCase);
 
     /// <summary>The line range of a <c>###</c> section inside a <c>##</c> one: its heading line and the line after its

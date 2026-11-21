@@ -36,6 +36,17 @@ The post-it wall: one `.md` per note with Obsidian properties, columns in `wall.
 
 The project's docs folder as a tree that expands (a folder of docs is a tree, never a flat list), drawn as markdown with a finder. Links between docs open the doc they name: relative markdown links (`[guide](guide.md)`, opened at the doc rather than the heading) and `[[wikilinks]]`. Card ids link to their cards. Edit, then Save or Ctrl+S. Pictures resolve relative to the open doc's folder. These docs follow the rules at the end of [README.md](README.md#how-these-docs-are-written).
 
+## Design
+
+The project's plans, for anything from one feature to the whole project (WOR-0175, the design in [FEATURE-PLANNING.md](FEATURE-PLANNING.md#the-design-section)). Each plan is a markdown file in the docs folder's `design/`; on the left they show as a tree (a feature plan under the project plan its `parent:` names, drafts and dropped ones marked, each with its cards done out of its cards), on the right the picked plan as a page in its parts:
+
+- **Goals, Not doing and Design**: read as markdown; ✎ Edit turns the part into a box, and Save writes only that part back into the file.
+- **Questions**: each choice only you can make, its options as buttons with the recommended one first. A tap (or an answer of your own) writes the `**Answer:**` line under the question, with your name and the date; Change shows the options again.
+- **Cards** (or **Features**, for a project plan): a proposed card shows its ticket score and what it waits on; a made one its column, the agent at work on it and its open blockers, read from the boards each time, and clicking it opens the card's panel. A feature linked to its own plan opens that plan.
+- **Log**: the reports of the plan's made cards, newest first.
+
+Nothing about progress is written into the plan file, and the page commits nothing: an edit made there is left for you or the next agent in the repo to commit (Philip's call, 2026-11-20). The header's ▦ button shows the plan's story board.
+
 ## Agents
 
 All the project's agents with a transcript that draws what Claude Code does: markdown replies, images, diffs, write previews, questions and permission prompts inline. How agents run is in [architecture.md](architecture.md#agents).

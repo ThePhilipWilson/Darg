@@ -195,6 +195,10 @@ public partial class MainViewModel : ObservableObject
                 s.Append($", docs folder {p.Docs.Folder}");
                 if (p.Docs.Selected is { } doc) s.Append($", doc {doc.Path} open");
                 break;
+            case Section.Design when p.Design is not null:
+                s.Append($", plans folder {p.Design.Folder}");
+                if (p.Design.Page is { } plan) s.Append($", plan \"{plan.Title}\" open ({plan.File})");
+                break;
             case Section.Code when p.Code is not null:
                 s.Append($", repos {string.Join(", ", p.Config.Repos)}");
                 if (p.Code.Current is { } f) s.Append($", file {f.FullPath} open");
@@ -450,7 +454,7 @@ public record NotificationEntry(string ProjectId, string AgentId, string Project
     public string Sub => $"{Project} · {At:HH:mm}";
 }
 
-public enum Section { Home, Board, Notes, Docs, Agents, Flows, Reports, Artifacts, Mistakes, Context, Code, GitHub, Preview, Terminal }
+public enum Section { Home, Board, Notes, Docs, Design, Agents, Flows, Reports, Artifacts, Mistakes, Context, Code, GitHub, Preview, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -464,6 +468,8 @@ public partial class ProjectViewModel : ObservableObject
     public BoardViewModel? Board { get; }
     public NotesViewModel? Notes { get; }
     public DocsViewModel? Docs { get; }
+    /// <summary>The project's plans in docs/design/, as a tree and a page each (WOR-0175; there with a docs folder).</summary>
+    public DesignViewModel? Design { get; }
     public CodeViewModel? Code { get; }
     public GitHubViewModel? Hub { get; }
     public PreviewViewModel? Preview { get; }
@@ -485,7 +491,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>A card's decision was answered (WOR-0124): its notification goes from the list.</summary>
     public event Action<string>? CardSettled;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnAgents), nameof(OnFlows), nameof(OnReports), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnContext), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnDesign), nameof(OnAgents), nameof(OnFlows), nameof(OnReports), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnContext), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -496,6 +502,7 @@ public partial class ProjectViewModel : ObservableObject
     public bool OnBoard => Section == Section.Board;
     public bool OnNotes => Section == Section.Notes;
     public bool OnDocs => Section == Section.Docs;
+    public bool OnDesign => Section == Section.Design;
     public bool OnCode => Section == Section.Code;
     public bool OnHub => Section == Section.GitHub;
     public bool OnPreview => Section == Section.Preview;
@@ -533,6 +540,15 @@ public partial class ProjectViewModel : ObservableObject
         }
         if (config.Uses(Features.Terminal)) Consoles = new ConsolesViewModel(config);
         if (config.Uses(Features.Docs) && config.Docs is { Length: > 0 } docs) Docs = new DocsViewModel(docs);
+        if (PlanStore.FolderFor(config) is { } plans)
+            Design = new DesignViewModel(config, plans)
+            {
+                AgentFor = id => Agents?.ForCard(id),
+                ReportsFolder = Reports?.Folder,
+                OpenReport = file => { if (Reports is null) return; Reports.Show(file); Section = Section.Reports; },
+                OpenCard = id => { if (Board?.OpenById(id) != true) return false; Section = Section.Board; return true; },
+                OpenBoard = name => { if (Board is null) return; if (Board.Boards.Contains(name)) Board.SelectedBoard = name; Section = Section.Board; },
+            };
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
             Notes = new NotesViewModel(notes, config.Boards)
             {
@@ -555,6 +571,8 @@ public partial class ProjectViewModel : ObservableObject
             Agents.DoneCardIds = Board.DoneCardIds;
             Agents.CardBoards = Board.CardBoards;
             Board.Reloaded += Agents.RefreshCards;
+            // a plan's made cards show their column and agent as the board has them
+            Board.Reloaded += () => { if (OnDesign) Design?.Reload(); };
             Reports!.StoryMap = Board.CardBoards;
             Reports.Reload();
             Reports!.OpenCard = id => { if (!Board.OpenById(id)) return false; Section = Section.Board; return true; };
@@ -830,6 +848,7 @@ public partial class ProjectViewModel : ObservableObject
         if (value == Section.Artifacts) Artifacts?.Refresh();
         if (value == Section.Mistakes) Mistakes?.Reload();
         if (value == Section.Context) Context.Reload();
+        if (value == Section.Design) Design?.Reload();
         if (value == Section.Reports) Reports?.Reload();
         if (value == Section.Preview) _ = Preview?.Open();
     }
@@ -845,7 +864,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>Whether this project has a section (its feature ticked and what it needs set up).</summary>
     public bool Has(Section s) => s switch
     {
-        Section.Home => true, Section.Context => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Agents => Agents is not null, Section.Flows => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null, Section.Reports => Reports is not null,
+        Section.Home => true, Section.Context => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Design => Design is not null, Section.Agents => Agents is not null, Section.Flows => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null, Section.Reports => Reports is not null,
         Section.Code => Code is not null, Section.GitHub => Hub is not null, Section.Preview => Preview is not null, _ => Consoles is not null,
     };
 

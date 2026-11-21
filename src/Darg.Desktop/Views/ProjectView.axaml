@@ -23,6 +23,10 @@
                       Command="{Binding OpenCommand}" CommandParameter="Docs" ToolTip.Tip="Docs">
           <StackPanel><TextBlock Text="❏" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Docs" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
         </ToggleButton>
+        <ToggleButton Classes="rail" IsChecked="{Binding OnDesign, Mode=OneWay}" IsVisible="{Binding Design, Converter={x:Static ObjectConverters.IsNotNull}}"
+                      Command="{Binding OpenCommand}" CommandParameter="Design" ToolTip.Tip="Design: plans for features and whole projects, their questions and cards">
+          <StackPanel><TextBlock Text="◇" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Design" FontSize="9" HorizontalAlignment="Center"/></StackPanel>
+        </ToggleButton>
         <ToggleButton Classes="rail" IsChecked="{Binding OnAgents, Mode=OneWay}" IsVisible="{Binding Agents, Converter={x:Static ObjectConverters.IsNotNull}}"
                       Command="{Binding OpenCommand}" CommandParameter="Agents" ToolTip.Tip="Agents">
           <Panel>
@@ -92,6 +96,7 @@
       <views:CodeView DataContext="{Binding Code}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnCode}"/>
       <views:GitHubView DataContext="{Binding Hub}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnHub}"/>
       <views:DocsView DataContext="{Binding Docs}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnDocs}"/>
+      <views:DesignView DataContext="{Binding Design}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnDesign}"/>
       <views:AgentsView DataContext="{Binding Agents}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnAgents}"/>
       <views:FlowsView DataContext="{Binding Agents}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnFlows}"/>
       <views:ReportsView DataContext="{Binding Reports}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnReports}"/>
