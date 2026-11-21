@@ -25,13 +25,13 @@
         <Image DockPanel.Dock="Left" Source="/wordmark.png" Height="34" VerticalAlignment="Center" Margin="14,0,16,0"
                RenderOptions.BitmapInterpolationMode="HighQuality"
                ToolTip.Tip="Darg" AutomationProperties.Name="Darg"/>
-        <Button DockPanel.Dock="Right" Content="🎨 Settings" Command="{Binding OpenSettingsCommand}" Background="Transparent"
+        <Button Classes="header" DockPanel.Dock="Right" Content="🎨 Settings" Command="{Binding OpenSettingsCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,10,0" ToolTip.Tip="Darg's own settings: the theme (dark, light, girlypop)"
                 AutomationProperties.Name="Settings"/>
-        <Button DockPanel.Dock="Right" Content="⚙ Setup" Command="{Binding OpenSetupCommand}" Background="Transparent"
+        <Button Classes="header" DockPanel.Dock="Right" Content="⚙ Setup" Command="{Binding OpenSetupCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Which projects this instance has, and which features each uses"/>
         <!-- restart, or update from the repo and restart: the build runs while Darg stays open -->
-        <Button x:Name="RestartButton" DockPanel.Dock="Right" Content="{Binding Restart.HeaderLabel}" Background="Transparent"
+        <Button Classes="header" x:Name="RestartButton" DockPanel.Dock="Right" Content="{Binding Restart.HeaderLabel}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Restart Darg, or update it from its repo and restart"
                 AutomationProperties.Name="Restart and update">
           <Button.Flyout>
@@ -62,7 +62,7 @@
             </Flyout>
           </Button.Flyout>
         </Button>
-        <Button DockPanel.Dock="Right" Content="🔧 Tools" Command="{Binding OpenToolsCommand}" Background="Transparent"
+        <Button Classes="header" DockPanel.Dock="Right" Content="🔧 Tools" Command="{Binding OpenToolsCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Forge, ComfyUI, Ollama, Pinokio and claude-draw on this machine"/>
         <!-- Optimise tokens (WOR-0159): agents one model down and at medium effort while it's on -->
         <ToggleButton DockPanel.Dock="Right" Classes="chip" Content="🍃 Optimise tokens" IsChecked="{Binding Usage.OptimiseTokens}"
