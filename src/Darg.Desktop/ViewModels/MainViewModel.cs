@@ -551,6 +551,13 @@ public partial class ProjectViewModel : ObservableObject
                 BoardsChanged = () => Board?.ReloadAll(),
                 OpenBoard = name => { if (Board is null) return; if (Board.Boards.Contains(name)) Board.SelectedBoard = name; Section = Section.Board; },
             };
+        // the planner beside the page (WOR-0176): + Plan starts one, the chat talks to the plan's own
+        if (Design is not null && Agents is not null)
+        {
+            Design.StartPlanner = (idea, kind) => StartPlan(idea, kind).Agent;
+            Design.PlannerFor = Agents.PlannerFor;
+            Design.StartReviser = StartReviser;
+        }
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)
             Notes = new NotesViewModel(notes, config.Boards)
             {

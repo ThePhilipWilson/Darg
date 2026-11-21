@@ -116,6 +116,8 @@ Planning starts from a line Philip types ("Android app: answer agents from the p
 
 It writes only the plan file, and commits it as the project's commit rule says.
 
+Built in WOR-0176: Darg names the file before the planner starts, so the page shows "drafting" and then the plan when its turn ends. Its chat has a Change picker: with a part picked (Goals, Questions, Cards…), anything the planner changes outside that part is put back when its turn ends, since a model told "only that part" still tidies next door now and then. A plan written by hand gets a planner on its first message from the chat.
+
 ### Whole projects
 
 A plan with `kind: project` has Goals, Not doing, Questions and Design as a feature plan does, and a Features part in place of Cards: a line per feature, linked to its feature plan once there is one. Ticking features and pressing the button starts the planner on each, with `parent:` set to the project plan. The tree then shows the project with its features under it, each with its progress rolled up from its cards. Darg's own [PLAN.md](PLAN.md) is this shape: the ask, the big calls, then the slices that became its first boards.

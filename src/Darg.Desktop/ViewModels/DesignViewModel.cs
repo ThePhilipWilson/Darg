@@ -23,12 +23,12 @@ public sealed partial class DesignViewModel : ObservableObject
     public string Folder { get; }
     public ObservableCollection<PlanNode> Tree { get; } = [];
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasPage))] public partial PlanNode? SelectedNode { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasPage))] public partial PlanPage? Page { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasPage), nameof(ShowChat), nameof(NoPlanner))] public partial PlanPage? Page { get; set; }
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasPlans), nameof(Empty))] public partial bool Loaded { get; set; }
     [ObservableProperty] public partial string Status { get; set; } = "";
     public bool HasPage => Page is not null;
     public bool HasPlans => Tree.Count > 0;
-    public bool Empty => Loaded && Tree.Count == 0;
+    public bool Empty => Loaded && Tree.Count == 0 && !IsDrafting;
     public string EmptyText =>
         $"No plans yet. A plan is a markdown file in {Folder}: goals, what it isn't doing, the questions only you can answer, " +
         "the design, and the cards it makes. Each one opens here in its parts.";
@@ -52,6 +52,130 @@ public sealed partial class DesignViewModel : ObservableObject
     {
         _config = config;
         Folder = folder;
+    }
+
+    // ---- the planner (WOR-0176): + Plan drafts one from a line; its chat sits beside the page ----
+
+    public const string WholePlan = "Whole plan";
+    public IReadOnlyList<string> Kinds { get; } = ["Feature", "Project"];
+    [ObservableProperty] public partial string Kind { get; set; } = "Feature";
+    /// <summary>The + Plan box: a line saying what to plan.</summary>
+    [ObservableProperty] public partial string Idea { get; set; } = "";
+    /// <summary>Start a planner on a line (the project's <see cref="ProjectViewModel.StartPlan"/>); null without agents.</summary>
+    public Func<string, PlanKind, AgentViewModel>? StartPlanner { get; set; }
+    public bool CanPlan => StartPlanner is not null;
+    /// <summary>A plan file's planner, if one is listed.</summary>
+    public Func<string, AgentViewModel?>? PlannerFor { get; set; }
+    /// <summary>Start a planner on a plan that has none, with the first message for it.</summary>
+    public Func<string, string, AgentViewModel?>? StartReviser { get; set; }
+    /// <summary>The agent the chat beside the page talks to: the shown plan's planner, or the one drafting a new plan.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowChat), nameof(HasPlanner), nameof(NoPlanner))] public partial AgentViewModel? Planner { get; set; }
+    public bool HasPlanner => Planner is not null;
+    public bool ShowChat => CanPlan && (Planner is not null || Page is not null);
+    /// <summary>A plan shown with no planner: a message from the chat starts one that reads the plan first.</summary>
+    public bool NoPlanner => Planner is null && Page is not null;
+    /// <summary>The chat's box, and which part the message is about (only that part may change).</summary>
+    [ObservableProperty] public partial string Ask { get; set; } = "";
+    public ObservableCollection<string> ChangeParts { get; } = [WholePlan];
+    [ObservableProperty] public partial string? ChangePart { get; set; } = WholePlan;
+    partial void OnChangePartChanged(string? value) { if (value is null) ChangePart = WholePlan; }
+
+    (AgentViewModel Agent, string File)? _draft;
+    string? _selectAfter;
+    /// <summary>A new plan is being drafted and nothing else picked since: the page says so and the chat is its planner's.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Empty), nameof(DraftingText))] public partial bool IsDrafting { get; private set; }
+    public string DraftingText => _draft is { } d
+        ? $"The planner is drafting {Path.GetFileName(d.File)} from your line. It opens here when its turn ends; its chat is on the right." : "";
+
+    [RelayCommand]
+    void StartPlan()
+    {
+        var idea = Idea.Trim();
+        if (idea.Length == 0) { Status = "Say in a line what to plan: a feature, or a whole project."; return; }
+        if (StartPlanner is null) { Status = "Planning needs the project's agents."; return; }
+        try { StartPlanner(idea, Kind == "Project" ? PlanKind.Project : PlanKind.Feature); Idea = ""; }
+        catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException) { Status = e.Message; }
+    }
+
+    /// <summary>A planner has started on a new plan file: show its chat and, when its turn ends, the plan.</summary>
+    internal void Drafting(AgentViewModel agent, string file)
+    {
+        _draft = (agent, file);
+        _selecting = true; SelectedNode = null; _selecting = false;
+        Page = null;
+        Planner = agent;
+        IsDrafting = true;
+        Status = $"Drafting {Path.GetFileName(file)}: it opens here when the planner's turn ends.";
+        AfterTurn(agent, () =>
+        {
+            if (!File.Exists(file)) { Status = $"The planner's turn ended without writing {Path.GetFileName(file)}: ask it why in the chat."; return; }
+            if (IsDrafting && _draft?.File == file) { _selectAfter = file; IsDrafting = false; }
+            Status = $"{Path.GetFileName(file)} drafted: a draft to judge. Answer its questions, edit a part, or ask the planner beside it.";
+            Reload();
+        });
+    }
+
+    /// <summary>Send the chat's box to the planner. With a part picked, only that part may change: what it changes
+    /// elsewhere is put back when its turn ends (<see cref="Core.Planner.KeepOnly"/>).</summary>
+    [RelayCommand]
+    void AskPlanner()
+    {
+        var text = Ask.Trim();
+        if (text.Length == 0) return;
+        var file = Page?.File ?? (IsDrafting ? _draft?.File : null);
+        if (file is null) return;
+        if (Planner is { Working: true }) { Status = "The planner is at work: wait for its turn to end."; return; }
+        var part = ChangePart is { } p && p != WholePlan ? p : null;
+        string? before = null;
+        if (part is not null)
+            try { before = File.Exists(file) ? File.ReadAllText(file) : null; } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        var sent = Core.Planner.ChangeMessage(file, part, text);
+        var agent = Planner;
+        if (agent is null)
+        {
+            agent = StartReviser?.Invoke(file, sent);
+            if (agent is null) return;
+            Planner = agent;
+        }
+        else agent.Say(text, sent);
+        Ask = "";
+        Status = part is null ? "Sent to the planner." : $"Asked the planner to change {part}: anything else it changes is put back.";
+        AfterTurn(agent, () =>
+        {
+            if (before is not null && part is not null)
+            {
+                try
+                {
+                    var put = Core.Planner.KeepOnly(file, before, part);
+                    Status = put.Count > 0
+                        ? $"The planner changed {part}, and {string.Join(", ", put)} too: put back, so only {part} changed (the put-back isn't committed)."
+                        : $"The planner changed {part}.";
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Couldn't check what the planner changed: {e.Message}"; }
+            }
+            if (Page is null && IsDrafting && File.Exists(file)) { _selectAfter = file; IsDrafting = false; }
+            Reload();
+        });
+    }
+
+    static void AfterTurn(AgentViewModel agent, Action then)
+    {
+        void Ended(bool _) { agent.TurnEnded -= Ended; Dispatcher.UIThread.Post(then); }
+        agent.TurnEnded += Ended;
+    }
+
+    partial void OnPageChanged(PlanPage? value)
+    {
+        List<string> parts = value is null ? [] : ["Goals", value.NotDoing.Name, "Questions", "Design", value.Plan.IsProject ? "Features" : "Cards"];
+        if (!ChangeParts.Skip(1).SequenceEqual(parts))
+        {
+            var keep = ChangePart;
+            while (ChangeParts.Count > 1) ChangeParts.RemoveAt(1);
+            foreach (var p in parts) ChangeParts.Add(p);
+            ChangePart = keep is not null && ChangeParts.Contains(keep) ? keep : WholePlan;
+        }
+        if (value is not null) Planner = PlannerFor?.Invoke(value.File);
+        else if (!IsDrafting) Planner = null;
     }
 
     /// <summary>Read the plans and the boards again, in the background; calls made while one runs fold into one more.</summary>
@@ -82,7 +206,8 @@ public sealed partial class DesignViewModel : ObservableObject
 
     void Apply(List<PlanDoc> plans, List<BoardCard> cards, List<AgentReport> log)
     {
-        var keep = SelectedNode?.Plan.File;
+        var keep = _selectAfter ?? SelectedNode?.Plan.File;
+        _selectAfter = null;
         var expanded = Flatten(Tree).Where(n => !n.IsExpanded).Select(n => n.Plan.File).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var index = Blockers.Index(cards);
         PlanNode Node(PlanStore.Node n) =>
@@ -93,6 +218,7 @@ public sealed partial class DesignViewModel : ObservableObject
         OnPropertyChanged(nameof(HasPlans));
         OnPropertyChanged(nameof(Empty));
         Loaded = true;
+        if (IsDrafting) return; // the page says a plan is being drafted until it's written or another is picked
         var pick = Flatten(Tree).FirstOrDefault(n => string.Equals(n.Plan.File, keep, StringComparison.OrdinalIgnoreCase)) ?? Tree.FirstOrDefault();
         if (Page is { Editing: true } open && pick is not null && string.Equals(open.File, pick.Plan.File, StringComparison.OrdinalIgnoreCase))
         {
@@ -109,6 +235,7 @@ public sealed partial class DesignViewModel : ObservableObject
     partial void OnSelectedNodeChanged(PlanNode? value)
     {
         if (_selecting) return;
+        if (value is not null) IsDrafting = false;
         // picking another plan reads it fresh, with the board as it is now
         Page = value is null ? null : new PlanPage(this, value.Plan, Blockers.Index(CardIndex.Read(_config.Boards)),
             ReportsFolder is null ? [] : ReportStore.List(ReportsFolder));

@@ -14,6 +14,10 @@ FAKE_CARD <project>: <title>   calls the Darg API's new-card ($DARG_API) as Fett
 FAKE_SPAWN <file>  leaves a process running as agents leave an emulator (WOR-0170): pwsh's Start-Process starts a
               hidden Windows PowerShell sleeping 10 minutes and exits, so nothing alive has it as a child; its id goes in
               the file (not a ping: DevServerTests counts those)
+FAKE_PLAN     writes a small plan to the message's "Plan file: <path>" line, as the planner does (WOR-0176): FAKE_OLD
+              in its Goals and its Design
+FAKE_REWRITE  replaces FAKE_OLD with FAKE_NEW all through the message's plan file, as a planner asked to change one
+              part might tidy the rest too
 """
 import json, os, re, subprocess, sys, threading, time
 
@@ -105,6 +109,38 @@ def new_card(project, title):
 
 asks = 0
 
+PLAN = """---
+kind: feature
+status: draft
+---
+# Fake plan
+
+What the fake planner drafted.
+
+## Goals
+- FAKE_OLD goal.
+
+## Not doing
+- Nothing much.
+
+## Questions
+
+### Which way?
+- **This way** (recommended): the quick one.
+- **That way**: the slow one.
+
+## Design
+FAKE_OLD design.
+
+## Cards
+
+### First card
+A card the fake planner proposes, with enough words in it to say what is wanted and why it matters to the plan here.
+**Where:** `src/First.cs`
+**Done when:** the first thing works.
+**Blocked by:** none
+"""
+
 def work(text):
     global asks
     card = re.search(r"Card file: (.+)", text)
@@ -124,6 +160,16 @@ def work(text):
             emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Made " + got["link"] + "."}]}})
         except Exception as e:
             emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "new-card failed: %s" % e}]}})
+    plan = re.search(r"Plan file: (.+)", text)
+    if plan and "FAKE_PLAN" in text:
+        with open(plan.group(1).strip(), "w", encoding="utf-8") as f:
+            f.write(PLAN)
+        emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Drafted the plan."}]}})
+    if plan and "FAKE_REWRITE" in text:
+        path = plan.group(1).strip()
+        with open(path, encoding="utf-8") as f: body = f.read()
+        with open(path, "w", encoding="utf-8") as f: f.write(body.replace("FAKE_OLD", "FAKE_NEW"))
+        emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Changed the plan."}]}})
     spawn = re.search(r"FAKE_SPAWN (\S+)", text)
     if spawn:
         command = ("(Start-Process -FilePath powershell -ArgumentList '-NoProfile','-Command','Start-Sleep 600' -WindowStyle Hidden -PassThru).Id"

@@ -82,7 +82,10 @@ public partial class MainViewModel
             a => Json(FlowList(a.Get("project") is null ? null : FindProject(a))));
         Add("new-flow", "start an agent that writes a new flow (the Agents view's + by Run flow): {project, description, kind?: basic|art, shared?: true for all projects, " +
                         "else the project's own}. Returns its id. Only when Philip asks.", NewFlow);
-        Add("run-flow", "run a flow: {project, flow, card} on a board card, or {project, flow, task} on a task in words. Only when Philip asks.", RunFlow);
+        Add("plan", "start a planner that drafts a whole plan from a line, as the Design section's + Plan does: {project, idea, kind?: feature (cards, the default) " +
+                    "or project (features)}. It writes a new file in the project's docs/design/ with every part filled, its open calls as questions for Philip, " +
+                    "and the Design page opens it when its turn ends; its chat stays beside the page. Returns the agent's id and the plan file. Only when Philip asks.", PlanApi);
+        Add("run-flow","run a flow: {project, flow, card} on a board card, or {project, flow, task} on a task in words. Only when Philip asks.", RunFlow);
         Add("theme", "the app's colours: {theme} switches to that theme (" + string.Join(", ", Themes.All.Select(t => t.Id)) + ") and saves it; " +
                      "{} says which is on. Only when Philip asks.", SetThemeApi);
         Add("optimise-tokens", "the header's Optimise tokens toggle: {on: true|false} turns it on (every agent one model down and at no more than " +
@@ -646,6 +649,18 @@ public partial class MainViewModel
         };
         var shared = a.Get("shared") is { } sh && (sh.Equals("true", StringComparison.OrdinalIgnoreCase) || sh == "1" || sh.Equals("shared", StringComparison.OrdinalIgnoreCase));
         return p.Agents.GenerateFlow(kind, shared, a.Get("description") ?? "").Id;
+    }
+
+    string PlanApi(ApiArgs a)
+    {
+        var p = FindProject(a);
+        var kind = Planner.ParseKind(a.Get("kind")) ?? throw new ApiError($"kind is feature or project, not \"{a.Get("kind")}\".");
+        try
+        {
+            var (agent, file) = p.StartPlan(a.Need("idea"), kind);
+            return Json(new JsonObject { ["agent"] = agent.Id, ["file"] = file, ["project"] = p.Config.Id });
+        }
+        catch (InvalidOperationException e) { throw new ApiError(e.Message); }
     }
 
     string RunFlow(ApiArgs a)

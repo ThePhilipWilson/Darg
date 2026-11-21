@@ -414,6 +414,22 @@ public partial class AgentsViewModel : ObservableObject
         return a;
     }
 
+    /// <summary>A plan's planner (WOR-0176): the newest agent started to draft or keep that plan file, if still listed.</summary>
+    public AgentViewModel? PlannerFor(string file) =>
+        Agents.Where(a => a.Purpose == AgentPurposes.Plan && string.Equals(a.Plan, file, StringComparison.OrdinalIgnoreCase)).MaxBy(a => a.Created);
+
+    /// <summary>The plan files planners are drafting or keeping: names a new plan mustn't take, though not on disk yet.</summary>
+    public IEnumerable<string> PlanFiles => Agents.Where(a => a.Purpose == AgentPurposes.Plan && a.Plan is not null).Select(a => a.Plan!);
+
+    /// <summary>Start a planner on a plan file (purpose plan; its model picked by its profile rules, kind plan).</summary>
+    public AgentViewModel StartPlanner(string prompt, string file, string name, string idea, IReadOnlyList<string> dirs)
+    {
+        var a = Start(prompt, Folder, name: name, job: new AgentJob(JobKinds.Plan, idea), dirs: dirs, purpose: AgentPurposes.Plan);
+        a.Plan = file;
+        a.Save();
+        return a;
+    }
+
     /// <summary>Open the flows folder to add or edit one (each is a markdown file), and read them again: the picked
     /// flow's folder (this project's own, or the shared one).</summary>
     [RelayCommand]
@@ -633,6 +649,8 @@ public partial class AgentViewModel : ObservableObject
     public string? StoreFolder { get; set; }
     /// <summary>For a Bench chat: the project it belongs to.</summary>
     public string? Project { get; set; }
+    /// <summary>For a planner (WOR-0176): the plan file it drafts and keeps, so the Design page shows its chat beside it.</summary>
+    public string? Plan { get; set; }
     readonly List<string> _args;
     DateTime _created = DateTime.Now;
     public DateTime Created => _created;
@@ -936,7 +954,7 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>An agent from an earlier run of Darg: its transcript, and its session to resume.</summary>
     public AgentViewModel(AgentRecord r, string storeFolder)
     {
-        Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; Purpose = r.Purpose; SessionId = r.SessionId; Project = r.Project;
+        Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; Purpose = r.Purpose; SessionId = r.SessionId; Project = r.Project; Plan = r.Plan;
         _args = r.Args; _created = r.Created; StoreFolder = storeFolder;
         _model = r.Model; _effort = r.Effort; _mode = r.Mode;
         _modelByHand = r.ModelByHand; _effortByHand = r.EffortByHand;
@@ -1003,7 +1021,7 @@ public partial class AgentViewModel : ObservableObject
             // the record is a snapshot taken here; it is written in the background (WOR-0076)
             AgentStore.SaveLater(StoreFolder, new AgentRecord
             {
-                Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Purpose = Purpose, Project = Project, SessionId = SessionId, Args = [.. _args],
+                Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Purpose = Purpose, Project = Project, Plan = Plan, SessionId = SessionId, Args = [.. _args],
                 Model = _model, Effort = _effort, Mode = _mode, ModelByHand = _modelByHand, EffortByHand = _effortByHand, ContinueAt = ContinueAt,
                 Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
             });

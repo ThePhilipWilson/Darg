@@ -70,7 +70,7 @@
     </DataTemplate>
   </UserControl.DataTemplates>
 
-  <Grid ColumnDefinitions="300,*" RowDefinitions="*,Auto">
+  <Grid ColumnDefinitions="300,*,Auto" RowDefinitions="*,Auto">
     <!-- the plans as a tree: a project plan with its feature plans under it -->
     <Border Grid.RowSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
@@ -81,6 +81,17 @@
             <TextBlock Text="{Binding Folder}" Classes="dim small" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Folder}"/>
           </StackPanel>
         </DockPanel>
+        <!-- + Plan (WOR-0176): a line, and the planner drafts the whole plan for you to react to -->
+        <StackPanel DockPanel.Dock="Top" Margin="12,0,8,8" Spacing="6" IsVisible="{Binding CanPlan}">
+          <TextBox Text="{Binding Idea}" PlaceholderText="A line to plan: a feature, or a whole project" AcceptsReturn="True" TextWrapping="Wrap"
+                   MinHeight="36" MaxHeight="120" views:EnterSends.Command="{Binding StartPlanCommand}" AutomationProperties.Name="Plan idea"/>
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Classes="primary" Content="+ Plan" Command="{Binding StartPlanCommand}" AutomationProperties.Name="Start plan"
+                    ToolTip.Tip="A planner agent drafts every part of the plan from your line, its open calls as questions for you, and writes it here"/>
+            <ComboBox ItemsSource="{Binding Kinds}" SelectedItem="{Binding Kind}" FontSize="12" MinHeight="0" Padding="8,3" Margin="0,0,6,0"
+                      AutomationProperties.Name="Plan kind" ToolTip.Tip="A feature plan proposes cards; a project plan lists features"/>
+          </DockPanel>
+        </StackPanel>
         <TreeView ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedNode}" Background="Transparent">
           <TreeView.Styles>
             <Style Selector="TreeViewItem" x:DataType="vm:PlanNode">
@@ -272,9 +283,44 @@
       </DockPanel>
       <TextBlock Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" MaxWidth="520" TextWrapping="Wrap"
                  IsVisible="{Binding Empty}" Text="{Binding EmptyText}"/>
+      <TextBlock Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" MaxWidth="520" TextWrapping="Wrap"
+                 IsVisible="{Binding IsDrafting}" Text="{Binding DraftingText}"/>
     </Panel>
 
-    <Border Grid.Row="1" Grid.Column="1" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
+    <!-- the planner's chat beside the page (WOR-0176): the agent that drafted this plan, to ask for changes -->
+    <Border Grid.Column="2" Width="400" IsVisible="{Binding ShowChat}" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1,0,0,0">
+      <DockPanel>
+        <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="12,8">
+          <StackPanel Spacing="2">
+            <TextBlock Text="{Binding Planner.Name, FallbackValue='Planner'}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{Binding Planner.StateText, FallbackValue=''}" Classes="dim small" IsVisible="{Binding HasPlanner}"/>
+            <TextBlock Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding NoPlanner}"
+                       Text="No planner on this plan yet. A message here starts one that reads the plan first."/>
+          </StackPanel>
+        </Border>
+        <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="10,8">
+          <StackPanel Spacing="6">
+            <DockPanel>
+              <TextBlock Text="Change" Classes="dim small" VerticalAlignment="Center" Margin="0,0,8,0"/>
+              <ComboBox ItemsSource="{Binding ChangeParts}" SelectedItem="{Binding ChangePart}" FontSize="12" MinHeight="0" Padding="8,3"
+                        AutomationProperties.Name="Part to change" ToolTip.Tip="Pick a part and only that part changes: anything else the planner touches is put back"/>
+            </DockPanel>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+              <TextBox Text="{Binding Ask}" PlaceholderText="Ask the planner to change the plan…" AcceptsReturn="True" TextWrapping="Wrap"
+                       MinHeight="36" MaxHeight="160" views:EnterSends.Command="{Binding AskPlannerCommand}" AutomationProperties.Name="Ask the planner"/>
+              <Button Grid.Column="1" Classes="primary" Content="Send" VerticalAlignment="Bottom" Command="{Binding AskPlannerCommand}" AutomationProperties.Name="Send to planner"/>
+            </Grid>
+          </StackPanel>
+        </Border>
+        <ScrollViewer x:Name="ChatScroll">
+          <ItemsControl ItemsSource="{Binding Planner.Items, FallbackValue={x:Null}}" Margin="12,10">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="10"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          </ItemsControl>
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+
+    <Border Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
       <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}"/>
     </Border>
   </Grid>

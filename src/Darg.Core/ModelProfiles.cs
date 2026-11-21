@@ -41,8 +41,9 @@ public sealed record AgentJob(string Kind, string Text, string? CardType = null,
 
 public static class JobKinds
 {
-    /// <summary>Chat: started from the Agents view's box. Card: Work on a card. Flow: a stage of a flow. Fettle: a Fettle chat.</summary>
-    public const string Chat = "chat", Card = "card", Flow = "flow", Fettle = "fettle";
+    /// <summary>Chat: started from the Agents view's box. Card: Work on a card. Flow: a stage of a flow. Fettle: a Fettle chat.
+    /// Plan: a planner drafting a plan from a line (WOR-0176).</summary>
+    public const string Chat = "chat", Card = "card", Flow = "flow", Fettle = "fettle", Plan = "plan";
 }
 
 /// <summary>The profile picked for a job and why ("rule type: Bug", or Haiku's reason).</summary>

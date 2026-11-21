@@ -25,7 +25,9 @@ public sealed class ItemRecord
 /// unless a QA agent is at work on it, whatever other agents the card has.</summary>
 public static class AgentPurposes
 {
-    public const string Chat = "chat", Work = "work", Qa = "qa", Improve = "improve", Rework = "rework", Flow = "flow";
+    public const string Chat = "chat", Work = "work", Qa = "qa", Improve = "improve", Rework = "rework", Flow = "flow",
+        /// <summary>A planner (WOR-0176): drafts a plan in docs/design/ and stays beside its Design page.</summary>
+        Plan = "plan";
 }
 
 /// <summary>An agent as saved between runs of Darg: enough to list it, show what it did, and
@@ -40,6 +42,8 @@ public sealed class AgentRecord
     public string? Purpose { get; set; }
     /// <summary>For a Bench chat: the project it was started in (it lists only there). Null: from before chats had one.</summary>
     public string? Project { get; set; }
+    /// <summary>For a planner (WOR-0176): the plan file it drafted, so the Design page finds its chat again.</summary>
+    public string? Plan { get; set; }
     public string? SessionId { get; set; }
     public List<string> Args { get; set; } = [];
     /// <summary>The model, effort and permission mode picked in the chat (null: the person's own settings);
