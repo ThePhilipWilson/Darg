@@ -226,5 +226,137 @@ public class PlansTests : IDisposable
         Assert.Contains("same commit", lines);
     }
 
+    static string ThreeCards => PlanSource.ReplaceLineEndings("\n");
+
+    const string PlanSource = """
+        ---
+        kind: feature
+        status: draft
+        ---
+        # Android app
+
+        ## Cards
+
+        ### Pairing in the app
+        Scan the code and keep the token.
+        **Where:** `src/Pair.cs`
+        **Done when:** a paired phone keeps its token across restarts.
+        **Blocked by:** Remote access
+
+        ### Remote access
+        TLS on its own port and a token per phone.
+        **Where:** `src/Remote.cs`
+        **Done when:** a paired phone calls the API and one without a token is refused.
+
+        ### Notifications
+        Push what waits on me to the phone: a question from an agent, a card needing a decision, or a turn that ran long, each as a notification with its options as buttons.
+        **Where:** `src/Push.cs`
+        **Done when:** a decision shows on the phone within a minute.
+        **Blocked by:** none
+        """;
+
+    string Boards(string name = "boards")
+    {
+        var boards = Path.Combine(Path.GetDirectoryName(_dir)!, name);
+        BoardStore.CreateBoard(boards, "Main", ["Ideas", "Doing", "Shipped"], "WOR");
+        return boards;
+    }
+
+    [Fact]
+    public void Making_cards_builds_the_story_board_in_blocked_by_order_and_writes_the_ids_back()
+    {
+        // WOR-0177
+        var f = Save(ThreeCards.ReplaceLineEndings("\r\n"));
+        var boards = Boards();
+        var r = PlanStore.MakeCards(f, boards);
+        Assert.True(r.Ok, r.Problem);
+        Assert.True(r.CreatedBoard);
+        Assert.Equal("Android app", r.Board);
+        // Remote access is made before Pairing, which waits on it, though Pairing comes first in the file
+        Assert.Equal(["Remote access", "Pairing in the app", "Notifications"], r.Made.Select(m => m.Title));
+        var folder = Path.Combine(boards, "Android app");
+        var board = BoardStore.Load(folder);
+        Assert.Equal(["Ideas", "Doing", "Shipped"], board.Columns.Select(c => c.Name));   // the project's columns
+        var cards = BoardStore.ReadCards(folder).ToDictionary(c => c.Title);
+        Assert.All(cards.Values, c => Assert.StartsWith("AND-", c.Id));
+        Assert.Equal([cards["Remote access"].Id], cards["Pairing in the app"].BlockedBy);
+        Assert.Empty(cards["Remote access"].BlockedBy);
+        Assert.Empty(cards["Notifications"].BlockedBy);
+        Assert.All(cards.Values, c => Assert.True(TicketQuality.Score(c).Green, c.Title));
+
+        // the plan holds the ids, the board and the agreed state; its CRLF endings stay
+        var text = File.ReadAllText(f);
+        Assert.Contains($"### {cards["Pairing in the app"].Id}: Pairing in the app", text);
+        Assert.Contains("board: Android app", text);
+        Assert.Contains("status: agreed", text);
+        Assert.DoesNotContain('\n', text.Replace("\r\n", ""));
+        Assert.All(PlanDoc.Load(f).Cards, c => Assert.True(c.Made));
+
+        // pressing again makes nothing, and nothing is deleted
+        var again = PlanStore.MakeCards(f, boards);
+        Assert.False(again.Ok);
+        Assert.Empty(again.Made);
+        Assert.Equal(3, BoardStore.ReadCards(folder).Count);
+    }
+
+    [Fact]
+    public void Making_again_makes_only_the_rows_with_no_id_and_names_made_blockers_by_id()
+    {
+        var f = Save(ThreeCards);
+        var boards = Boards();
+        var folder = Path.Combine(boards, "Android app");
+        Assert.True(PlanStore.MakeCards(f, boards, ["Remote access"]).Ok);   // only the ticked one
+        Assert.Equal(["Remote access"], BoardStore.ReadCards(folder).Select(c => c.Title));
+        // Pairing alone is fine now that its blocker is made; the rest is left for later
+        var r = PlanStore.MakeCards(f, boards, ["Pairing in the app"]);
+        Assert.True(r.Ok, r.Problem);
+        var cards = BoardStore.ReadCards(folder).ToDictionary(c => c.Title);
+        Assert.Equal([cards["Remote access"].Id], cards["Pairing in the app"].BlockedBy);
+        Assert.Single(PlanDoc.Load(f).Cards, c => !c.Made);
+        Assert.Single(PlanStore.MakeCards(f, boards).Made);
+        Assert.Equal(3, BoardStore.ReadCards(folder).Count);
+    }
+
+    [Fact]
+    public void A_card_under_three_stars_stops_everything_and_its_missing_parts_are_named()
+    {
+        var f = Save(ThreeCards.Replace("**Done when:** a decision shows on the phone within a minute.\n", ""));
+        var boards = Boards();
+        var before = File.ReadAllText(f);
+        var r = PlanStore.MakeCards(f, boards);
+        Assert.False(r.Ok);
+        Assert.Contains("\"Notifications\" is 2/3", r.Problem);
+        Assert.Contains("when it's done", r.Problem);
+        Assert.Empty(r.Made);
+        Assert.False(Directory.Exists(Path.Combine(boards, "Android app")));   // not even the board
+        Assert.Equal(before, File.ReadAllText(f));
+    }
+
+    [Fact]
+    public void Open_questions_need_a_second_press_and_a_loop_or_unknown_blocker_is_refused()
+    {
+        var open = ThreeCards.Replace("## Cards", "## Questions\n\n### Which port?\n- **A** (recommended): one\n- **B**: two\n\n## Cards");
+        var f = Save(open);
+        var boards = Boards();
+        var first = PlanStore.MakeCards(f, boards);
+        Assert.True(first.NeedsConfirm);
+        Assert.Equal(["Which port?"], first.OpenQuestions);
+        Assert.Empty(BoardStore.List(boards).Where(b => b != "Main"));
+        Assert.True(PlanStore.MakeCards(f, boards, confirmOpen: true).Ok);
+
+        var loop = Save(ThreeCards.Replace("**Where:** `src/Remote.cs`", "**Blocked by:** Pairing in the app\n**Where:** `src/Remote.cs`"), "loop.md");
+        Assert.Contains("loop", PlanStore.MakeCards(loop, Boards("boards2")).Problem);
+        var typo = Save(ThreeCards.Replace("**Blocked by:** none", "**Blocked by:** Nothing like it"), "typo.md");
+        Assert.Contains("no card in the plan", PlanStore.MakeCards(typo, Boards("boards3")).Problem);
+    }
+
+    [Fact]
+    public void A_prefix_comes_from_the_plans_name()
+    {
+        Assert.Equal("AND", PlanStore.PrefixFor("Android app"));
+        Assert.Equal("PH", PlanStore.PrefixFor("Ph"));
+        Assert.Equal("T", PlanStore.PrefixFor("42"));
+    }
+
     static int Count(List<PlanStore.Node> nodes) => nodes.Sum(n => 1 + Count(n.Children));
 }

@@ -43,6 +43,8 @@ public sealed partial class DesignViewModel : ObservableObject
     public Func<string, string, string?>? SendBack { get; set; }
     /// <summary>Open a report in the Reports section.</summary>
     public Action<string>? OpenReport { get; set; }
+    /// <summary>The boards changed on disk (cards were made): the Board section reads them again.</summary>
+    public Action? BoardsChanged { get; set; }
     /// <summary>The project's reports folder, for the Log (null without agents).</summary>
     public string? ReportsFolder { get; set; }
 
@@ -168,6 +170,44 @@ public sealed partial class DesignViewModel : ObservableObject
         return true;
     }
 
+    readonly Dictionary<string, HashSet<string>> _unticked = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>The headings a plan's page has unticked, kept here because a reload builds the page again.</summary>
+    internal HashSet<string> UntickedFor(string file) =>
+        _unticked.TryGetValue(file, out var set) ? set : _unticked[file] = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Make a plan's ticked cards on its story board (WOR-0177, <see cref="PlanStore.MakeCards"/>), then read the plans
+    /// and boards again. Open questions need a second press (<paramref name="confirmOpen"/>). Sets <see cref="Status"/> to
+    /// what happened, or why nothing did.</summary>
+    public PlanStore.MadeCards Make(string file, IEnumerable<string>? only, bool confirmOpen)
+    {
+        PlanStore.MadeCards result;
+        try
+        {
+            if (_config.Boards is not { Length: > 0 } boards) throw new InvalidOperationException($"{_config.Name} has no boards folder.");
+            result = PlanStore.MakeCards(file, boards, only, confirmOpen);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            Status = $"Couldn't make the cards: {e.Message}";
+            Reload();
+            BoardsChanged?.Invoke();   // a part may have been made before it failed
+            return new PlanStore.MadeCards("", [], e.Message, false, [], false);
+        }
+        if (result.NeedsConfirm)
+        {
+            Status = $"{result.OpenQuestions.Count} {(result.OpenQuestions.Count == 1 ? "question is" : "questions are")} still open. Press again to make the cards anyway.";
+            return result;   // nothing changed: no reload, so the page keeps its second press
+        }
+        if (result.Problem.Length > 0) { Status = result.Problem; return result; }
+        {
+            Status = $"Made {result.Made.Count} {(result.Made.Count == 1 ? "card" : "cards")} on {result.Board}" + (result.CreatedBoard ? " (a new board)" : "") + ": " +
+                     string.Join(", ", result.Made.Select(m => m.Id)) + $". The ids are in {Path.GetFileName(file)}, not committed.";
+            BoardsChanged?.Invoke();
+        }
+        Reload();
+        return result;
+    }
+
     internal void ShowCard(string id)
     {
         if (OpenCard?.Invoke(id) != true) Status = $"No board of {_config.Name} has {id}.";
@@ -247,6 +287,41 @@ public sealed partial class PlanPage : ObservableObject
     public bool HasLog => Log.Count > 0;
     public bool Editing => Goals.Editing || NotDoing.Editing || Design.Editing;
 
+    /// <summary>Headings of the proposed cards the person unticked (all are ticked to start), kept across the page's reloads.</summary>
+    internal HashSet<string> Unticked => _owner.UntickedFor(File);
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(MakeText))] public partial bool Confirming { get; set; }
+    public int MakeCount => Cards.Count(c => c.Proposed && c.Ticked);
+    public bool CanMake => MakeCount > 0;
+    public bool HasProposed => Cards.Any(c => c.Proposed);
+    public string MakeText => Confirming ? $"Make {MakeCount} anyway" : $"Make {MakeCount} {(MakeCount == 1 ? "card" : "cards")}";
+    public IReadOnlyList<string> OpenQuestionList => Plan.OpenQuestions.Select(q => q.Question).ToList();
+    public bool HasOpenQuestions => Plan.OpenQuestions.Count > 0 && HasProposed;
+    public string OpenQuestionsText => "Still open: " + string.Join("; ", OpenQuestionList) + (Confirming ? ". Press again to make the cards anyway." : ".");
+
+    internal void TickChanged(PlanCardRow row)
+    {
+        if (row.Ticked) Unticked.Remove(row.Title); else Unticked.Add(row.Title);
+        Confirming = false;   // a different set of cards: the question is asked again
+        NotifyMake();
+    }
+
+    void NotifyMake()
+    {
+        OnPropertyChanged(nameof(MakeCount)); OnPropertyChanged(nameof(CanMake)); OnPropertyChanged(nameof(MakeText));
+        OnPropertyChanged(nameof(HasProposed)); OnPropertyChanged(nameof(HasOpenQuestions)); OnPropertyChanged(nameof(OpenQuestionsText));
+    }
+
+    /// <summary>One press makes the ticked cards. With questions still open the first press only says so and the second makes them.</summary>
+    [RelayCommand]
+    void MakeCards()
+    {
+        var only = Cards.Where(c => c.Proposed && c.Ticked).Select(c => c.Title).ToList();
+        if (only.Count == 0) return;
+        var result = _owner.Make(File, only, Confirming);
+        Confirming = result.NeedsConfirm;
+        NotifyMake();
+    }
+
     public PlanPage(DesignViewModel owner, PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index, IReadOnlyList<AgentReport> reports)
     {
         _owner = owner;
@@ -272,10 +347,11 @@ public sealed partial class PlanPage : ObservableObject
     {
         Plan = plan;
         // rows that read the same keep their controls (ListSync compares by reference)
-        var want = plan.Cards.Select(c => new PlanCardRow(_owner, plan, c, index))
+        var want = plan.Cards.Select(c => new PlanCardRow(_owner, plan, c, index, this))
             .Select(row => Cards.FirstOrDefault(old => old.Key == row.Key && old.Same(row)) ?? row).ToList();
         ListSync.Sync(Cards, want);
         OnPropertyChanged(nameof(HasCards));
+        NotifyMake();
         var (done, total) = DesignViewModel.Count(plan, index);
         var made = plan.Cards.Count(c => c.Made);
         var state = plan.Status == "agreed" && made > 0 ? (done == total && total > 0 ? "built" : "building") : plan.Status;
@@ -381,8 +457,12 @@ public sealed partial class PlanOptionRow(PlanQuestionRow question, DecisionOpti
 public sealed partial class PlanCardRow : ObservableObject
 {
     readonly DesignViewModel _owner;
+    readonly PlanPage? _page;
     public string Key { get; }
     public string Id { get; }
+    /// <summary>Ticked to be made (proposed rows only; on by default).</summary>
+    [ObservableProperty] public partial bool Ticked { get; set; } = true;
+    partial void OnTickedChanged(bool value) => _page?.TickChanged(this);
     public string Title { get; }
     public bool Made { get; }
     public bool Proposed => !Made;
@@ -406,9 +486,11 @@ public sealed partial class PlanCardRow : ObservableObject
     public bool HasQuality => Quality is not null;
     public string Tip => Made ? $"Open {Id} on the board" : Quality?.Tip ?? "";
 
-    public PlanCardRow(DesignViewModel owner, PlanDoc plan, PlanCard card, IReadOnlyDictionary<string, BoardCard> index)
+    public PlanCardRow(DesignViewModel owner, PlanDoc plan, PlanCard card, IReadOnlyDictionary<string, BoardCard> index, PlanPage? page = null)
     {
         _owner = owner;
+        Ticked = page is null || !page.Unticked.Contains(card.Title);
+        _page = page;
         Key = card.Made ? card.Id : "#" + card.Title;
         Id = card.Id;
         Title = card.Title;

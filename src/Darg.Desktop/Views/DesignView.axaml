@@ -209,6 +209,9 @@
                 <ItemsControl ItemsSource="{Binding Page.Cards, FallbackValue={x:Null}}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:PlanCardRow">
+                     <DockPanel>
+                      <CheckBox DockPanel.Dock="Left" IsChecked="{Binding Ticked}" IsVisible="{Binding Proposed}" VerticalAlignment="Top" Margin="0,2,0,0"
+                                ToolTip.Tip="Make this card" AutomationProperties.Name="{Binding Title, StringFormat='Make {0}'}"/>
                       <Button Classes="row" Command="{Binding OpenCommand}" IsHitTestVisible="{Binding Made}" ToolTip.Tip="{Binding Tip}"
                               AutomationProperties.Name="{Binding Heading}">
                         <StackPanel Spacing="3">
@@ -232,9 +235,16 @@
                           <TextBlock Text="{Binding Blockers}" Classes="blocker small" Classes.bad="{Binding BlockerWarning}" TextWrapping="Wrap" IsVisible="{Binding HasBlockers}"/>
                         </StackPanel>
                       </Button>
+                     </DockPanel>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <!-- WOR-0177: one press makes the ticked cards; questions still open are listed and need a second press -->
+                <TextBlock Text="{Binding Page.OpenQuestionsText, FallbackValue=''}" Classes="blocker small" TextWrapping="Wrap"
+                           IsVisible="{Binding Page.HasOpenQuestions, FallbackValue=False}"/>
+                <Button HorizontalAlignment="Left" Content="{Binding Page.MakeText, FallbackValue=''}" Command="{Binding Page.MakeCardsCommand, FallbackValue={x:Null}}"
+                        IsEnabled="{Binding Page.CanMake, FallbackValue=False}" IsVisible="{Binding Page.HasProposed, FallbackValue=False}"
+                        AutomationProperties.Name="Make cards" ToolTip.Tip="Make the ticked cards on the plan's story board, blockers and all"/>
               </StackPanel>
             </Border>
 

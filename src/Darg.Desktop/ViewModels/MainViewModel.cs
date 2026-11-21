@@ -548,6 +548,7 @@ public partial class ProjectViewModel : ObservableObject
                 OpenReport = file => { if (Reports is null) return; Reports.Show(file); Section = Section.Reports; },
                 OpenCard = id => { if (Board?.OpenById(id) != true) return false; Section = Section.Board; return true; },
                 SendBack = (id, notes) => Board?.SendBackById(id, notes),
+                BoardsChanged = () => Board?.ReloadAll(),
                 OpenBoard = name => { if (Board is null) return; if (Board.Boards.Contains(name)) Board.SelectedBoard = name; Section = Section.Board; },
             };
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)

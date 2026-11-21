@@ -1,3 +1,4 @@
+using Darg.Core;
 using Avalonia.Headless.XUnit;
 using Darg.Core;
 using Darg.Desktop.ViewModels;
@@ -239,6 +240,113 @@ public class DesignPageTests
         await app.Until(() => d.Loaded, "the plans read");
         Assert.True(d.Empty);
         Assert.Contains(Path.Combine(app.Docs, "design"), d.EmptyText);
+        Assert.Equal("", app.Crashes());
+    }
+
+    static string AndroidPlan(string extra = "", string notifyDone = "**Done when:** a decision shows on the phone within a minute.") => $"""
+        ---
+        kind: feature
+        status: draft
+        ---
+        # Android app
+
+        ## Goals
+        - Answer agents from the sofa.
+        {extra}
+        ## Cards
+
+        ### Pairing in the app
+        Scan the code and keep the token so a phone stays paired, and show who is paired in Settings.
+        **Where:** `src/Pair.cs`
+        **Done when:** a paired phone keeps its token across restarts.
+        **Blocked by:** Remote access
+
+        ### Remote access
+        TLS on its own port and a token per phone, so a phone on the home network can call the API and anything else is turned away.
+        **Where:** `src/Remote.cs`
+        **Done when:** a paired phone calls the API and one without a token is refused.
+
+        ### Notifications
+        Push what waits on me to the phone: a question from an agent, a card needing a decision, or a turn that ran long.
+        **Where:** `src/Push.cs`
+        {notifyDone}
+        """.ReplaceLineEndings("\r\n");
+
+    [AvaloniaFact]
+    public async Task Plan_cards_makes_the_story_board_with_blockers_and_the_plan_holds_the_ids()
+    {
+        // WOR-0177: three cards, one blocked by another, made through the API in one call; a second call makes nothing
+        using var app = DargApp.Make();
+        var design = Directory.CreateDirectory(Path.Combine(app.Docs, "design")).FullName;
+        var file = Path.Combine(design, "android.md");
+        File.WriteAllText(file, AndroidPlan());
+        await app.Start();
+
+        var made = System.Text.Json.Nodes.JsonNode.Parse(await app.Api("plan-cards", new { project = "proj", plan = "android" }))!;
+        Assert.Equal("Android app", (string?)made["board"]);
+        Assert.Equal(3, made["made"]!.AsArray().Count);
+        var folder = Path.Combine(app.Boards, "Android app");
+        var cards = BoardStore.ReadCards(folder).ToDictionary(c => c.Title);
+        Assert.All(cards.Values, c => Assert.StartsWith("AND-", c.Id));
+        Assert.Equal([cards["Remote access"].Id], cards["Pairing in the app"].BlockedBy);
+        Assert.Empty(cards["Remote access"].BlockedBy);
+        Assert.Equal(DargApp.Columns, BoardStore.Load(folder).Columns.Select(c => c.Name));
+        var plan = PlanDoc.Load(file);
+        Assert.Equal("agreed", plan.Status);
+        Assert.Equal("Android app", plan.Board);
+        Assert.Equal(cards.Values.Select(c => c.Id).Order(), plan.Cards.Select(c => c.Id).Order());
+
+        // the Board section sees the new board, and the page has no card left to make
+        await app.Until(() => app.Board.Boards.Contains("Android app"), "the Board section reading the new board");
+        await app.Until(() => app.Project.Design!.Page is { HasProposed: false }, "the plan page reading its made cards");
+        await app.Api("show", new { project = "proj", section = "Design" });
+        app.Shot("plan-made");
+
+        // again: nothing to make, and nothing deleted
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => app.Api("plan-cards", new { project = "proj", plan = "android" }));
+        Assert.Contains("already", ex.Message);
+        Assert.Equal(3, BoardStore.ReadCards(folder).Count);
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
+    public async Task The_make_button_makes_the_ticked_cards_after_a_second_press_on_open_questions_and_refuses_a_thin_card()
+    {
+        using var app = DargApp.Make();
+        var design = Directory.CreateDirectory(Path.Combine(app.Docs, "design")).FullName;
+        var file = Path.Combine(design, "android.md");
+        var question = "\n## Questions\n\n### Which port?\n- **A** (recommended): one\n- **B**: two\n";
+        File.WriteAllText(file, AndroidPlan(question, notifyDone: "").ReplaceLineEndings("\n"));   // Notifications has no Done when
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Design" });
+        var d = app.Project.Design!;
+        await app.Until(() => d.Page is { Cards.Count: 3 }, "the plan page");
+        var page = d.Page!;
+        Assert.All(page.Cards, c => Assert.True(c.Ticked));   // all ticked to start
+        Assert.Equal(3, page.MakeCount);
+        Assert.Contains("Which port?", page.OpenQuestionsText);
+        Assert.True(page.Cards.Single(c => c.Title == "Notifications").Quality!.Stars < 3);
+
+        // the thin card is refused with what it lacks: nothing made, no board
+        page.MakeCardsCommand.Execute(null);   // refused before the open question is even asked
+        Assert.Contains("\"Notifications\"", d.Status);
+        Assert.Contains("when it's done", d.Status);
+        Assert.False(Directory.Exists(Path.Combine(app.Boards, "Android app")));
+
+        // untick it: one press asks about the question, the next makes the other two
+        page.Cards.Single(c => c.Title == "Notifications").Ticked = false;
+        Assert.False(page.Confirming);
+        Assert.Equal(2, page.MakeCount);
+        page.MakeCardsCommand.Execute(null);
+        Assert.Contains("still open", d.Status);
+        Assert.False(Directory.Exists(Path.Combine(app.Boards, "Android app")));
+        page.MakeCardsCommand.Execute(null);
+        var cards = BoardStore.ReadCards(Path.Combine(app.Boards, "Android app")).ToDictionary(c => c.Title);
+        Assert.Equal(["Pairing in the app", "Remote access"], cards.Keys.Order());
+        Assert.Equal([cards["Remote access"].Id], cards["Pairing in the app"].BlockedBy);
+        Assert.Contains("Made 2 cards", d.Status);
+        await app.Until(() => d.Page is { } p && p.Cards.Count(c => c.Made) == 2 && !p.Cards.Single(c => c.Title == "Notifications").Made, "the page reading the made cards");
+        Assert.Equal(0, d.Page!.MakeCount);   // the row left unticked stays unticked across the reload
         Assert.Equal("", app.Crashes());
     }
 

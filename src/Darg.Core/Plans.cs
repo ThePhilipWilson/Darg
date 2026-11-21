@@ -359,6 +359,106 @@ public static class PlanStore
             return true;
         });
 
+    /// <summary>What <see cref="MakeCards"/> did, or why it did nothing: <see cref="Problem"/> says what stopped it
+    /// (nothing made then), <see cref="NeedsConfirm"/> that open questions want a second press.</summary>
+    public sealed record MadeCards(string Board, IReadOnlyList<(string Id, string Title)> Made, string Problem, bool NeedsConfirm,
+        IReadOnlyList<string> OpenQuestions, bool CreatedBoard)
+    {
+        public bool Ok => Problem.Length == 0 && !NeedsConfirm;
+    }
+
+    /// <summary>Make a plan's cards on its story board (WOR-0177, docs/FEATURE-PLANNING.md "From plan to board"). The board is
+    /// the plan's <c>board:</c>, or one named for the plan, made with the project's columns and a prefix from the plan's name
+    /// (AND for Android) when there is none. The rows with no id (all of them, or those whose heading is in
+    /// <paramref name="only"/>) are made in Blocked by order, each reference turned into the new id, each id written into
+    /// the plan's heading as soon as its card exists, and the plan set to agreed. All or nothing before anything is made:
+    /// a row under 3/3 (its missing parts named), an unknown or circular Blocked by, a repeated heading, or open questions
+    /// without <paramref name="confirmOpen"/> make nothing. Run again it makes only the rows still without an id; it never
+    /// deletes a card.</summary>
+    public static MadeCards MakeCards(string file, string boardsFolder, IEnumerable<string>? only = null, bool confirmOpen = false)
+    {
+        var plan = PlanDoc.Load(file);
+        var open = plan.OpenQuestions.Select(q => q.Question).ToList();
+        MadeCards Stop(string problem, bool confirm = false) => new(plan.Board, [], problem, confirm, open, false);
+
+        var pick = only?.Select(o => o.Trim()).Where(o => o.Length > 0).ToList();
+        if (pick is not null)
+            foreach (var o in pick.Where(o => !plan.Cards.Any(c => !c.Made && c.Title.Equals(o, StringComparison.OrdinalIgnoreCase))))
+                return Stop($"No card \"{o}\" in the plan without an id.");
+        var rows = plan.Cards.Where(c => !c.Made && (pick is null || pick.Any(o => o.Equals(c.Title, StringComparison.OrdinalIgnoreCase)))).ToList();
+        if (rows.Count == 0) return Stop("Every card in the plan has been made already.");
+        if (plan.Status == "dropped") return Stop("The plan is dropped.");
+
+        var unready = rows.Where(c => !c.Ready).ToList();
+        if (unready.Count > 0)
+            return Stop("Not made: " + string.Join("; ", unready.Select(c =>
+                $"\"{c.Title}\" is {c.Score.Stars}/{TicketScore.Max} and doesn't say {string.Join(" or ", c.Score.Missing)}")) + ". Fix the plan first.");
+        var dup = plan.Cards.GroupBy(c => c.Title, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1);
+        if (dup is not null) return Stop($"Two cards in the plan are headed \"{dup.Key}\": give each its own heading.");
+
+        // order: a row after every row it waits on
+        var chosen = rows.ToHashSet();
+        var ordered = new List<PlanCard>();
+        var visiting = new HashSet<PlanCard>();
+        string? bad = null;
+        void Visit(PlanCard c)
+        {
+            if (bad is not null || ordered.Contains(c)) return;
+            if (!visiting.Add(c)) { bad = $"\"{c.Title}\" waits on itself through a loop of Blocked by."; return; }
+            foreach (var r in c.BlockedBy)
+            {
+                var t = plan.Find(r);
+                if (t is null) { if (Blockers.ParseIds(r).Count == 0) bad = $"\"{c.Title}\" is blocked by \"{r}\", which is no card in the plan."; continue; }
+                if (t.Made) continue;
+                if (!chosen.Contains(t)) { bad = $"\"{c.Title}\" waits on \"{t.Title}\", which isn't being made: include it too."; return; }
+                Visit(t);
+            }
+            visiting.Remove(c);
+            if (bad is null) ordered.Add(c);
+        }
+        foreach (var c in rows) Visit(c);
+        if (bad is not null) return Stop(bad);
+
+        if (open.Count > 0 && !confirmOpen) return Stop("", confirm: true);
+
+        // the board
+        var name = plan.Board.Length > 0 ? plan.Board : (plan.Title.Length > 0 ? plan.Title : plan.Slug);
+        name = Regex.Replace(name, "[\\\\/:*?\"<>|]", " ").Trim().TrimStart('.').Trim();
+        if (name.Length == 0) return Stop("The plan has no name to give its board: set board: in its properties.");
+        var folder = Path.Combine(boardsFolder, name);
+        var created = false;
+        if (!File.Exists(Path.Combine(folder, "board.json")))
+        {
+            if (Directory.Exists(folder)) return Stop($"{folder} exists but isn't a board.");
+            var columns = BoardStore.List(boardsFolder).Select(b => BoardStore.Load(Path.Combine(boardsFolder, b)).Columns.Select(c => c.Name).ToList())
+                .FirstOrDefault(c => c.Count > 0) ?? [.. BoardStore.DefaultColumns];
+            BoardStore.CreateBoard(boardsFolder, name, columns, PrefixFor(plan.Title.Length > 0 ? plan.Title : name));
+            created = true;
+        }
+        if (!plan.Board.Equals(name, StringComparison.Ordinal)) SetProperty(file, "board", name);
+
+        var ids = new Dictionary<PlanCard, string>();
+        var made = new List<(string, string)>();
+        foreach (var c in ordered)
+        {
+            var card = BoardStore.Create(folder, c.Title, c.Ticket, null, "", CardTypes.Guess(c.Title + "\n" + c.Description, []));
+            ids[c] = card.Id;
+            SetCardId(file, c.Title, card.Id);   // at once, so a failure further on leaves the plan knowing what exists
+            made.Add((card.Id, c.Title));
+            var waits = c.BlockedBy.Select(r => plan.Find(r) is { } t ? (t.Made ? t.Id : ids[t]) : r).ToList();
+            if (waits.Count > 0) BoardStore.SetBlockedBy(folder, card.Id, waits);
+        }
+        if (plan.Status != "agreed") SetProperty(file, "status", "agreed");
+        return new MadeCards(name, made, "", false, open, created);
+    }
+
+    /// <summary>A board prefix from a plan's name: its first three letters upper-cased (Android is AND); T with none.</summary>
+    public static string PrefixFor(string name)
+    {
+        var letters = new string(name.Where(char.IsAsciiLetter).Take(3).ToArray()).ToUpperInvariant();
+        return letters.Length == 0 ? "T" : letters;
+    }
+
     static bool AnswerLine(string l) => Regex.IsMatch(l, @"^\s*(?:[-*+]\s+)?\**\s*Answer(?:ed)?\s*\**\s*:", RegexOptions.IgnoreCase);
 
     /// <summary>The line range of a <c>###</c> section inside a <c>##</c> one: its heading line and the line after its
