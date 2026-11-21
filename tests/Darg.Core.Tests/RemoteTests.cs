@@ -92,7 +92,7 @@ public sealed class RemoteTests : IDisposable
     [Fact]
     public async Task Over_TLS_a_request_without_a_paired_token_is_refused_and_a_paired_one_reads_projects_cards_and_agents()
     {
-        using var server = RemoteServer.Start(Api(), () => _home, port: 0);
+        using var server = RemoteServer.Start(Api(), () => _home, port: 0, loopbackOnly: true);
         using var http = Client(server.Fingerprint);
         var root = $"https://127.0.0.1:{server.Port}";
 
@@ -103,8 +103,6 @@ public sealed class RemoteTests : IDisposable
         var guess = new HttpRequestMessage(HttpMethod.Get, $"{root}/api/projects") { Headers = { Authorization = new AuthenticationHeaderValue("Bearer", RemoteAccess.NewToken()) } };
         Assert.Equal(HttpStatusCode.Unauthorized, (await http.SendAsync(guess)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await http.GetAsync($"{root}/hello")).StatusCode);
-        foreach (var host in RemoteAccess.Hosts()) // it listens on the networks, not only on this machine (none on a box with no network)
-            Assert.Equal(HttpStatusCode.Unauthorized, (await http.GetAsync($"https://{host}:{server.Port}/api/projects")).StatusCode);
 
         // pairing: no code open, then a wrong one, then the right one
         Assert.Equal(HttpStatusCode.Forbidden, (await http.PostAsync($"{root}/pair", Json(new { code = "ABCDEFGH", name = "Pixel" }))).StatusCode);
@@ -145,7 +143,7 @@ public sealed class RemoteTests : IDisposable
         string fingerprint;
         int port;
         using (var server = RemoteServer.Start(Api(), () => _home, port: 0)) { fingerprint = server.Fingerprint; port = server.Port; }
-        using var again = RemoteServer.Start(Api(), () => _home, port: 0);
+        using var again = RemoteServer.Start(Api(), () => _home, port: 0, loopbackOnly: true);
         Assert.Equal(fingerprint, again.Fingerprint); // a paired phone's pin stays good
 
         using var wrong = Client(new string('0', 64));
@@ -155,7 +153,7 @@ public sealed class RemoteTests : IDisposable
     [Fact]
     public async Task Plain_http_gets_nothing_and_an_oversized_head_is_refused()
     {
-        using var server = RemoteServer.Start(Api(), () => _home, port: 0);
+        using var server = RemoteServer.Start(Api(), () => _home, port: 0, loopbackOnly: true);
         using var plain = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         await Assert.ThrowsAnyAsync<Exception>(() => plain.GetStringAsync($"http://127.0.0.1:{server.Port}/hello"));
 
@@ -163,6 +161,15 @@ public sealed class RemoteTests : IDisposable
         var big = new HttpRequestMessage(HttpMethod.Get, $"https://127.0.0.1:{server.Port}/hello");
         big.Headers.Add("X-Big", new string('a', 20_000));
         Assert.Equal((HttpStatusCode)431, (await http.SendAsync(big)).StatusCode);
+    }
+
+    [Fact]
+    public void Loopback_only_binds_127_0_0_1_and_the_default_binds_every_address()
+    {
+        using (var local = RemoteServer.Start(Api(), () => _home, port: 0, loopbackOnly: true))
+            Assert.Equal(IPAddress.Loopback, local.LocalEndpoint.Address);
+        // the default isn't started here: binding every address is what makes Windows ask about the firewall
+        Assert.Equal(IPAddress.IPv6Any, RemoteServer.BindAddress(loopbackOnly: false));
     }
 
     static StringContent Json(object o) => new(System.Text.Json.JsonSerializer.Serialize(o), Encoding.UTF8, "application/json");

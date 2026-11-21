@@ -33,6 +33,7 @@ public class PhoneAccessTests
         var q = System.Web.HttpUtility.ParseQueryString(uri.Query);
         var (port, code, fingerprint) = (q["port"]!, q["code"]!, q["fp"]!);
         Assert.Equal(RemoteHost.Server!.Fingerprint, fingerprint);
+        Assert.True(System.Net.IPAddress.IsLoopback(RemoteHost.Server!.LocalEndpoint.Address), "tests keep phone access off the network, so no firewall prompt");
         Assert.NotEqual(RemoteAccess.PreferredPort.ToString(), port); // the real app's port is left alone, whatever ran before
         using var http = new HttpClient(new HttpClientHandler
         {

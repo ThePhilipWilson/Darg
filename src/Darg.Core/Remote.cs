@@ -261,6 +261,8 @@ public sealed class RemoteServer : IDisposable
     readonly CancellationTokenSource _stop = new();
 
     public int Port { get; }
+    /// <summary>Where it listens: 127.0.0.1 only when started loopback-only, else every address.</summary>
+    public IPEndPoint LocalEndpoint => (IPEndPoint)_listener.LocalEndpoint;
     public string Fingerprint { get; }
     public RemotePairing Pairing { get; } = new();
     /// <summary>The instance's paired devices (read from the instance folder each time).</summary>
@@ -268,25 +270,29 @@ public sealed class RemoteServer : IDisposable
     /// <summary>Raised (off the UI thread) when a phone pairs.</summary>
     public event Action<RemoteDevice>? Paired;
 
-    RemoteServer(DargApi api, X509Certificate2 cert, Func<string> instance, int port)
+    RemoteServer(DargApi api, X509Certificate2 cert, Func<string> instance, int port, bool loopbackOnly)
     {
         _api = api; _cert = cert; _instance = instance;
         Fingerprint = RemoteCert.Fingerprint(cert);
-        _listener = new TcpListener(IPAddress.IPv6Any, port);
-        _listener.Server.DualMode = true;
+        _listener = new TcpListener(BindAddress(loopbackOnly), port);
+        if (!loopbackOnly) _listener.Server.DualMode = true;
         _listener.Start();
         Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
         _ = Task.Run(Loop);
     }
 
+    /// <summary>The address it binds: every one (IPv6 dual-mode, so IPv4 too) for the app, 127.0.0.1 for tests.</summary>
+    public static IPAddress BindAddress(bool loopbackOnly) => loopbackOnly ? IPAddress.Loopback : IPAddress.IPv6Any;
+
     /// <summary>Start listening: on <paramref name="port"/> if it's free (so paired phones find it), else any free one.
+    /// <paramref name="loopbackOnly"/> keeps it off the network (tests: no firewall prompt).
     /// <paramref name="instance"/> gives the folder the devices are kept in; the certificate is kept in its folder now.</summary>
-    public static RemoteServer Start(DargApi api, Func<string>? instance = null, int port = RemoteAccess.PreferredPort)
+    public static RemoteServer Start(DargApi api, Func<string>? instance = null, int port = RemoteAccess.PreferredPort, bool loopbackOnly = false)
     {
         instance ??= () => InstanceConfig.Folder();
         var cert = RemoteCert.LoadOrCreate(instance());
-        try { return new RemoteServer(api, cert, instance, port); }
-        catch (SocketException) when (port != 0) { return new RemoteServer(api, cert, instance, 0); }
+        try { return new RemoteServer(api, cert, instance, port, loopbackOnly); }
+        catch (SocketException) when (port != 0) { return new RemoteServer(api, cert, instance, 0, loopbackOnly); }
     }
 
     /// <summary>The QR's text for the pairing in progress (null when none).</summary>

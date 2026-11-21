@@ -39,7 +39,7 @@ public static class RemoteHost
         if (Api is null || !Allowed) return null;
         try
         {
-            _server = RemoteServer.Start(Api, port: Port());
+            _server = RemoteServer.Start(Api, port: Port(), loopbackOnly: PortOverride is not null);
             _server.Pairing.Changed += () => Changed?.Invoke();
             _server.Paired += _ => Changed?.Invoke();
             Error = null;
