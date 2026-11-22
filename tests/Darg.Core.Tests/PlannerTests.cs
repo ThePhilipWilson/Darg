@@ -235,6 +235,56 @@ public class PlannerTests : IDisposable
         Assert.DoesNotContain("reworded", text);
     }
 
+    const string Qs = "---\nstatus: draft\n---\n# Phone\n\n## Goals\n- Answer agents.\n\n## Questions\n### Which way?\n- **That** (recommended): t.\n- **Other**: o.\n\n## Design\nA thin client.\n\n## Cards\n### Build it\nDescription line.\n";
+
+    [Fact]
+    public void A_question_the_planner_adds_after_the_last_one_goes_back_when_the_page_answers_it()
+    {
+        // WOR-0191: the answer line and the planner's lines went in at the same spot, so the page's write took both
+        var file = Path.Combine(_dir, "phone.md");
+        File.WriteAllText(file, Qs);
+        using var hold = PlanHold.Start(file, "Goals")!;
+        File.WriteAllText(file, Qs.Replace("\n## Design", "### Added?\n- **Yes**: y.\n- **No**: n.\n\n## Design"));
+        Assert.True(PlanStore.Answer(file, "Which way?", "That", "Philip", new DateTime(2026, 11, 22)));
+
+        Assert.Equal(["Questions"], hold.Finish());
+        var text = File.ReadAllText(file);
+        Assert.DoesNotContain("Added?", text);
+        Assert.Contains("**Answer:** That (Philip", text);
+    }
+
+    [Fact]
+    public void A_deletion_the_planner_made_beside_an_answer_and_an_added_question_goes_back()
+    {
+        var file = Path.Combine(_dir, "phone.md");
+        File.WriteAllText(file, Qs);
+        using var hold = PlanHold.Start(file, "Goals")!;
+        File.WriteAllText(file, Qs.Replace("- **Other**: o.\n", "").Replace("\n## Design", "### Added?\n- **Yes**: y.\n\n## Design"));
+        Assert.True(PlanStore.Answer(file, "Which way?", "That", "Philip", new DateTime(2026, 11, 22)));
+
+        Assert.Equal(["Questions"], hold.Finish());
+        var text = File.ReadAllText(file);
+        Assert.DoesNotContain("Added?", text);
+        Assert.Contains("- **Other**: o.", text);
+        Assert.Contains("**Answer:** That (Philip", text);
+    }
+
+    [Fact]
+    public void A_line_the_planner_reworded_under_a_heading_make_cards_wrote_an_id_into_goes_back()
+    {
+        var file = Path.Combine(_dir, "phone.md");
+        File.WriteAllText(file, Qs);
+        using var hold = PlanHold.Start(file, "Goals")!;
+        File.WriteAllText(file, Qs.Replace("Description line.", "Description reworded."));
+        Assert.True(PlanStore.SetCardId(file, "Build it", "AND-0010"));
+
+        Assert.Equal(["Cards"], hold.Finish());
+        var text = File.ReadAllText(file);
+        Assert.Contains("### AND-0010: Build it", text);
+        Assert.Contains("Description line.", text);
+        Assert.DoesNotContain("reworded", text);
+    }
+
     [Fact]
     public void Merge3_applies_the_writes_lines_to_mine_and_the_writes_win_where_both_changed()
     {
@@ -246,8 +296,8 @@ public class PlannerTests : IDisposable
         Assert.Equal("a\nb\nc\nd\nd2\ne\nf\ng", Planner.Merge3(pre, mine, "a\nB\nc\nd\nd2\ne\nF\ng"));         // a line put in between
         Assert.Equal("a\nb\nc\ne\nf\ng", Planner.Merge3(pre, mine, "a\nB\nc\ne\nF\ng"));                       // a line the write took out
         Assert.Equal("a\nB!\nc\nd\ne\nf\ng", Planner.Merge3(pre, mine, "a\nB!\nc\nd\ne\nF\ng"));               // the same line: the write's stands
-        // right beside a line the planner changed, with no line between that both kept: the write's stretch stands whole
-        Assert.Equal("a\nB\nC\nd\ne\nf\ng", Planner.Merge3(pre, mine, "a\nB\nC\nd\ne\nF\ng"));
+        // right beside a line the planner changed: the write's line stands and the planner's still goes (WOR-0191)
+        Assert.Equal("a\nb\nC\nd\ne\nf\ng", Planner.Merge3(pre, mine, "a\nB\nC\nd\ne\nF\ng"));
         Assert.Equal(mine, Planner.Merge3(pre, mine, pre));
         Assert.Equal("z", Planner.Merge3(mine, mine, "z"));
         // the planner rewrote the file with LF where the plan had CRLF: lines still match, and the result keeps CRLF

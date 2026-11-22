@@ -266,9 +266,10 @@ public static partial class Planner
     }
 
     /// <summary>A three-way merge by lines: <paramref name="mine"/> with the change from <paramref name="pre"/> to
-    /// <paramref name="post"/> applied, as diff3 does. Where both changed the same stretch (lines with no line between
-    /// them that both left alone), <paramref name="post"/>'s stretch wins whole: it's the person's write, so it must
-    /// stand, even if it carries a change of the planner's right beside it.</summary>
+    /// <paramref name="post"/> applied, as diff3 does. Where both changed the same lines (overlapping), <paramref name="post"/>'s change
+    /// wins: it's the person's write, so it must stand. A write that only touches a changed stretch (an answer line put
+    /// where the planner's lines were, an id in the heading above a line the planner reworded) applies as well, so the
+    /// planner's change beside it is still undone (WOR-0191).</summary>
     public static string Merge3(string pre, string mine, string post)
     {
         if (pre == post) return mine;
@@ -279,28 +280,75 @@ public static partial class Planner
         var o = pre.Replace("\r\n", "\n").Split('\n');
         var a = mine.Replace("\r\n", "\n").Split('\n');
         var b = post.Replace("\r\n", "\n").Split('\n');
-        var ma = Match(o, a);
-        var mb = Match(o, b);
+        var hunks = Hunks(o, a, Match(o, a)).Select(h => (H: h, Mine: true)).ToList();
+        foreach (var h in Hunks(o, b, Match(o, b)))
+            // the same line put in at the same spot by both is put in once
+            if (!(h.Os == h.Oe && hunks.Any(x => x.H.Os == h.Os && x.H.Oe == h.Oe && x.H.New.SequenceEqual(h.New))))
+                hunks.Add((h, false));
+        hunks = hunks.OrderBy(x => x.H.Os).ThenBy(x => x.H.Oe).ThenBy(x => x.Mine ? 0 : 1).ToList();
         var result = new List<string>();
-        int i = 0, j = 0, k = 0;
-        while (true)
+        var pos = 0;
+        var cluster = new List<(Hunk H, bool Mine)>();
+        void Flush()
         {
-            // the next line of pre that both kept, from where we are
-            var l = i;
-            while (l < o.Length && (ma[l] < j || mb[l] < k)) l++;
-            var (ea, eb) = l < o.Length ? (ma[l], mb[l]) : (a.Length, b.Length);
-            if (l > i || ea > j || eb > k)
+            if (cluster.Count == 0) return;
+            var s = cluster.Min(x => x.H.Os);
+            var e = cluster.Max(x => x.H.Oe);
+            result.AddRange(o[pos..s]);
+            if (cluster.All(x => x.Mine == cluster[0].Mine))
+                foreach (var x in cluster) result.AddRange(x.H.New);
+            else
             {
-                var co = o[i..l]; var ca = a[j..ea]; var cb = b[k..eb];
-                if (co.SequenceEqual(ca)) result.AddRange(cb);          // only the write changed this stretch
-                else if (co.SequenceEqual(cb)) result.AddRange(ca);     // only mine did
-                else result.AddRange(cb);                               // both: the person's write stands
+                // both changed the same lines (overlapping, not merely touching): the person's write stands
+                var at = s;
+                foreach (var x in cluster.Where(x => !x.Mine))
+                {
+                    result.AddRange(o[at..x.H.Os]);
+                    result.AddRange(x.H.New);
+                    at = x.H.Oe;
+                }
+                result.AddRange(o[at..e]);
             }
-            if (l >= o.Length) break;
-            result.Add(o[l]);
-            i = l + 1; j = ea + 1; k = eb + 1;
+            pos = e;
+            cluster.Clear();
         }
+        foreach (var x in hunks)
+        {
+            if (cluster.Count > 0 && !cluster.Any(c => Overlap(c.H, x.H))) Flush();
+            cluster.Add(x);
+        }
+        Flush();
+        result.AddRange(o[pos..]);
         return string.Join(crlf ? "\r\n" : "\n", result);
+    }
+
+    /// <summary>A change from <c>o</c> to another version: lines Os..Oe of o became New (Os == Oe is an insertion).</summary>
+    readonly record struct Hunk(int Os, int Oe, string[] New);
+
+    static List<Hunk> Hunks(string[] o, string[] x, int[] m)
+    {
+        var list = new List<Hunk>();
+        int p = 0, q = 0;
+        for (var i = 0; i <= o.Length; i++)
+        {
+            if (i < o.Length && m[i] < 0) continue;
+            var qi = i < o.Length ? m[i] : x.Length;
+            if (i > p || qi > q) list.Add(new Hunk(p, i, x[q..qi]));
+            p = i + 1; q = qi + 1;
+        }
+        return list;
+    }
+
+    /// <summary>Whether two changes collide: their ranges share a line, or one is an insertion strictly inside the
+    /// other's range. Touching (one starting where the other ends, an insertion at the edge of a changed stretch, two
+    /// insertions at one spot) is not a collision: both apply, mine's first (WOR-0191).</summary>
+    static bool Overlap(Hunk h, Hunk g)
+    {
+        bool hi = h.Os == h.Oe, gi = g.Os == g.Oe;
+        if (hi && gi) return false;
+        if (hi) return g.Os < h.Os && h.Os < g.Oe;
+        if (gi) return h.Os < g.Os && g.Os < h.Oe;
+        return h.Os < g.Oe && g.Os < h.Oe;
     }
 
     /// <summary>For each line of <paramref name="x"/>, the index of the line of <paramref name="y"/> it's matched to in
