@@ -75,6 +75,9 @@ public partial class MainWindow : Window
         if (sender is Avalonia.Controls.Primitives.ToggleButton t) t.IsChecked = true;
     }
 
+    // WOR-0190: the ✕ beside Fettle's box clears it (the command) and puts the cursor back in it
+    void ClearFettleBoxClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => MascotBox.Focus();
+
     void InitializeComponentState()
     {
         var vm = _vm;

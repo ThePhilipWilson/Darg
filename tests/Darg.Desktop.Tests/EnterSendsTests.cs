@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -91,5 +92,36 @@ public class EnterSendsTests
         await Exercise(app, box, () => app.Prompts().Any(p => Lines(p).Contains("third")), "Fettle's box");
         Assert.Contains(app.Prompts(), p => Lines(p).Contains("first line\nsecond\nthird"));
         app.Shot("fettle");
+    }
+
+    [AvaloniaFact]
+    public async Task The_clear_button_empties_Fettles_box_sends_nothing_and_is_disabled_while_empty()
+    {
+        using var app = DargApp.Make();
+        await app.Start();
+        app.Main.Mascot.Open = true;
+        await DargApp.Settle();
+
+        var box = Box(app, b => b.Name == "MascotBox");
+        var clear = app.Window.GetVisualDescendants().OfType<Button>().First(b =>
+            b.IsEffectivelyVisible && Avalonia.Automation.AutomationProperties.GetName(b) == "Clear Fettle box");
+        Assert.False(clear.IsEffectivelyEnabled, "enabled with an empty box");
+
+        Type(app, box, "half a thought");
+        await DargApp.Settle();
+        Assert.True(clear.IsEffectivelyEnabled);
+        var before = app.Prompts().Count;
+        var at = clear.TranslatePoint(new Avalonia.Point(clear.Bounds.Width / 2, clear.Bounds.Height / 2), app.Window)!.Value;
+        app.Window.MouseMove(at);
+        app.Window.MouseDown(at, Avalonia.Input.MouseButton.Left);
+        app.Window.MouseUp(at, Avalonia.Input.MouseButton.Left);
+        await DargApp.Settle();
+
+        Assert.Equal("", app.Main.Mascot.Compose);
+        Assert.Equal("", box.Text ?? "");
+        Assert.True(box.IsFocused, "focus left the box");
+        Assert.False(clear.IsEffectivelyEnabled);
+        Assert.Equal(before, app.Prompts().Count);
+        Assert.Null(app.Main.Mascot.Agent);
     }
 }

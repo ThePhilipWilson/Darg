@@ -227,6 +227,12 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         return true;
     }
 
+    /// <summary>WOR-0190: empties what's typed in the box; sends nothing, leaves the chat alone. Disabled while the box is empty.</summary>
+    [RelayCommand(CanExecute = nameof(CanClearCompose))]
+    void ClearCompose() => Compose = "";
+    bool CanClearCompose() => Compose.Length > 0;
+    partial void OnComposeChanged(string value) => ClearComposeCommand.NotifyCanExecuteChanged();
+
     [RelayCommand]
     void Send()
     {
