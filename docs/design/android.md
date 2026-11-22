@@ -25,14 +25,14 @@ Darg on the phone: a window onto the desktop for answering what waits on Philip,
 - **Wrap the desktop UI**: Darg's UI isn't web, so there is nothing to wrap.
 - **Rewrite natively in Kotlin**: throws away Darg.Core and doubles every feature.
 
-**Answer:** Thin client, Avalonia on Android (agent for AND-0001, 2026-11-20, on Philip's behalf; keep or change)
+**Answer:** Thin client, Avalonia on Android (decided by agent, AND-0001, 2026-11-20)
 
 ### How does the phone reach the PC off the home network?
 - **Tailscale** (recommended): nothing goes through anyone else's server.
 - **A relay**: works without installing anything on the PC.
 - **Home network only**: simplest, no use on the move.
 
-**Answer:** Tailscale (agent for AND-0002, 2026-11-20, on Philip's behalf; not installed, so only the home network works for now; keep or change)
+**Answer:** Tailscale (decided by agent, AND-0002, 2026-11-20; not installed, so only the home network works for now)
 
 ### How do notifications arrive with the app closed?
 - **ntfy** (recommended): the phone needs only the ntfy app and internet, not a route to the PC.
@@ -45,13 +45,13 @@ Darg on the phone: a window onto the desktop for answering what waits on Philip,
 - **Under `D:\Android`** (recommended): a dotnet with the workload, an SDK and an emulator image, set up by `tools/android-setup.ps1`.
 - **The system dotnet and C:**: needs admin and fills C:.
 
-**Answer:** Under `D:\Android` (agent for AND-0003, 2026-11-20, on Philip's behalf; keep or change)
+**Answer:** Under `D:\Android` (decided by agent, AND-0003, 2026-11-20)
 
 ### What is the app id, and who holds the release key?
 - **`uk.co.philipwilson.darg`, with Philip holding the key** (recommended): the key is never committed.
 - **An id under the studio's name**: Darg carries no studio reference.
 
-**Answer:** `uk.co.philipwilson.darg` (agent for AND-0003, 2026-11-20, on Philip's behalf; the key is left to AND-0009; keep or change)
+**Answer:** `uk.co.philipwilson.darg` (decided by agent, AND-0003, 2026-11-20; the key is left to AND-0009)
 
 ## Design
 A thin remote client: a native Avalonia Android app over the desktop's Darg API, with the PC as the hub. The phone holds no agents, repos or boards of its own and never edits board or note files; it caches what it last saw for reading offline.
@@ -67,7 +67,7 @@ The first screen is Needs you: every agent question and permission ask, and ever
 
 ### AND-0001: Decide the approach and scope
 The decision, now this plan's Questions and Design. It is a card here only because the board has it.
-**Where:** [ANDROID.md](../ANDROID.md).
+**Where:** `docs/ANDROID.md`.
 **Done when:** the approach and v1 scope are written down.
 **Blocked by:** none
 

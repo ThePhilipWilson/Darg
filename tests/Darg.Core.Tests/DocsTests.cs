@@ -19,14 +19,14 @@ public sealed class DocsTests
         .Where(f => Path.GetFileName(f) is not ("PLAN.md" or "MORNING.md" or "PHONE-PLAN.md"));
 
     /// <summary>The text of the repo's own files (src, tests, tools), never build output, docs, or other worktrees (paths taken
-    /// from the repo's root, since the repo itself may be a worktree under .claude/worktrees).</summary>
+    /// from the repo's root, since the repo itself may be a worktree under .claude/worktrees). Skipped folders are never
+    /// entered: other tests make and delete folders under bin while this runs, and walking into one failed a run.</summary>
     static string Source(string under, params string[] patterns)
     {
-        var root = Root();
         string[] skip = ["bin", "obj", ".claude", ".shots", "docs", ".darg"];
-        return string.Concat(patterns.SelectMany(p => Directory.GetFiles(Path.Combine(root, under), p, SearchOption.AllDirectories))
-            .Where(f => !Path.GetRelativePath(root, f).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(skip.Contains))
-            .Select(File.ReadAllText));
+        IEnumerable<string> Walk(string dir) => patterns.SelectMany(p => Directory.GetFiles(dir, p))
+            .Concat(Directory.GetDirectories(dir).Where(d => !skip.Contains(Path.GetFileName(d))).SelectMany(Walk));
+        return string.Concat(Walk(Path.Combine(Root(), under)).Select(File.ReadAllText));
     }
 
     /// <summary>A button named in the docs by its icon and first word (✓ Done, 🔔 For human attention) must be a label the app shows:
@@ -209,6 +209,14 @@ public sealed class DocsTests
         Assert.Equal("Android", plan.Board);
         Assert.Equal(5, plan.Questions.Count);
         Assert.All(plan.Questions, q => Assert.False(q.Open, q.Question));
+        // Four answers were card agents' choices and must read as such, so the page offers Keep and Change on them
+        // (WOR-0178's "decided by agent, CARD, date"); ntfy was Philip's, so it must not.
+        Assert.Equal(["AND-0001", "AND-0002", "AND-0003", "AND-0003"], plan.Questions.Where(q => q.ByAgent).Select(q => q.DecidedCard));
+        Assert.False(plan.Questions.Single(q => q.Pick == "ntfy").ByAgent);
+        Assert.Equal(["Thin client, Avalonia on Android", "Tailscale", "ntfy", "Under `D:\\Android`", "`uk.co.philipwilson.darg`"],
+            plan.Questions.Select(q => q.Pick));
+        // A card row shows Where and the description as plain text, so a markdown link would show raw.
+        Assert.All(plan.Cards, c => Assert.DoesNotContain("](", c.Description + " " + c.Where + " " + c.Done));
         Assert.Equal(Enumerable.Range(1, 11).Select(n => $"AND-{n:0000}"), plan.Cards.Select(c => c.Id).OrderBy(i => i));
         Assert.All(plan.Cards, c => Assert.True(c.Ready, c.Id + " scores " + string.Join("|", c.Score.Missing)));
         Assert.Empty(plan.UnknownBlockers());
