@@ -580,10 +580,6 @@ public partial class ProjectViewModel : ObservableObject
             // a card agent shows its card's state: "Complete, pending removal" once the card is done
             Agents.DoneCardIds = Board.DoneCardIds;
             Agents.CardBoards = Board.CardBoards;
-            // a finished task agent stays while its card waits on the person: set before the first RefreshCards below, which
-            // without it forgot the asker of every card waiting in For Human Attention on each start (WOR-0183); every board's
-            // cards, as for done, since an agent's card may sit on a board that isn't shown
-            Agents.AttentionCardIds = () => CardIndex.Read(Config.Boards).Where(c => c.InAttention).Select(c => c.Card.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
             Board.Reloaded += Agents.RefreshCards;
             // a plan's made cards show their column and agent as the board has them
             Board.Reloaded += () => { if (OnDesign) Design?.Reload(); };
@@ -611,19 +607,28 @@ public partial class ProjectViewModel : ObservableObject
             void DecisionOnLanding(Card card, string file)
             {
                 var mover = Agents.Agents.Where(a => a.CardId == card.Id).MaxBy(a => a.Created);
+                // a task agent goes once it stops (WOR-0183); this one stays until it's known whether it has to be asked
+                if (mover is not null) Agents.Hold(mover);
                 AfterTurn(mover, () => Check(nudged: false));
                 void Check(bool nudged)
                 {
-                    if (!Board.CardInAttention(card.Id)) return; // answered or moved on meanwhile
+                    var asking = false;
+                    try { asking = Ask(nudged); }
+                    finally { if (!asking) Agents.Release(mover); }
+                }
+                // true: the mover has been asked for the decision, and is held until that turn ends
+                bool Ask(bool nudged)
+                {
+                    if (!Board.CardInAttention(card.Id)) return false; // answered or moved on meanwhile
                     var column = AttentionColumn.Find(Board.Columns) ?? BoardStore.AttentionName;
                     string text;
-                    try { text = File.ReadAllText(file); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; }
-                    if (CardDecision.Read(text) is { Valid: true } d) { DecisionWaits(card, d); return; }
+                    try { text = File.ReadAllText(file); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+                    if (CardDecision.Read(text) is { Valid: true } d) { DecisionWaits(card, d); return false; }
                     if (!nudged && mover is not null && Agents.Find(mover.Id) is not null && mover.SessionId is not null)
                     {
                         mover.Say($"Darg: {card.Id} landed in {column} with no decision. Asked for one.", CardDecision.Nudge(card, file, column));
                         AfterTurn(mover, () => Check(nudged: true));
-                        return;
+                        return true;
                     }
                     _ = Task.Run(async () =>
                     {
@@ -640,6 +645,7 @@ public partial class ProjectViewModel : ObservableObject
                             DecisionWaits(card, draft);
                         });
                     });
+                    return false;
                 }
             }
             // after the agent's turn (and any question it is waiting on) has ended; at once when there is none

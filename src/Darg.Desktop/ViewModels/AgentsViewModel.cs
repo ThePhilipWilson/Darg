@@ -198,8 +198,9 @@ public partial class AgentsViewModel : ObservableObject
         foreach (var a in Agents.Where(a => a.State == AgentState.Idle).ToList()) a.CloseSession();
     }
 
-    /// <summary>Forget every finished agent here: one whose turn ended well and is waiting, or a saved one whose card is done.
-    /// Working, waiting on you and failed agents stay listed. Each goes as the × on it would (its file goes, Claude Code keeps its history).</summary>
+    /// <summary>Forget every finished agent here: one whose turn ended well and is waiting, a saved one whose card is done, and
+    /// every task agent that isn't running (<see cref="TaskOver"/>). Working, waiting on you, set to carry on after a usage
+    /// reset and failed agents stay listed. Each goes as the × on it would (its file goes, Claude Code keeps its history).</summary>
     [RelayCommand]
     void ClearFinished()
     {
@@ -209,26 +210,37 @@ public partial class AgentsViewModel : ObservableObject
     /// <summary>Whether the agent has finished its work and is only sitting in the list.</summary>
     public bool IsFinished(AgentViewModel a) =>
         a.IsDone || (a.State == AgentState.Saved && a.CardDone && a.FinishedTurn)
-        || (Replaced(a) && Settled(a)) || TaskOver(a);
+        || (Replaced(a) && Stopped(a)) || TaskOver(a);
 
-    /// <summary>The ids of the cards waiting on the person in For Human Attention, on every one of the project's boards (set by
-    /// the project): their agents stay, since a card's decision shows on one of them, the answer may go back to it, and one that
-    /// moved it there is asked for the decision. Null until the project has set it, and then no task agent goes: restored agents
-    /// are checked before the project is fully built, and a check made without the boards deleted every asker on each restart.</summary>
-    public Func<IReadOnlySet<string>>? AttentionCardIds { get; set; }
+    /// <summary>A task agent that isn't running (WOR-0183): its turn ended, or it was cut off mid-turn by a crash, a close or
+    /// an update, or never got past its prompt. Its card waiting on the person keeps nothing: the decision is on the card,
+    /// answered there (a free-text answer starts a fresh card agent). Held only while Darg asks it for a missing decision.</summary>
+    bool TaskOver(AgentViewModel a) => IsTask(a) && Stopped(a) && !_held.Contains(a.Id);
 
-    /// <summary>A task agent whose turn has ended well, on a card that isn't waiting on the person's answer.</summary>
-    bool TaskOver(AgentViewModel a) => IsTask(a) && Settled(a) && TaskOver(a, AttentionCardIds?.Invoke());
-
-    /// <summary>As <see cref="TaskOver(AgentViewModel)"/> with the attention cards read once for the lot; null: can't tell, it stays.</summary>
-    static bool TaskOver(AgentViewModel a, IReadOnlySet<string>? waiting) =>
-        IsTask(a) && Settled(a) && waiting is not null && !waiting.Contains(a.CardId!);
-
-    /// <summary>A card agent doing one task (work, rework, QA, improve): once its turn ends well the task is over and the
-    /// agent has no place in the list (WOR-0183, Philip 2026-11-22: a finished QA, build or the like leaves no agent behind).
-    /// What it found is in the card and its reports.</summary>
+    /// <summary>A card agent doing one task (work, rework, QA, improve): once it stops the task is over and the agent has
+    /// no place in the list (WOR-0183, Philip 2026-11-22: once a task, QA, building or whatever, has finished, there
+    /// shouldn't be an agent in the list). What it found is in the card and its reports.</summary>
     static bool IsTask(AgentViewModel a) =>
         a.CardId is not null && a.Purpose is AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa or AgentPurposes.Improve;
+
+    /// <summary>Not running and with nothing to show: done with its turn, cut off partway or saved, and not at work, waiting
+    /// on the person, set to carry on after a usage reset (all <see cref="AgentViewModel.IsLiveOnCard"/>) or failed.</summary>
+    static bool Stopped(AgentViewModel a) =>
+        a.State is AgentState.Idle or AgentState.Saved && !a.IsLiveOnCard && !a.EndedInError;
+
+    /// <summary>Task agents kept while Darg waits on something from them (a decision it asked for).</summary>
+    readonly HashSet<string> _held = [];
+
+    /// <summary>Keep a task agent listed after it stops, until <see cref="Release"/>: its card landed in For Human
+    /// Attention with no decision yet, and it is the one asked to write it.</summary>
+    public void Hold(AgentViewModel a) => _held.Add(a.Id);
+
+    /// <summary>Done waiting on the agent: it goes now if its task is over.</summary>
+    public void Release(AgentViewModel? a)
+    {
+        if (a is null || !_held.Remove(a.Id)) return;
+        if (Agents.Contains(a) && TaskOver(a)) Forget(a);
+    }
 
     /// <summary>Whether a card agent's work has been taken over (WOR-0183): a newer work, rework or QA agent is on its card.
     /// What it did is in the card, its reports and the newer agent's prompt; it only clutters the list.</summary>
@@ -236,17 +248,14 @@ public partial class AgentsViewModel : ObservableObject
         a.CardId is not null && a.Purpose is null or AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa or AgentPurposes.Improve
         && Agents.Any(b => b != a && b.CardId == a.CardId && b.Purpose is AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa && b.Created > a.Created);
 
-    /// <summary>Finished its turn well and holds no claim on its card: nothing left for it to do.</summary>
-    static bool Settled(AgentViewModel a) => Finished(a) && !a.IsLiveOnCard;
-
-    /// <summary>A new work, rework or QA agent has started on a card (WOR-0183): the older agents on it that have settled
-    /// leave the list; one still at work, waiting on the person or out of usage goes once its turn ends well, and a failed
-    /// one stays. A QA agent's verdict stays readable until this point, when something has replaced it.</summary>
+    /// <summary>A new work, rework or QA agent has started on a card (WOR-0183): the older agents on it that have stopped
+    /// (turn ended or cut off) leave the list; one still at work, waiting on the person or out of usage goes once its turn
+    /// ends well, and a failed one stays.</summary>
     void ForgetReplacedBy(AgentViewModel newer)
     {
         foreach (var a in Agents.Where(a => a != newer && a.CardId == newer.CardId && a.Purpose is null or AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa or AgentPurposes.Improve).ToList())
         {
-            if (Settled(a)) Forget(a);
+            if (Stopped(a)) Forget(a);
             else if (a.IsLiveOnCard) _goWhenFinished.Add(a.Id);
         }
     }
@@ -355,9 +364,8 @@ public partial class AgentsViewModel : ObservableObject
         if (CardBoards is not null) { _cardBoards = CardBoards(); SyncTabs(); Resort(); }
         var done = DoneCardIds?.Invoke(); // every board's, not only the one shown: an agent's card may be on another (WOR-0153)
         foreach (var a in Agents) if (a.CardId is not null) a.CardDone = done?.Contains(a.CardId) == true;
-        // a card agent whose turn has ended well has finished its task: it leaves the list (a failed one stays)
-        if (Agents.Any(a => IsTask(a) && Settled(a)) && AttentionCardIds?.Invoke() is { } waiting)
-            foreach (var a in Agents.Where(a => TaskOver(a, waiting)).ToList()) Forget(a);
+        // a task agent that isn't running has finished its task, ended or cut off: it leaves the list (a failed one stays)
+        foreach (var a in Agents.Where(TaskOver).ToList()) Forget(a);
     }
     [ObservableProperty] public partial AgentViewModel? Selected { get; set; }
     [ObservableProperty] public partial string NewPrompt { get; set; } = "";
@@ -802,6 +810,26 @@ public partial class AgentViewModel : ObservableObject
     public bool FinishedTurn =>
         Items.LastOrDefault(i => !(i is NoteItem { Bad: false } c && ClosedAfterTurn(c.Text))) is NoteItem { Bad: false } n
         && n.Text.StartsWith("Turn done", StringComparison.Ordinal);
+
+    /// <summary>Its last turn ended in an error, or its session died or never started: what the person is left to see.
+    /// A saved one reads it from its transcript (an error note last, or just before that turn's "Turn done"), since a
+    /// restored agent doesn't keep <see cref="TurnFailed"/>. One cut off mid-turn (a crash, an update) didn't fail:
+    /// its transcript just stops (WOR-0183).</summary>
+    public bool EndedInError => State switch
+    {
+        AgentState.Exited => true,
+        AgentState.Idle => TurnFailed,
+        AgentState.Saved => TurnFailed || SavedInError(),
+        _ => false,
+    };
+
+    bool SavedInError()
+    {
+        var i = Items.Count - 1;
+        while (i >= 0 && Items[i] is NoteItem { Bad: false } c && ClosedAfterTurn(c.Text)) i--;
+        if (i >= 0 && Items[i] is NoteItem { Bad: false } n && n.Text.StartsWith("Turn done", StringComparison.Ordinal)) i--;
+        return i >= 0 && Items[i] is NoteItem { Bad: true };
+    }
 
     const string ClosedTail = ". Send a message to carry on.";
 

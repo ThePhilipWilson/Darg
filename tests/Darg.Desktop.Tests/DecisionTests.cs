@@ -277,21 +277,24 @@ public class DecisionTests
             File.WriteAllText(FileOf(app, card), File.ReadAllText(FileOf(app, card)).Replace("## How to check", Decision(app.Agents.ForCard(card.Id)!.Id) + "\n## How to check"));
             Assert.Null(app.Board.MoveToAttention(card.Id));
         });
-        await DargApp.Settle(300);
+        // the asker goes once its turn ends, though its card waits on the person (Philip, 2026-11-22): the decision is on the card
+        await app.Until(() => !app.Agents.Agents.Contains(asker), "the asker to leave the list once its turn ended");
 
         await app.Api("decide", new { project = "proj", card = card.Id, answer = "Use Whisper instead", notes = "the small model" });
 
-        await app.Until(() => app.Prompts().Any(p => p.Contains("decision: you asked")), "the answer to reach the agent that asked");
-        // the asker left the list when the card did (WOR-0183: its task was over), so the answer went to a fresh card agent
-        Assert.Equal(2, app.ClaudeCalls().Count(c => (string?)c["kind"] == "start"));
-        var said = app.Prompts().Single(p => p.Contains("decision: you asked"));
-        Assert.Contains("I picked: Use Whisper instead", said);
-        Assert.Contains("Notes: the small model", said);
+        await app.Until(() => app.Prompts().Any(p => p.Contains("I have answered it")), "the answer to reach a fresh card agent");
+        var fresh = Assert.Single(app.Agents.Agents);
+        Assert.NotEqual(asker.Id, fresh.Id);
+        Assert.Equal(card.Id, fresh.CardId);
+        Assert.DoesNotContain(app.Prompts(), p => p.Contains("decision: you asked")); // the asker, gone, isn't resumed
+        var said = app.Prompts().Single(p => p.Contains("I have answered it"));
+        Assert.Contains("My answer: Use Whisper instead", said);
+        Assert.Contains("My notes: the small model", said);
         Assert.Equal("In Progress", app.Read(card.Id).Status);
     }
 
-    /// <summary>WOR-0183: a finished task agent leaves the list, but one whose card waits on the person stays; so the card
-    /// is moved while the agent is still at work, as a card agent's rules have it. Returns once its turn has ended.</summary>
+    /// <summary>The card is moved while the agent is still at work, as a card agent's rules have it. Returns once its turn
+    /// has ended (a task agent then leaves the list, WOR-0183, unless Darg holds it to ask for a missing decision).</summary>
     static async Task<AgentViewModel> WorkMovingTo(DargApp app, Card card, Action move)
     {
         Environment.SetEnvironmentVariable("FAKE_SECONDS", "4");
@@ -301,25 +304,31 @@ public class DecisionTests
             var agent = app.Agents.ForCard(card.Id)!;
             await app.Until(() => agent.State == AgentState.Working, "the card agent to start working");
             move();
-            // idle, or waiting on the person when the card holds a decision for them
-            await app.Until(() => agent.State is AgentState.Idle or AgentState.NeedsYou, "the card agent's turn to end");
+            // idle, waiting on the person, or already off the list and saved (WOR-0183)
+            await app.Until(() => agent.State is not (AgentState.Starting or AgentState.Working), "the card agent's turn to end");
             return agent;
         }
         finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
     }
 
     /// <summary>WOR-0169: a card with its agent, which has written the decision and moved the card to For Human
-    /// Attention, as a card agent's rules say.</summary>
+    /// Attention, as a card agent's rules say, and is still at work: a task agent leaves the list once its turn ends
+    /// (WOR-0183), so the decision shows on it only while it runs.</summary>
     static async Task<(Card Card, AgentViewModel Agent)> AgentAsks(DargApp app)
     {
         var card = app.Card("voice mode", "In Progress", Body());
         await app.Start();
-        var agent = await WorkMovingTo(app, card, () =>
+        Environment.SetEnvironmentVariable("FAKE_SECONDS", "60");
+        try
         {
-            File.WriteAllText(FileOf(app, card), File.ReadAllText(FileOf(app, card)).Replace("## How to check", Decision(app.Agents.ForCard(card.Id)!.Id) + "\n## How to check"));
+            await app.Api("work-on", new { project = "proj", card = card.Id });
+            var agent = app.Agents.ForCard(card.Id)!;
+            await app.Until(() => agent.State == AgentState.Working, "the card agent to start working");
+            File.WriteAllText(FileOf(app, card), File.ReadAllText(FileOf(app, card)).Replace("## How to check", Decision(agent.Id) + "\n## How to check"));
             Assert.Null(app.Board.MoveToAttention(card.Id));
-        });
-        return (card, agent);
+            return (card, agent);
+        }
+        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
     }
 
     [AvaloniaFact]
@@ -346,10 +355,7 @@ public class DecisionTests
         Assert.Null(CardDecision.Read(text));
         await DargApp.Settle(300);
         Assert.Empty(agent.OpenDecisions); // and the board's next read doesn't put it back
-        // a saved agent keeps the answered decision as a line in its transcript. The card went to done, so the agent has
-        // left the list with it (WOR-0131) and nothing saves it now (WOR-0183); saved anyway, here, to see what it keeps
-        Assert.True(agent.Gone);
-        agent.Gone = false;
+        // a saved agent keeps the answered decision as a line in its transcript (still at work here, it goes when its turn ends)
         agent.Save();
         AgentStore.Flush();
         var saved = AgentStore.List(agent.StoreFolder!).Single(r => r.Id == agent.Id);
@@ -365,14 +371,12 @@ public class DecisionTests
         await app.Until(() => agent.OpenDecisions.Any(), "the card's decision to show on its agent");
         var item = agent.OpenDecisions.Single();
 
-        await app.Api("decide", new { project = "proj", card = card.Id, answer = "Still fails", notes = "nothing landed" });
+        await app.Api("decide", new { project = "proj", card = card.Id, answer = "Works" });
 
-        // sent back starts a rework agent on the card, which replaces the asker (WOR-0183): its decision goes with it, and
-        // the answer lives on in the card and the rework agent's prompt
-        Assert.DoesNotContain(agent, app.Agents.Agents);
-        Assert.Contains(app.Agents.Agents, a => a.CardId == card.Id && a.Purpose == AgentPurposes.Rework);
-        Assert.Equal("In Progress", app.Read(card.Id).Status);
-        await app.Until(() => app.Prompts().Any(p => p.Contains("nothing landed")), "the rework agent to be sent the notes");
+        // answered through the API: it closes on the agent too, saying how
+        Assert.False(item.Open);
+        Assert.Contains("approved", item.Outcome);
+        Assert.Equal("Done", app.Read(card.Id).Status);
     }
 
     [AvaloniaFact]
@@ -400,9 +404,8 @@ public class DecisionTests
 
         await app.Api("move-card", new { project = "proj", card = card.Id, column = "In Progress" });
 
-        // its task is over and the card no longer waits on the person (WOR-0183): the agent goes, or its decision closes
-        await app.Until(() => !item.Open || !app.Agents.Agents.Contains(agent), "the agent's decision to close or the agent to go once the card left the attention column");
-        if (!item.Open) Assert.Contains("no open decision", item.Outcome);
+        await app.Until(() => !item.Open, "the agent's decision to close once the card left the attention column");
+        Assert.Contains("no open decision", item.Outcome);
     }
 
     [AvaloniaFact]
@@ -439,7 +442,9 @@ public class DecisionTests
         var nudge = app.Prompts().Single(p => p.Contains("has no ## Decision section"));
         Assert.Contains(card.Id, nudge);
         Assert.Contains("**Question:**", nudge);
-        Assert.Single(app.Agents.Agents);
+        Assert.DoesNotContain(app.Agents.Agents, a => a != agent); // it was asked, rather than a new agent started
+        // held only for that (WOR-0183): it goes once the turn it was asked in has ended
+        await app.Until(() => !app.Agents.Agents.Contains(agent), "the agent to go once the turn it was asked in ended");
     }
 
     [AvaloniaFact]
