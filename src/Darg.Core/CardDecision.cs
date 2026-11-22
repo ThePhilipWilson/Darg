@@ -6,9 +6,9 @@ namespace Darg.Core;
 /// <summary>What a decision option does when the person picks it (WOR-0124): the answer goes to the agent (the
 /// default, for choices only the agent can act on), the card goes to done, it is sent back as with QA notes, or it
 /// stays where it is for now.</summary>
-public enum DecisionAction { Agent, Done, Back, Stay }
+public enum DecisionAction { Agent, Done, Back, Stay, Move }
 
-public sealed record DecisionOption(string Label, string Description, DecisionAction Action, bool Recommended)
+public sealed record DecisionOption(string Label, string Description, DecisionAction Action, bool Recommended, string? Target = null)
 {
     /// <summary>What the click does, in a couple of words for the button's corner.</summary>
     public string ActionText => Action switch
@@ -16,6 +16,7 @@ public sealed record DecisionOption(string Label, string Description, DecisionAc
         DecisionAction.Done => "→ done",
         DecisionAction.Back => "→ send back",
         DecisionAction.Stay => "→ stays here",
+        DecisionAction.Move => $"→ {Target}",
         _ => "→ to the agent",
     };
 }
@@ -128,32 +129,39 @@ public sealed partial record CardDecision(string Question, IReadOnlyList<Decisio
         rest = rest.Trim();
         if (RecommendedLeadRx().Match(rest) is { Success: true } r) { recommended = true; rest = rest[r.Length..].Trim(); }
         var action = DecisionAction.Agent;
+        string? target = null;
         if (ArrowRx().Match(rest) is { Success: true } a)
         {
-            action = a.Groups[1].Value.ToLowerInvariant().Replace(" ", "") switch
-            {
-                "done" or "approve" or "approved" => DecisionAction.Done,
-                "back" or "sendback" or "rework" => DecisionAction.Back,
-                "stay" or "wait" or "leave" or "later" => DecisionAction.Stay,
-                _ => DecisionAction.Agent,
-            };
+            var word = a.Groups[1].Value.Trim();
             rest = rest[a.Length..].Trim();
+            switch (word.ToLowerInvariant().Replace(" ", ""))
+            {
+                case "done" or "approve" or "approved": action = DecisionAction.Done; break;
+                case "back" or "sendback" or "rework": action = DecisionAction.Back; break;
+                case "stay" or "wait" or "leave" or "later": action = DecisionAction.Stay; break;
+                case "" or "agent" or "theagent" or "toagent" or "ask" or "message": break;
+                default:
+                    // any other column, by name (WOR-0186): "→ QA", "→ move to In Progress", "→ backlog"
+                    target = MoveLeadRx().Replace(word, "").Trim();
+                    action = target.Length > 0 ? DecisionAction.Move : DecisionAction.Agent;
+                    break;
+            }
         }
         if (RecommendedLeadRx().Match(rest) is { Success: true } r2) { recommended = true; rest = rest[r2.Length..].Trim(); }
         rest = Regex.Replace(rest, @"^[:\-–—]+\s*", "");
-        return new DecisionOption(label, rest.Trim(), action, recommended);
+        return new DecisionOption(label, rest.Trim(), action, recommended, target);
     }
 
     /// <summary>The section as markdown, heading included.</summary>
     public string Format()
     {
-        static string Act(DecisionAction a) => a switch { DecisionAction.Done => " → done", DecisionAction.Back => " → back", DecisionAction.Stay => " → stay", _ => "" };
+        static string Act(DecisionOption o) => o.Action switch { DecisionAction.Done => " → done", DecisionAction.Back => " → back", DecisionAction.Stay => " → stay", DecisionAction.Move => " → move to " + o.Target, _ => "" };
         var sb = new StringBuilder(Heading).Append("\n\n");
         sb.Append("**Question:** ").Append(Question).Append('\n');
         if (AskedBy.Length > 0) sb.Append("**Asked by:** ").Append(AskedBy).Append('\n');
         sb.Append('\n');
         foreach (var o in Options)
-            sb.Append("- **").Append(o.Label).Append("**").Append(o.Recommended ? " (recommended)" : "").Append(Act(o.Action))
+            sb.Append("- **").Append(o.Label).Append("**").Append(o.Recommended ? " (recommended)" : "").Append(Act(o))
               .Append(o.Description.Length > 0 ? ": " + o.Description : "").Append('\n');
         if (Context.Length > 0) sb.Append("\n**Context:** ").Append(Context).Append('\n');
         return sb.ToString();
@@ -207,7 +215,7 @@ public sealed partial record CardDecision(string Question, IReadOnlyList<Decisio
         "shaped like an AskUserQuestion: a line **Question:** with one specific question I can answer by picking (a decision, not a list of steps); " +
         "a line **Asked by:** agent and your agent id if you know it, then the date; then two to four options, one per line, as " +
         "- **Label** (recommended) → done: what it means. Mark exactly one (recommended). After the arrow say what picking it does: done (the card goes to done), " +
-        "back (it is sent back for more work with my notes), stay (it stays for now), or leave the arrow out and my answer comes back to you as a message to act on. " +
+        "back (it is sent back for more work with my notes), stay (it stays for now), move to and a column name such as QA, In Progress, Backlog or Needs More Work (the card goes there), or leave the arrow out and my answer comes back to you as a message to act on. " +
         "Last, a line **Context:** with only what I need to answer, in a sentence or two (the detail stays in How to check). " +
         "If the question is about how something looks, put a screenshot of it in the card as a markdown image with its full path, e.g. ![the panel](C:/path/shot.png): Darg shows it above the options, and a look okay question with nothing to look at is no use to me. " +
         "A card that lands there without one gets you a message asking for it.";
@@ -243,7 +251,7 @@ public sealed partial record CardDecision(string Question, IReadOnlyList<Decisio
         "- Label → stay: what it means\n" +
         "Context: one sentence of what they need to know to answer\n\n" +
         "Mark exactly one option (recommended). After the arrow: done moves the card to done, back sends it back for more work, stay leaves it, " +
-        "and no arrow sends the answer to an agent to act on. Use only what the card says; if it doesn't say what was done, ask whether it is right as it stands.\n\n" +
+        "\"move to QA\" (or any other column) moves it there, and no arrow sends the answer to an agent to act on. Use only what the card says; if it doesn't say what was done, ask whether it is right as it stands.\n\n" +
         $"The card ({card.Id}: {card.Title}):\n\n" + (cardText.Length > 6000 ? cardText[..6000] : cardText);
 
     /// <summary>Haiku's draft, or null unless it is exactly the shape asked for: a question ending in ?, two to four
@@ -295,8 +303,11 @@ public sealed partial record CardDecision(string Question, IReadOnlyList<Decisio
     private static partial Regex RecommendedRx();
     [GeneratedRegex(@"^(?:[\(\[]\s*recommended\s*[\)\]]|[–—-]\s*recommended\b|,\s*recommended\b)", RegexOptions.IgnoreCase)]
     private static partial Regex RecommendedLeadRx();
-    [GeneratedRegex(@"^(?:→|->|=>)\s*(send back|[a-z]+)\b", RegexOptions.IgnoreCase)]
+    // the word after the arrow: up to six words, ended by a colon, a bracket, a dash or the end
+    [GeneratedRegex(@"^(?:→|->|=>)\s*(send back|[a-z][a-z0-9]*(?:\s+[a-z][a-z0-9]*){0,5}?)(?=\s*(?::|\(|\[|$)|\s[–—-]\s)", RegexOptions.IgnoreCase)]
     private static partial Regex ArrowRx();
+    [GeneratedRegex(@"^(?:moves?\s+to\s+|goes?\s+to\s+|to\s+)", RegexOptions.IgnoreCase)]
+    private static partial Regex MoveLeadRx();
     [GeneratedRegex(@"(?:^|(?<=\n))##[ \t]+Decision[ \t]*\n(?:.*?)(?=\n##[ \t]|\z)", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
     private static partial Regex OpenSectionRx();
     [GeneratedRegex(@"\bagent\s+([0-9a-f]{6,})\b", RegexOptions.IgnoreCase)]

@@ -1115,6 +1115,14 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             Apply();
             return null;
         }
+        // a move to another column (WOR-0186): the answer is recorded, then the card goes where the option says
+        string? moveTo = null;
+        if (action == DecisionAction.Move)
+        {
+            moveTo = BoardColumns.Resolve(_board.Columns, option!.Target ?? "");
+            if (moveTo is null) return $"This board has no column called {option.Target}, so {card.Id} stays where it is.";
+            if (moveTo == BoardStore.PlaceOf(card.Status, _board.Columns)) { _notice = $"{card.Id} stays in {card.Status}: {label}"; Apply(); return null; }
+        }
         // an agent at work on the card holds it: sending back goes to that agent rather than starting another
         if (action == DecisionAction.Back && AgentFor?.Invoke(card.Id) is not null) action = DecisionAction.Agent;
         if (action == DecisionAction.Back && recorded is null && notes.Trim().Length == 0) return "Say what's wrong first: the agent works from your notes.";
@@ -1124,6 +1132,11 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return $"Couldn't write the answer into the card: {e.Message}"; }
         switch (action)
         {
+            case DecisionAction.Move:
+                Move(card.Id, moveTo!);
+                _notice = $"{card.Id}: {label}, moved to {option!.Target}";
+                DecisionSettled?.Invoke(card.Id, DecisionReport.Answered, (label + ". " + notes.Trim()).Trim());
+                return null;
             case DecisionAction.Done:
                 if (Approve(card.Id) is { } error) return error;
                 DecisionSettled?.Invoke(card.Id, DecisionReport.Approved, notes);
@@ -1148,6 +1161,10 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// and it can be sent back with notes (WOR-0079).</summary>
     public bool InQa(Card card) =>
         _board is not null && BoardColumns.Qa(_board.Columns) is { } qa && BoardStore.PlaceOf(card.Status, _board.Columns) == BoardStore.PlaceOf(qa, _board.Columns);
+
+    /// <summary>Whether a card sits in the board's In Progress column.</summary>
+    public bool InProgress(Card card) =>
+        _board is not null && _board.Columns.FirstOrDefault(c => c.Name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) is { } w && BoardStore.PlaceOf(card.Status, _board.Columns) == w.Id;
 
     /// <summary>Whether a card sits in the board's needs-more-work column (<see cref="BoardColumns.Rework"/>): QA failed it.</summary>
     public bool InRework(Card card) =>
@@ -1895,7 +1912,11 @@ public partial class CardEditor : ObservableObject
     /// (its decision report is written by the board's reload), approved to done, or sent back with notes below.</summary>
     // a card with a decision (WOR-0124) is answered by its options instead
     public bool CanQaVerdict => (InQa || InAttention) && CanWorkOn && !ShowDecision;
-    public bool CanToAttention => InQa && HasAttentionColumn;
+    /// <summary>Any card that has finished a stage and needs an answer can go to For Human Attention (WOR-0186): from
+    /// In Progress, QA or needs more work.</summary>
+    public bool CanToAttention => (InQa || InRework || InProgress) && HasAttentionColumn;
+    public bool InProgress => _card is not null && _board.InProgress(_card.Card);
+    public bool InRework => _card is not null && _board.InRework(_card.Card);
     public bool HasAttentionColumn => _board.HasAttentionColumn;
     [RelayCommand]
     void QaToAttention()

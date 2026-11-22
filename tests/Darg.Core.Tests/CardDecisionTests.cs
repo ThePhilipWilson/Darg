@@ -39,6 +39,38 @@ public class CardDecisionTests
         Assert.Null(d.OptionFor("something else"));
     }
 
+    // WOR-0186: an option can send the card to any column, by name
+    [Theory]
+    [InlineData("- **Re-check** → move to QA: look again", DecisionAction.Move, "QA", "look again")]
+    [InlineData("- **Re-check** (recommended) → QA: look again", DecisionAction.Move, "QA", "look again")]
+    [InlineData("- **Park it** → backlog", DecisionAction.Move, "backlog", "")]
+    [InlineData("- **Carry on** -> move to In Progress - keep going", DecisionAction.Move, "In Progress", "keep going")]
+    [InlineData("- **Rework** → Needs More Work: fix it", DecisionAction.Move, "Needs More Work", "fix it")]
+    [InlineData("- **Ask** → agent: it decides", DecisionAction.Agent, null, "it decides")]
+    public void An_option_can_name_any_column_to_move_to(string line, DecisionAction action, string? target, string description)
+    {
+        var d = CardDecision.Parse("**Question:** Next?\n" + line + "\n- **Other** → done");
+        var o = d.Options[0];
+        Assert.Equal(action, o.Action);
+        Assert.Equal(target, o.Target);
+        Assert.Equal(description, o.Description);
+        Assert.Equal(DecisionAction.Done, d.Options[1].Action);
+        var again = CardDecision.Parse(d.Format()).Options[0];
+        Assert.Equal((o.Action, o.Target), (again.Action, again.Target));
+    }
+
+    [Fact]
+    public void Targets_resolve_to_board_columns_by_name_or_role()
+    {
+        IReadOnlyList<Column> cols = [new("c1", "To Do"), new("c2", "In Progress"), new("c3", "QA Ready"), new("c4", "For Human Attention"), new("c5", "needs more work"), new("c6", "Done")];
+        Assert.Equal("backlog", BoardColumns.Resolve(cols, "Backlog"));
+        Assert.Equal("c2", BoardColumns.Resolve(cols, "in  progress"));
+        Assert.Equal("c3", BoardColumns.Resolve(cols, "QA"));
+        Assert.Equal("c5", BoardColumns.Resolve(cols, "rework"));
+        Assert.Equal("c6", BoardColumns.Resolve(cols, "done"));
+        Assert.Null(BoardColumns.Resolve(cols, "Shipping"));
+    }
+
     // the shapes agents drift into when writing an option line by hand
     [Theory]
     [InlineData("- **Works (Recommended)** → done: words land", "Works", true, DecisionAction.Done, "words land")]

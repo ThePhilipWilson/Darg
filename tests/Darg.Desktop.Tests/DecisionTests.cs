@@ -233,6 +233,57 @@ public class DecisionTests
         Assert.Equal(AgentPurposes.Rework, agent.Purpose);
     }
 
+    /// <summary>WOR-0186: an answer can send the card to any column, not just done or back; and a card in In Progress or
+    /// needs more work can be sent to attention from its panel, as one in QA can.</summary>
+    [AvaloniaTheory]
+    [InlineData("QA Ready", "move to QA")]
+    [InlineData("Backlog", "backlog")]
+    [InlineData("needs more work", "move to Needs More Work")]
+    [InlineData("In Progress", "In Progress")]
+    public async Task A_move_option_sends_the_card_to_the_column_it_names(string column, string arrow)
+    {
+        using var app = DargApp.Make();
+        var text = Decision().Replace("**Not tried yet** → stay: leave it here.", "**Elsewhere** → " + arrow + ": go there.");
+        var card = app.Card("voice mode", BoardStore.AttentionName, Body(text));
+        await app.Start();
+
+        await app.Api("decide", new { project = "proj", card = card.Id, answer = "Elsewhere", notes = "later" });
+
+        Assert.Equal(column, app.Read(card.Id).Status);
+        var file = File.ReadAllText(FileOf(app, card));
+        Assert.Null(CardDecision.Read(file));
+        Assert.Contains("**Answer:** Elsewhere", file);
+        Assert.Empty(app.Agents.Agents);
+    }
+
+    [AvaloniaFact]
+    public async Task A_move_to_a_column_the_board_lacks_changes_nothing()
+    {
+        using var app = DargApp.Make();
+        var text = Decision().Replace("**Not tried yet** → stay: leave it here.", "**Ship** → move to Shipping: out.");
+        var card = app.Card("voice mode", BoardStore.AttentionName, Body(text));
+        await app.Start();
+
+        await Assert.ThrowsAnyAsync<Exception>(() => app.Api("decide", new { project = "proj", card = card.Id, answer = "Ship" }));
+
+        Assert.Equal(BoardStore.AttentionName, app.Read(card.Id).Status);
+        Assert.NotNull(CardDecision.Read(File.ReadAllText(FileOf(app, card))));
+    }
+
+    [AvaloniaTheory]
+    [InlineData("In Progress")]
+    [InlineData("QA Ready")]
+    [InlineData("needs more work")]
+    [InlineData("To Do")]
+    public async Task A_card_in_a_working_stage_can_be_sent_to_attention_from_its_panel(string column)
+    {
+        using var app = DargApp.Make();
+        var card = app.Card("voice mode", column, Body());
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board", card = card.Id });
+        Assert.Equal(column != "To Do", app.Board.Editor!.CanToAttention);
+    }
+
     [AvaloniaFact]
     public async Task A_stay_option_leaves_the_card_and_its_decision_open()
     {

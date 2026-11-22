@@ -54,10 +54,10 @@ public partial class MainViewModel
         Add("send-back", "send a card in the QA column back with what's wrong, as its panel's Send back does: {project, card, notes}. The notes go into the card " +
                          "under QA notes, it returns to In Progress and an agent reworks it from them. Only when Philip asks, with his words as the notes.", SendBack);
         Add("decide", "answer the decision a card in For Human Attention waits on, as picking an option on its panel does: {project, card, answer, notes?}. " +
-                      "answer is an option's label (its action runs: done, send back or stay) or Philip's own words (they go to the agent that asked, or a new one). " +
+                      "answer is an option's label (its action runs: done, send back, stay or move to a column) or Philip's own words (they go to the agent that asked, or a new one). " +
                       "A card with no decision answers Approve or Send back. Only with Philip's answer.", Decide);
         Add("to-attention", "move a card to For Human Attention with the decision Philip has to make: {project, card, question, options, context?}. " +
-                            "options is a list of 2 to 4 lines, each Label (recommended) → done|back|stay: what it means (one marked recommended; no arrow sends his answer to an agent). " +
+                            "options is a list of 2 to 4 lines, each Label (recommended) → done|back|stay|move to <column>: what it means (one marked recommended; move to takes any column's name or backlog, qa, rework; no arrow sends his answer to an agent). Any card can be sent there from any column. " +
                             "Refused without a question and two options.", ToAttention);
         Add("new-card", "make a card in a project's backlog, on its inbox board (Inbox, Main or Backlog), as + Card does: {project, title, description?, " +
                         "type?: " + string.Join("|", CardTypes.All) + " (else guessed from the words), labels? (a list, or separated by commas), priority?}. " +

@@ -360,4 +360,23 @@ public static class BoardColumns
     public static string? Rework(IReadOnlyList<Column> columns) =>
         columns.Take(Math.Max(0, columns.Count - 1))
             .FirstOrDefault(c => Regex.IsMatch(c.Name, @"more work|rework|send back", RegexOptions.IgnoreCase))?.Name;
+
+    /// <summary>The list id a decision option's target names (WOR-0186): backlog or completed, a column by its name,
+    /// or by role (QA, needs more work, attention, done). Null when the board has nothing by that name.</summary>
+    public static string? Resolve(IReadOnlyList<Column> columns, string target)
+    {
+        var t = Regex.Replace(target.Trim(), @"\s+", " ");
+        if (t.Equals("backlog", StringComparison.OrdinalIgnoreCase)) return Board.Backlog;
+        if (t.Equals("completed", StringComparison.OrdinalIgnoreCase)) return Board.Completed;
+        if (columns.FirstOrDefault(c => c.Name.Equals(t, StringComparison.OrdinalIgnoreCase)) is { } named) return named.Id;
+        var role = t.ToLowerInvariant() switch
+        {
+            "qa" or "review" or "testing" => Qa(columns),
+            "rework" or "more work" or "needs more work" or "needs rework" => Rework(columns),
+            "attention" or "for attention" or "human attention" => AttentionColumn.Find(columns),
+            "done" => columns.LastOrDefault()?.Name,
+            _ => null,
+        };
+        return role is null ? null : columns.FirstOrDefault(c => c.Name == role)?.Id;
+    }
 }
