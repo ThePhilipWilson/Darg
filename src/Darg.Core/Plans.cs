@@ -578,6 +578,11 @@ public static class PlanStore
         return start >= 0 ? (start, lines.Count) : (-1, lines.Count);
     }
 
+    /// <summary>Raised after every write Darg makes to a plan (file, its text before, its text after), whoever made it:
+    /// the page, the API, Make cards. A planner held to one part (<see cref="PlanHold"/>) takes these as the person's,
+    /// not the planner's, so they stand when its turn ends.</summary>
+    public static event Action<string, string, string>? Edited;
+
     static bool Edit(string file, Func<List<string>, bool> change)
     {
         var raw = File.ReadAllText(file);
@@ -585,7 +590,9 @@ public static class PlanStore
         var lines = raw.Replace("\r\n", "\n").Split('\n').ToList();
         if (!change(lines)) return false;
         var text = string.Join("\n", lines);
-        File.WriteAllText(file, crlf ? text.Replace("\n", "\r\n") : text, new UTF8Encoding(false));
+        var written = crlf ? text.Replace("\n", "\r\n") : text;
+        File.WriteAllText(file, written, new UTF8Encoding(false));
+        Edited?.Invoke(file, raw, written);
         return true;
     }
 }

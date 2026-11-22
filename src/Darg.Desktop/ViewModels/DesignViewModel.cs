@@ -129,15 +129,17 @@ public sealed partial class DesignViewModel : ObservableObject
         if (file is null) return;
         if (Planner is { Working: true }) { Status = "The planner is at work: wait for its turn to end."; return; }
         var part = ChangePart is { } p && p != WholePlan ? p : null;
-        string? before = null;
+        // what Darg writes to the plan meanwhile (answers, edits, Make cards) is the person's and stands; only the
+        // planner's changes outside the part are put back
+        PlanHold? hold = null;
         if (part is not null)
-            try { before = File.Exists(file) ? File.ReadAllText(file) : null; } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            try { hold = PlanHold.Start(file, part); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         var sent = Core.Planner.ChangeMessage(file, part, text);
         var agent = Planner;
         if (agent is null)
         {
             agent = StartReviser?.Invoke(file, sent);
-            if (agent is null) return;
+            if (agent is null) { hold?.Dispose(); return; }
             Planner = agent;
         }
         else agent.Say(text, sent);
@@ -145,11 +147,11 @@ public sealed partial class DesignViewModel : ObservableObject
         Status = part is null ? "Sent to the planner." : $"Asked the planner to change {part}: anything else it changes is put back.";
         AfterTurn(agent, () =>
         {
-            if (before is not null && part is not null)
+            if (hold is not null)
             {
                 try
                 {
-                    var put = Core.Planner.KeepOnly(file, before, part);
+                    var put = hold.Finish();
                     Status = put.Count > 0
                         ? $"The planner changed {part}, and {string.Join(", ", put)} too: put back, so only {part} changed (the put-back isn't committed)."
                         : $"The planner changed {part}.";

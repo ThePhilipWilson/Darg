@@ -208,20 +208,56 @@ public static partial class Planner
     }
 
     /// <summary>What differs between two versions of a plan outside <paramref name="part"/>, by part name.</summary>
-    public static IReadOnlyList<string> Changed(string before, string after, string part)
+    public static IReadOnlyList<string> Changed(string before, string after, string part) =>
+        Differing(before, after, part).Select(n => n.Length == 0 ? "the title and properties" : n).ToList();
+
+    /// <summary>The headings of the parts that differ between two versions ("" for what comes before any), leaving out
+    /// <paramref name="except"/>.</summary>
+    static List<string> Differing(string before, string after, string? except = null)
     {
-        var a = Parts(before).Where(p => !p.Heading.Equals(part, StringComparison.OrdinalIgnoreCase)).ToList();
-        var b = Parts(after).Where(p => !p.Heading.Equals(part, StringComparison.OrdinalIgnoreCase)).ToList();
-        static string Norm(string s) => string.Join("\n", s.Split('\n').Select(l => l.TrimEnd())).Trim('\n');
+        var a = Parts(before).Where(p => except is null || !p.Heading.Equals(except, StringComparison.OrdinalIgnoreCase)).ToList();
+        var b = Parts(after).Where(p => except is null || !p.Heading.Equals(except, StringComparison.OrdinalIgnoreCase)).ToList();
         var names = a.Select(p => p.Heading).Concat(b.Select(p => p.Heading)).Distinct(StringComparer.OrdinalIgnoreCase);
         var changed = new List<string>();
         foreach (var n in names)
         {
             var x = a.FirstOrDefault(p => p.Heading.Equals(n, StringComparison.OrdinalIgnoreCase)).Body;
             var y = b.FirstOrDefault(p => p.Heading.Equals(n, StringComparison.OrdinalIgnoreCase)).Body;
-            if (Norm(x ?? "\u0000") != Norm(y ?? "\u0000")) changed.Add(n.Length == 0 ? "the title and properties" : n);
+            if (Norm(x ?? "\u0000") != Norm(y ?? "\u0000")) changed.Add(n);
         }
         return changed;
+    }
+
+    static string Norm(string s) => string.Join("\n", s.Split('\n').Select(l => l.TrimEnd())).Trim('\n');
+
+    /// <summary><paramref name="basis"/> with every part that a write from <paramref name="pre"/> to
+    /// <paramref name="post"/> changed taken as <paramref name="post"/> has it (added where post has it, dropped if post
+    /// dropped it), and every other part left as <paramref name="basis"/> has it. How a write made during a planner's
+    /// one-part turn (an answer, Make cards' ids, an edit on the page) joins what the turn is compared with, so
+    /// <see cref="KeepOnly"/> leaves it standing.</summary>
+    public static string Rebase(string basis, string pre, string post)
+    {
+        var changed = Differing(pre, post);
+        if (changed.Count == 0) return basis;
+        static bool Is(string a, string b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
+        var from = Blocks(post);
+        var result = new List<(string Heading, string Text)>();
+        foreach (var block in Blocks(basis))
+        {
+            if (!changed.Any(c => Is(c, block.Heading))) { result.Add(block); continue; }
+            if (result.Any(r => Is(r.Heading, block.Heading))) continue;   // a heading written twice: taken once, below
+            var now = from.FirstOrDefault(p => Is(p.Heading, block.Heading));
+            if (now.Text is not null) result.Add(now);
+        }
+        // parts the write added: after the part post has before them, else at the end
+        for (var i = 0; i < from.Count; i++)
+        {
+            if (result.Any(r => Is(r.Heading, from[i].Heading))) continue;
+            if (!changed.Any(c => Is(c, from[i].Heading))) continue;
+            var prev = i == 0 ? -1 : result.FindIndex(r => Is(r.Heading, from[i - 1].Heading));
+            result.Insert(prev < 0 ? result.Count : prev + 1, from[i]);
+        }
+        return string.Join("\n", result.Select(r => r.Text));
     }
 
     /// <summary>A plan's text cut at its <c>##</c> headings: first what comes before any (properties, title, intro)
@@ -235,6 +271,63 @@ public static partial class Planner
         return parts.Select(p => (p.Heading, string.Join("\n", p.Lines))).ToList();
     }
 
+    /// <summary>As <see cref="Parts"/>, but each with its own lines as written, heading line included, so joined with
+    /// "\n" they give the text back (line endings made "\n").</summary>
+    static List<(string Heading, string Text)> Blocks(string text)
+    {
+        var blocks = new List<(string Heading, List<string> Lines)> { ("", []) };
+        foreach (var l in text.Replace("\r\n", "\n").Split('\n'))
+            if (H2().Match(l) is { Success: true } m) blocks.Add((m.Groups[1].Value.Trim(), [l]));
+            else blocks[^1].Lines.Add(l);
+        return blocks.Select(b => (b.Heading, string.Join("\n", b.Lines))).ToList();
+    }
+
     [GeneratedRegex(@"[a-z0-9]+")] private static partial Regex Word();
     [GeneratedRegex(@"^##[ \t]+(.+?)\s*#*\s*$")] private static partial Regex H2();
+}
+
+/// <summary>A planner's turn held to one part of its plan: made as the message goes, finished when the turn ends.
+/// What Darg writes to the plan in between (an answer tapped on the page, Keep, a part edited, Make cards' ids and
+/// status, a feature's link: every <see cref="PlanStore.Edited"/>) is the person's, so it joins the text the turn is
+/// compared with and stands; only what else differs at the end is the planner's, and that is put back (WOR-0176,
+/// QA round 1: the page sits beside the chat, and a turn takes minutes).</summary>
+public sealed class PlanHold : IDisposable
+{
+    readonly string _file;
+    readonly object _gate = new();
+    string _basis;
+    bool _done;
+
+    public string File { get; }
+    public string Part { get; }
+
+    PlanHold(string file, string part, string text)
+    {
+        File = file;
+        Part = part;
+        _file = Path.GetFullPath(file);
+        _basis = text;
+        PlanStore.Edited += Wrote;
+    }
+
+    /// <summary>Hold the planner's turn on <paramref name="file"/> to <paramref name="part"/>; null when there's no file yet.</summary>
+    public static PlanHold? Start(string file, string part) =>
+        System.IO.File.Exists(file) ? new PlanHold(file, part, System.IO.File.ReadAllText(file)) : null;
+
+    void Wrote(string file, string pre, string post)
+    {
+        if (!string.Equals(Path.GetFullPath(file), _file, StringComparison.OrdinalIgnoreCase)) return;
+        lock (_gate) if (!_done) _basis = Planner.Rebase(_basis, pre, post);
+    }
+
+    /// <summary>The turn is over: put back whatever else the planner changed (<see cref="Planner.KeepOnly"/>), and say what.</summary>
+    public IReadOnlyList<string> Finish()
+    {
+        string basis;
+        lock (_gate) { _done = true; basis = _basis; }
+        Dispose();
+        return Planner.KeepOnly(File, basis, Part);
+    }
+
+    public void Dispose() => PlanStore.Edited -= Wrote;
 }

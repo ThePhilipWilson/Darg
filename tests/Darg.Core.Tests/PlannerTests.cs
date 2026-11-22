@@ -153,6 +153,67 @@ public class PlannerTests : IDisposable
     }
 
     [Fact]
+    public void What_darg_writes_to_the_plan_during_a_held_turn_stands_and_only_the_planners_other_changes_go_back()
+    {
+        var file = Path.Combine(_dir, "phone.md");
+        var other = Path.Combine(_dir, "other.md");
+        File.WriteAllText(file, Before.ReplaceLineEndings("\r\n"));
+        File.WriteAllText(other, Before);
+        using var hold = PlanHold.Start(file, "Goals")!;
+
+        // the planner, asked about Goals, changes Goals and tidies the Design too
+        File.WriteAllText(file, File.ReadAllText(file).Replace("- Answer agents.", "- Answer agents from the sofa.").Replace("A thin client.", "A thick client."));
+        // meanwhile, on the page and through the API: an answer changed, the plan agreed, a card's id written, a part added
+        Assert.True(PlanStore.Answer(file, "Which way?", "That", "Philip", new DateTime(2026, 11, 22)));
+        Assert.True(PlanStore.SetProperty(file, "status", "agreed"));
+        Assert.True(PlanStore.SetCardId(file, "First", "AND-0009"));
+        Assert.True(PlanStore.SetSection(file, "Not doing", "- Tablets."));
+        // a write to another plan is nothing to this one
+        Assert.True(PlanStore.SetSection(other, "Design", "Elsewhere."));
+
+        var put = hold.Finish();
+
+        Assert.Equal(["Design"], put);
+        var text = File.ReadAllText(file);
+        Assert.Contains("- Answer agents from the sofa.", text);
+        Assert.Contains("A thin client.", text);
+        Assert.DoesNotContain("A thick client.", text);
+        Assert.Contains("**Answer:** That (Philip", text);
+        Assert.DoesNotContain("**Answer:** This", text);
+        Assert.Contains("status: agreed", text);
+        Assert.Contains("### AND-0009", text);
+        Assert.Equal("- Tablets.", Planner.Part(text, "Not doing"));
+        Assert.DoesNotContain("Elsewhere", text);
+        Assert.Contains("\r\n", text);
+        Assert.DoesNotMatch("[^\r]\n", text);
+    }
+
+    [Fact]
+    public void A_held_turn_with_nothing_else_written_still_puts_back_what_the_planner_changed()
+    {
+        var file = Path.Combine(_dir, "phone.md");
+        File.WriteAllText(file, Before);
+        var hold = PlanHold.Start(file, "Design")!;
+        File.WriteAllText(file, Before.Replace("A thin client.", "A thin client over the API.").Replace("# Phone", "# Phone app"));
+        Assert.Equal(["the title and properties"], hold.Finish());
+        Assert.Equal(Before.Replace("A thin client.", "A thin client over the API."), File.ReadAllText(file));
+        Assert.Null(PlanHold.Start(Path.Combine(_dir, "none.md"), "Goals"));
+    }
+
+    [Fact]
+    public void Rebase_takes_the_parts_a_write_changed_and_keeps_the_rest()
+    {
+        var before = Before.ReplaceLineEndings("\n");
+        var pre = before.Replace("A thin client.", "A thick client.");   // the planner's change was already on disk
+        var post = pre.Replace("## Questions", "## Not doing\n- Tablets.\n\n## Questions").Replace("### First", "### AND-0001: First");
+        var rebased = Planner.Rebase(before, pre, post);
+        Assert.Equal(before.Replace("## Questions", "## Not doing\n- Tablets.\n\n## Questions").Replace("### First", "### AND-0001: First"), rebased);
+        Assert.Equal(before, Planner.Rebase(before, pre, pre));
+        // a part the write dropped goes
+        Assert.DoesNotContain("## Design", Planner.Rebase(before, before, before.Replace("## Design\nA thin client.\n\n", "")));
+    }
+
+    [Fact]
     public void Kinds_read_as_typed()
     {
         Assert.Equal(PlanKind.Feature, Planner.ParseKind(null));
