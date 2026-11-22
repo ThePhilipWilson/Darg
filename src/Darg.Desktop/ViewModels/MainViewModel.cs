@@ -699,6 +699,7 @@ public partial class ProjectViewModel : ObservableObject
                 foreach (var (card, d, agent) in owners) agent?.ShowDecision(card.Id, d, Board.Decide);
             }
             Board.Reloaded += SyncDecisions;
+            Agents.CardAwaitsDecision = Board.CardInAttention;
             Agents.Agents.CollectionChanged += (_, e) =>
             {
                 if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)

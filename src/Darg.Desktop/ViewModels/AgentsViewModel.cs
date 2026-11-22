@@ -208,7 +208,20 @@ public partial class AgentsViewModel : ObservableObject
     /// <summary>Whether the agent has finished its work and is only sitting in the list.</summary>
     public bool IsFinished(AgentViewModel a) =>
         a.IsDone || (a.State == AgentState.Saved && a.CardDone && a.FinishedTurn)
-        || ((Replaced(a) || a.Purpose == AgentPurposes.Improve) && Settled(a));
+        || (Replaced(a) && Settled(a)) || TaskOver(a);
+
+    /// <summary>Whether a card is waiting on the person in For Human Attention (set by the project from its boards): its agents stay,
+    /// since its decision shows on one of them, the answer may go back to it, and one that moved it there is asked for the decision.</summary>
+    public Func<string, bool>? CardAwaitsDecision { get; set; }
+
+    /// <summary>A task agent whose turn has ended well, on a card that isn't waiting on the person's answer.</summary>
+    bool TaskOver(AgentViewModel a) => IsTask(a) && Settled(a) && CardAwaitsDecision?.Invoke(a.CardId!) != true;
+
+    /// <summary>A card agent doing one task (work, rework, QA, improve): once its turn ends well the task is over and the
+    /// agent has no place in the list (WOR-0183, Philip 2026-11-22: a finished QA, build or the like leaves no agent behind).
+    /// What it found is in the card and its reports.</summary>
+    static bool IsTask(AgentViewModel a) =>
+        a.CardId is not null && a.Purpose is AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa or AgentPurposes.Improve;
 
     /// <summary>Whether a card agent's work has been taken over (WOR-0183): a newer work, rework or QA agent is on its card.
     /// What it did is in the card, its reports and the newer agent's prompt; it only clutters the list.</summary>
@@ -307,7 +320,7 @@ public partial class AgentsViewModel : ObservableObject
             if (e.PropertyName is nameof(AgentViewModel.State) or nameof(AgentViewModel.TurnFailed) && SortByStatus) Resort();
             if (e.PropertyName != nameof(AgentViewModel.State)) return;
             // it filed a report, or its card reached done, and its turn has now ended well: it goes (after this change has been handled)
-            if (_goWhenFinished.Contains(agent.Id) && Finished(agent)) Dispatcher.UIThread.Post(() => { if (Agents.Contains(agent) && Finished(agent)) Forget(agent); });
+            if (_goWhenFinished.Contains(agent.Id) && Finished(agent) || TaskOver(agent)) Dispatcher.UIThread.Post(() => { if (Agents.Contains(agent) && (Finished(agent) && _goWhenFinished.Contains(agent.Id) || TaskOver(agent))) Forget(agent); });
             NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
             CountRunning();
             if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
@@ -335,8 +348,8 @@ public partial class AgentsViewModel : ObservableObject
         if (CardBoards is not null) { _cardBoards = CardBoards(); SyncTabs(); Resort(); }
         var done = DoneCardIds?.Invoke(); // every board's, not only the one shown: an agent's card may be on another (WOR-0153)
         foreach (var a in Agents) if (a.CardId is not null) a.CardDone = done?.Contains(a.CardId) == true;
-        // a QA agent that has ended its turn has given its verdict: close it so it doesn't linger on the card
-        foreach (var a in Agents.Where(a => a.IsDone && !a.LimitHit && a.ContinueAt is null && a.CardId is not null && a.Purpose == AgentPurposes.Qa).ToList()) a.CloseSession("Darg");
+        // a card agent whose turn has ended well has finished its task: it leaves the list (a failed one stays)
+        foreach (var a in Agents.Where(TaskOver).ToList()) Forget(a);
     }
     [ObservableProperty] public partial AgentViewModel? Selected { get; set; }
     [ObservableProperty] public partial string NewPrompt { get; set; } = "";

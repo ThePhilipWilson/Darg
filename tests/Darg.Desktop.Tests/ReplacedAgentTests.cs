@@ -12,44 +12,51 @@ public class ReplacedAgentTests
     const string HowToCheck = "\n\n## How to check\n\nLook at the logo.\n";
 
     [AvaloniaFact]
-    public async Task A_new_rework_agent_takes_the_settled_work_agent_off_the_list()
+    public async Task A_work_agent_leaves_the_list_once_its_turn_ends_well()
     {
         using var app = DargApp.Make();
         var card = app.Card("fix the logo aliasing", "To Do");
         await app.Start();
         await app.Api("work-on", new { project = "proj", card = card.Id });
         var work = app.Agents.ForCard(card.Id)!;
-        await app.Until(() => work.State == AgentState.Idle, "the work agent's turn to end");
-        BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("QA Ready"));
-        await DargApp.Settle(500);
-        Assert.Contains(work, app.Agents.Agents); // its work is still the newest on the card: it stays
+        Assert.Equal(AgentPurposes.Work, work.Purpose);
 
-        await app.Api("send-back", new { project = "proj", card = card.Id, notes = "still jagged" });
-
-        var rework = app.Agents.Agents.Single(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Rework);
-        Assert.DoesNotContain(work, app.Agents.Agents);
-        await app.Until(() => app.Prompts().Any(p => p.Contains("still jagged")), "the rework agent to be sent its prompt");
-        Assert.Contains(rework, app.Agents.Agents);
+        await app.Until(() => !app.Agents.Agents.Contains(work), "the work agent to go once its turn ended");
         Assert.Equal("", app.Crashes());
     }
 
     [AvaloniaFact]
-    public async Task A_QA_verdict_stays_listed_until_the_next_agent_on_the_card_starts()
+    public async Task A_QA_agent_leaves_the_list_once_it_has_given_its_verdict()
     {
         using var app = DargApp.Make();
         var card = app.Card("check the logo", "QA Ready", "The logo." + HowToCheck);
         await app.Start();
         await app.Api("qa-all", new { project = "proj" });
         var qa = app.Agents.Agents.Single(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Qa);
-        await app.Until(() => qa.FinishedTurn, "the QA agent's turn to end");
-        await DargApp.Settle(1000); // the board reloads, which closes it ("Session closed by Darg")
-        Assert.Contains(qa, app.Agents.Agents); // the verdict stays readable
 
-        await app.Api("send-back", new { project = "proj", card = card.Id, notes = "wrong" });
-
-        await app.Until(() => !app.Agents.Agents.Contains(qa), "the QA agent to go once a rework agent replaced it");
-        await app.Until(() => app.Prompts().Any(p => p.Contains("wrong")), "the rework agent to be sent its prompt");
+        await app.Until(() => !app.Agents.Agents.Contains(qa), "the QA agent to go once its turn ended");
         Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
+    public async Task An_agent_whose_card_waits_on_the_person_stays_after_its_turn()
+    {
+        Environment.SetEnvironmentVariable("FAKE_SECONDS", "3");
+        try
+        {
+            using var app = DargApp.Make();
+            var card = app.Card("fix the logo aliasing", "To Do");
+            await app.Start();
+            await app.Api("work-on", new { project = "proj", card = card.Id });
+            var agent = app.Agents.ForCard(card.Id)!;
+            await app.Until(() => agent.State == AgentState.Working, "the agent to start working");
+            Assert.Null(app.Board.MoveToAttention(card.Id));
+
+            await app.Until(() => agent.State == AgentState.Idle, "the agent's turn to end");
+            await DargApp.Settle(1000);
+            Assert.Contains(agent, app.Agents.Agents); // it asked the person something: it stays for the answer
+        }
+        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
     }
 
     [AvaloniaFact]
@@ -96,22 +103,21 @@ public class ReplacedAgentTests
         using var app = DargApp.Make();
         var card = app.Card("fix the logo aliasing", "To Do");
         var store = AgentStore.Folder("proj", app.Home);
-        void Seed(string id, string purpose, int daysAgo) => AgentStore.Save(store, new AgentRecord
+        void Seed(string id, string? purpose, int daysAgo, bool turnDone = true) => AgentStore.Save(store, new AgentRecord
         {
             Id = id, Name = $"{card.Id} {id}", Cwd = app.Repo, CardId = card.Id, Purpose = purpose,
             Created = DateTime.Now.AddDays(-daysAgo), Updated = DateTime.Now.AddDays(-daysAgo),
-            Items = [new ItemRecord { Kind = "note", Text = "Turn done" }],
+            Items = turnDone ? [new ItemRecord { Kind = "note", Text = "Turn done" }] : [],
         });
-        Seed("oldwork", AgentPurposes.Work, 3);
-        Seed("oldqa", AgentPurposes.Qa, 2);
-        Seed("newestqa", AgentPurposes.Qa, 1);
+        Seed("oldchat", null, 3); // a chat on the card, settled
+        Seed("newwork", AgentPurposes.Work, 1, turnDone: false); // work started since, its turn not ended: stays
         await app.Start();
-        Assert.Equal(3, app.Agents.Agents.Count(a => a.CardId == card.Id)); // loaded as they were left
+        Assert.Equal(2, app.Agents.Agents.Count(a => a.CardId == card.Id)); // loaded as they were left
 
         app.Agents.ClearFinishedCommand.Execute(null);
 
         var left = Assert.Single(app.Agents.Agents, a => a.CardId == card.Id);
-        Assert.Equal("newestqa", left.Id); // the newest settled one stays: nothing has replaced it
+        Assert.Equal("newwork", left.Id); // the settled agent a newer work agent replaced goes
         Assert.Equal("", app.Crashes());
     }
 }

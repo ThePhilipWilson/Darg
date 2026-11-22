@@ -79,8 +79,8 @@ public class CardWorkTests
         await app.Start();
         await app.Api("work-on", new { project = "proj", card = card.Id });
         var agent = app.Agents.ForCard(card.Id)!;
-        await app.Until(() => agent.State == AgentState.Idle, "the fake agent's turn to end");
-        Assert.False(agent.IsFailed);
+        await app.Until(() => agent.State == AgentState.Idle || !app.Agents.Agents.Contains(agent), "the fake agent's turn to end");
+        Assert.True(!app.Agents.Agents.Contains(agent) || !agent.IsFailed); // a finished task agent has left the list (WOR-0183)
         await DargApp.Settle(300);
         Assert.Empty(Sandbox.Notifications);
     }
@@ -158,7 +158,7 @@ public class CardWorkTests
         await app.Api("work-on", new { project = "proj", card = card.Id });
         var agent = app.Agents.ForCard(card.Id)!;
         BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("QA Ready"));
-        await app.Until(() => agent.State == AgentState.Idle, "the agent's turn to end");
+        await app.Until(() => agent.State == AgentState.Idle || !app.Agents.Agents.Contains(agent), "the agent's turn to end");
         await DargApp.Settle(1500);
         Assert.DoesNotContain(app.Agents.Agents, a => a.Purpose == AgentPurposes.Qa);
     }

@@ -26,8 +26,7 @@ public class DoneCardTests
         using var app = DargApp.Make();
         var card = app.Card("fix the logo aliasing", "To Do");
         await app.Start();
-        await app.Api("work-on", new { project = "proj", card = card.Id });
-        var agent = app.Agents.ForCard(card.Id)!;
+        var agent = app.Agents.Start("look at the card", app.Repo, cardId: card.Id, name: "look"); // not a task agent: those leave by themselves (WOR-0183)
         await app.Until(() => agent.State == AgentState.Idle, "the agent's turn to end");
         var qa = QaReport(app, card);
         await DargApp.Settle(500);
@@ -103,8 +102,7 @@ public class DoneCardTests
         using var app = DargApp.Make();
         var done = app.Card("finished long ago", "Done");
         await app.Start();
-        await app.Api("work-on", new { project = "proj", card = done.Id }); // work-on leaves Done alone
-        var stranded = app.Agents.ForCard(done.Id)!;
+        var stranded = app.Agents.Start("look at the card", app.Repo, cardId: done.Id, name: "look"); // a chat on the card
         await app.Until(() => stranded.State == AgentState.Idle, "the turn to end");
         Assert.True(stranded.CloseSession("Darg"));
         Assert.Equal("Complete, pending removal", stranded.StateText);
@@ -124,8 +122,8 @@ public class DoneCardTests
         BoardStore.CreateBoard(app.Boards, "Aaa", DargApp.Columns, "AAA");
         var done = app.Card("finished on Main", "Done");
         await app.Start();
-        await app.Api("work-on", new { project = "proj", card = done.Id }); // opens the card's board, so re-pick Aaa below
-        var stranded = app.Agents.ForCard(done.Id)!;
+        var stranded = app.Agents.Start("look at the card", app.Repo, cardId: done.Id, name: "look");
+        app.Board.SelectedBoard = "Main"; // so Aaa is picked below, as opening the card's board did
         await app.Until(() => stranded.State == AgentState.Idle, "the turn to end");
         app.Board.SelectedBoard = "Aaa";
         await DargApp.Settle(300);
@@ -154,10 +152,8 @@ public class DoneCardTests
         File.WriteAllText(Path.Combine(app.Project.Reports!.Folder, $"20261101-0900-{done.Id}-qa.md"),
             $"---\nstatus: qa\ncard: {done.Id}\ntitle: finished long ago\ndate: 2026-11-01 09:00\nread: true\n---\n\n## Changed\n\nThe thing.\n");
         // agents left on a done card from before this change: work on the card where it is (work-on leaves Done alone)
-        await app.Api("work-on", new { project = "proj", card = done.Id });
-        await app.Api("work-on", new { project = "proj", card = open.Id });
-        var stranded = app.Agents.ForCard(done.Id)!;
-        var other = app.Agents.ForCard(open.Id)!;
+        var stranded = app.Agents.Start("look at the card", app.Repo, cardId: done.Id, name: "look");
+        var other = app.Agents.Start("look at the card", app.Repo, cardId: open.Id, name: "look");
         await app.Until(() => stranded.State == AgentState.Idle && other.State == AgentState.Idle, "both turns to end");
         Assert.Equal("Done", app.Read(done.Id).Status);
         await DargApp.Settle(500);
