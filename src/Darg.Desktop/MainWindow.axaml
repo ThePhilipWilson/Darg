@@ -193,8 +193,17 @@
             <Button DockPanel.Dock="Right" Content="➤" Command="{Binding Mascot.SendCommand}" Background="Transparent"
                     AutomationProperties.Name="Send to Fettle" VerticalAlignment="Bottom" Margin="0,0,6,6"/>
             <Button DockPanel.Dock="Right" Content="✕" Command="{Binding Mascot.ClearComposeCommand}" Click="ClearFettleBoxClicked" Background="Transparent"
-                    AutomationProperties.Name="Clear Fettle box" ToolTip.Tip="Clear the box" VerticalAlignment="Bottom" Margin="0,0,0,6"
-                    Foreground="{DynamicResource Dim}"/>
+                    AutomationProperties.Name="Clear Fettle box" ToolTip.Tip="Clear the box" VerticalAlignment="Bottom" Margin="0,0,0,6">
+              <Button.Styles>
+                <!-- bright with something to clear, dim when the box is empty -->
+                <Style Selector="Button /template/ ContentPresenter#PART_ContentPresenter">
+                  <Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+                </Style>
+                <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                  <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+                </Style>
+              </Button.Styles>
+            </Button>
             <Button DockPanel.Dock="Right" Content="🎙" views:Dictation.Target="{Binding #MascotBox}" Background="Transparent"
                     AutomationProperties.Name="Dictate to Fettle" VerticalAlignment="Bottom" Margin="0,0,0,6"/>
             <TextBox x:Name="MascotBox" Text="{Binding Mascot.Compose}" BorderThickness="0,1,0,0" CornerRadius="0,0,0,14"

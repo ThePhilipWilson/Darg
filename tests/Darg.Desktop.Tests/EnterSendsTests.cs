@@ -106,10 +106,17 @@ public class EnterSendsTests
         var clear = app.Window.GetVisualDescendants().OfType<Button>().First(b =>
             b.IsEffectivelyVisible && Avalonia.Automation.AutomationProperties.GetName(b) == "Clear Fettle box");
         Assert.False(clear.IsEffectivelyEnabled, "enabled with an empty box");
+        string Ink() => ((Avalonia.Media.ISolidColorBrush)clear.GetVisualDescendants()
+            .OfType<Avalonia.Controls.Presenters.ContentPresenter>().First().Foreground!).Color.ToString();
+        var idle = Ink();
 
         Type(app, box, "half a thought");
         await DargApp.Settle();
         Assert.True(clear.IsEffectivelyEnabled);
+        // bright with something to clear, dim when empty
+        string Key(string k) => ((Avalonia.Media.ISolidColorBrush)ThemeManager.Brush(k)).Color.ToString();
+        Assert.Equal(Key("Dim"), idle);
+        Assert.Equal(Key("Ink"), Ink());
         var before = app.Prompts().Count;
         var at = clear.TranslatePoint(new Avalonia.Point(clear.Bounds.Width / 2, clear.Bounds.Height / 2), app.Window)!.Value;
         app.Window.MouseMove(at);
