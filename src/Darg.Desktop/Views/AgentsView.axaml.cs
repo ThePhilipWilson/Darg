@@ -14,16 +14,6 @@ public partial class AgentsView : UserControl
     {
         InitializeComponent();
         _follow = new StickToBottom(Scroll);
-        // Enter sends; Shift+Enter is a new line. Tunnel, so it's seen before the TextBox takes the Enter.
-        // (Asks the view model each time which agent is shown, so the one open at start works too.)
-        ComposeBox.AddHandler(KeyDownEvent, (_, e) =>
-        {
-            if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _vm?.Shown is { } shown)
-            {
-                e.Handled = true;
-                shown.SendCommand.Execute(null);
-            }
-        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         // an agents tab pressed with Ctrl adds or removes its board (WOR-0150); the button's click reads the flag
         AddHandler(PointerPressedEvent, (_, e) =>
         {

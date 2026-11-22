@@ -37,7 +37,8 @@
 
                 <!-- Forge: a prompt, an image -->
                 <StackPanel Spacing="8" IsVisible="{Binding IsForge}" IsEnabled="{Binding Up}">
-                  <TextBox Text="{Binding Prompt}" PlaceholderText="Prompt" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60"/>
+                  <TextBox Text="{Binding Prompt}" PlaceholderText="Prompt" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60"
+                           views:EnterSends.Command="{Binding GenerateCommand}"/>
                   <TextBox Text="{Binding Negative}" PlaceholderText="Negative prompt (optional)"/>
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <NumericUpDown Value="{Binding Width}" Minimum="256" Maximum="2048" Increment="64" FormatString="0" Width="120" ToolTip.Tip="Width"/>
@@ -55,7 +56,8 @@
                   <ComboBox ItemsSource="{Binding Models}" SelectedItem="{Binding Model}" HorizontalAlignment="Stretch" PlaceholderText="Model"/>
                   <DockPanel>
                     <Button DockPanel.Dock="Right" Classes="primary" Content="Ask" Command="{Binding AskCommand}" Margin="8,0,0,0" VerticalAlignment="Bottom"/>
-                    <TextBox Text="{Binding Question}" PlaceholderText="Ask the local model…" AcceptsReturn="True" TextWrapping="Wrap"/>
+                    <TextBox Text="{Binding Question}" PlaceholderText="Ask the local model…" AcceptsReturn="True" TextWrapping="Wrap"
+                             views:EnterSends.Command="{Binding AskCommand}"/>
                   </DockPanel>
                   <ProgressBar IsIndeterminate="True" IsVisible="{Binding Busy}"/>
                   <views:MarkdownView Markdown="{Binding Answer}"/>

@@ -6,9 +6,11 @@ using Avalonia.Interactivity;
 
 namespace Darg.Desktop.Views;
 
-/// <summary>Enter runs a command, Shift+Enter is a new line, for a TextBox in a template with no code-behind
-/// (<c>views:EnterSends.Command="{Binding SendCommand}"</c>). Tunnels, so it sees the Enter before the TextBox
-/// takes it, as the agent and Bench boxes do.</summary>
+/// <summary>The one Enter rule for every box that sends or submits something (WOR-0188):
+/// <c>views:EnterSends.Command="{Binding SendCommand}"</c>. Enter runs the command; Shift+Enter is a new line; a
+/// <c>\</c> typed just before the caret then Enter takes the backslash out and makes a new line instead of sending.
+/// Enter in a blank box, or one whose command can't run, does nothing at all (no send, no new line). Tunnels, so it
+/// sees the Enter before the TextBox takes it. Editors with nothing to send (a card's description, docs) don't use it.</summary>
 public static class EnterSends
 {
     public static readonly AttachedProperty<ICommand?> CommandProperty =
@@ -27,6 +29,20 @@ public static class EnterSends
     {
         if (e.Key != Key.Enter || e.KeyModifiers.HasFlag(KeyModifiers.Shift) || sender is not TextBox box) return;
         e.Handled = true;
+        var text = box.Text ?? "";
+        if (Backslash(box, text)) return;
+        if (string.IsNullOrWhiteSpace(text)) return;
         if (GetCommand(box) is { } cmd && cmd.CanExecute(null)) cmd.Execute(null);
+    }
+
+    /// <summary>A <c>\</c> right before the caret (nothing selected): swap it for a new line.</summary>
+    static bool Backslash(TextBox box, string text)
+    {
+        var at = box.CaretIndex;
+        if (box.SelectionStart != box.SelectionEnd || at <= 0 || at > text.Length || text[at - 1] != '\\') return false;
+        var newLine = string.IsNullOrEmpty(box.NewLine) ? "\n" : box.NewLine;
+        box.Text = text[..(at - 1)] + newLine + text[at..];
+        box.CaretIndex = at - 1 + newLine.Length;
+        return true;
     }
 }

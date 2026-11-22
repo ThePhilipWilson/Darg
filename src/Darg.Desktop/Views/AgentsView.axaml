@@ -9,7 +9,8 @@
     <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
         <StackPanel DockPanel.Dock="Bottom" Margin="10" Spacing="6">
-          <TextBox Text="{Binding NewPrompt}" PlaceholderText="What should a new agent do?" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"/>
+          <TextBox Text="{Binding NewPrompt}" PlaceholderText="What should a new agent do?" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"
+                   views:EnterSends.Command="{Binding StartAgentCommand}" AutomationProperties.Name="New agent prompt"/>
           <TextBlock Classes="dim small" Text="{Binding Folder, StringFormat='Runs in {0}'}" TextWrapping="Wrap" IsVisible="{Binding !HasRepoChoice}"/>
           <!-- a project with several repos: pick which one the agent starts in; it is given the others too -->
           <DockPanel IsVisible="{Binding HasRepoChoice}">
@@ -179,7 +180,7 @@
           <Button DockPanel.Dock="Right" Content="🎙" views:Dictation.Target="{Binding #ComposeBox}" Margin="8,0,0,0" VerticalAlignment="Bottom"
                   AutomationProperties.Name="Dictate"/>
           <TextBox x:Name="ComposeBox" Text="{Binding Compose}" PlaceholderText="Message this agent… (Enter sends, Shift+Enter for a new line)"
-                   AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160"/>
+                   AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160" views:EnterSends.Command="{Binding SendCommand}"/>
         </DockPanel>
       </Border>
     </Grid>

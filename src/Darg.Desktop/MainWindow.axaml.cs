@@ -86,13 +86,7 @@ public partial class MainWindow : Window
                 vm.Restart.Refresh();
             };
         MaxButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
-        // Bench's box: Enter sends, Shift+Enter is a new line; the chat follows its newest line.
-        MascotBox.AddHandler(KeyDownEvent, (_, e) =>
-        {
-            if (e.Key != Avalonia.Input.Key.Enter || e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift)) return;
-            e.Handled = true;
-            vm.Mascot.SendCommand.Execute(null);
-        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        // Fettle's chat follows its newest line (Enter in its box is EnterSends', in the XAML)
         _follow = new Views.StickToBottom(MascotScroll);
         MoveByHeader(MascotBubble, MascotHeader);
         // Fettle himself moves too: drag the critter (a click still opens the box) and the box goes with it

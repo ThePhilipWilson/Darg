@@ -195,7 +195,8 @@
             <Button DockPanel.Dock="Right" Content="🎙" views:Dictation.Target="{Binding #MascotBox}" Background="Transparent"
                     AutomationProperties.Name="Dictate to Fettle" VerticalAlignment="Bottom" Margin="0,0,0,6"/>
             <TextBox x:Name="MascotBox" Text="{Binding Mascot.Compose}" BorderThickness="0,1,0,0" CornerRadius="0,0,0,14"
-                     PlaceholderText="What needs fettling?" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" Padding="12,9"/>
+                     PlaceholderText="What needs fettling?" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120" Padding="12,9"
+                     views:EnterSends.Command="{Binding Mascot.SendCommand}"/>
           </DockPanel>
           <!-- every notification agents have raised; click one to open that agent -->
           <Border DockPanel.Dock="Top" IsVisible="{Binding ShowNotifications}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1">

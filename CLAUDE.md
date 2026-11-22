@@ -51,6 +51,7 @@ Philip's one app for everything: per-project boards, notes, docs, code, agents, 
 - **A list must read as a list of things, not of times or cut-off text.** Chats and agents went out named "Bench · 11:00" and the first 40 characters of a prompt; it annoyed him on sight (2026-11-17). When a screenshot shows a list, check that a stranger could tell its rows apart and say what each is; generated items get a real title (`ChatTitle`).
 - **Structure on disk shows as structure on screen.** A folder of docs or files is a tree that expands, not a flat list of every file (2026-11-17).
 - **Drag and drop shows the thing moving** (`DragLift`), never the OS drag with nothing under the pointer.
+- **Every box that sends or submits uses `views:EnterSends.Command`** (WOR-0188), never its own Enter handler: Enter sends, Shift+Enter or a typed `\` then Enter is a new line, Enter in a blank box does nothing. Editors with nothing to send (a card's description, docs, the note's paper) don't.
 
 ## Building and checking
 
