@@ -156,6 +156,7 @@ public partial class AgentsViewModel : ObservableObject
     void Forget(AgentViewModel? a)
     {
         if (a is null) return;
+        a.Gone = true; // its session's end, which arrives after this, mustn't save it back
         a.End();
         AgentStore.Delete(_store, a.Id);
         Agents.Remove(a);
@@ -210,12 +211,18 @@ public partial class AgentsViewModel : ObservableObject
         a.IsDone || (a.State == AgentState.Saved && a.CardDone && a.FinishedTurn)
         || (Replaced(a) && Settled(a)) || TaskOver(a);
 
-    /// <summary>Whether a card is waiting on the person in For Human Attention (set by the project from its boards): its agents stay,
-    /// since its decision shows on one of them, the answer may go back to it, and one that moved it there is asked for the decision.</summary>
-    public Func<string, bool>? CardAwaitsDecision { get; set; }
+    /// <summary>The ids of the cards waiting on the person in For Human Attention, on every one of the project's boards (set by
+    /// the project): their agents stay, since a card's decision shows on one of them, the answer may go back to it, and one that
+    /// moved it there is asked for the decision. Null until the project has set it, and then no task agent goes: restored agents
+    /// are checked before the project is fully built, and a check made without the boards deleted every asker on each restart.</summary>
+    public Func<IReadOnlySet<string>>? AttentionCardIds { get; set; }
 
     /// <summary>A task agent whose turn has ended well, on a card that isn't waiting on the person's answer.</summary>
-    bool TaskOver(AgentViewModel a) => IsTask(a) && Settled(a) && CardAwaitsDecision?.Invoke(a.CardId!) != true;
+    bool TaskOver(AgentViewModel a) => IsTask(a) && Settled(a) && TaskOver(a, AttentionCardIds?.Invoke());
+
+    /// <summary>As <see cref="TaskOver(AgentViewModel)"/> with the attention cards read once for the lot; null: can't tell, it stays.</summary>
+    static bool TaskOver(AgentViewModel a, IReadOnlySet<string>? waiting) =>
+        IsTask(a) && Settled(a) && waiting is not null && !waiting.Contains(a.CardId!);
 
     /// <summary>A card agent doing one task (work, rework, QA, improve): once its turn ends well the task is over and the
     /// agent has no place in the list (WOR-0183, Philip 2026-11-22: a finished QA, build or the like leaves no agent behind).
@@ -349,7 +356,8 @@ public partial class AgentsViewModel : ObservableObject
         var done = DoneCardIds?.Invoke(); // every board's, not only the one shown: an agent's card may be on another (WOR-0153)
         foreach (var a in Agents) if (a.CardId is not null) a.CardDone = done?.Contains(a.CardId) == true;
         // a card agent whose turn has ended well has finished its task: it leaves the list (a failed one stays)
-        foreach (var a in Agents.Where(TaskOver).ToList()) Forget(a);
+        if (Agents.Any(a => IsTask(a) && Settled(a)) && AttentionCardIds?.Invoke() is { } waiting)
+            foreach (var a in Agents.Where(a => TaskOver(a, waiting)).ToList()) Forget(a);
     }
     [ObservableProperty] public partial AgentViewModel? Selected { get; set; }
     [ObservableProperty] public partial string NewPrompt { get; set; } = "";
@@ -540,7 +548,6 @@ public partial class AgentsViewModel : ObservableObject
         var agent = new AgentViewModel(folder, prompt, cardId, name ?? ChatTitle.Guess(prompt),
             args: [.. ArtifactArgs(id), .. RepoArgs(folder), .. (dirs ?? []).SelectMany(d => new[] { "--add-dir", d })], id: id, profile: profile) { StoreFolder = _store, Purpose = purpose };
         Add(agent, select: true);
-        if (purpose == AgentPurposes.Improve) _goWhenFinished.Add(agent.Id); // writes no report: it goes once its turn ends well
         if (cardId is not null && purpose is AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa) ForgetReplacedBy(agent);
         agent.Save();
         if (name is null) _ = Retitle(agent, prompt); // a card's agent is already named for the card
@@ -1024,10 +1031,14 @@ public partial class AgentViewModel : ObservableObject
         }
     }
 
+    /// <summary>Forgotten: off the list and its file deleted. Nothing saves it again (the session's exit, which comes after
+    /// <see cref="End"/>, wrote a forgotten agent's file back, WOR-0183).</summary>
+    public bool Gone { get; set; }
+
     /// <summary>Write this agent to its store (after every turn and on exit).</summary>
     public void Save()
     {
-        if (StoreFolder is null) return;
+        if (StoreFolder is null || Gone) return;
         using var timing = StallWatch.Shared.Section("Agent.Save");
         try
         {

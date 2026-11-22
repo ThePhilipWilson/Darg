@@ -346,7 +346,10 @@ public class DecisionTests
         Assert.Null(CardDecision.Read(text));
         await DargApp.Settle(300);
         Assert.Empty(agent.OpenDecisions); // and the board's next read doesn't put it back
-        // a saved agent keeps the answered decision as a line in its transcript
+        // a saved agent keeps the answered decision as a line in its transcript. The card went to done, so the agent has
+        // left the list with it (WOR-0131) and nothing saves it now (WOR-0183); saved anyway, here, to see what it keeps
+        Assert.True(agent.Gone);
+        agent.Gone = false;
         agent.Save();
         AgentStore.Flush();
         var saved = AgentStore.List(agent.StoreFolder!).Single(r => r.Id == agent.Id);

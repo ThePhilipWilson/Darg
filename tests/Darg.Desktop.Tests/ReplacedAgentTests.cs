@@ -60,6 +60,48 @@ public class ReplacedAgentTests
     }
 
     [AvaloniaFact]
+    public async Task A_saved_agent_whose_card_waits_on_the_person_stays_after_a_restart()
+    {
+        // QA round 1: the first check at start ran before the project knew which cards wait on the person, so every
+        // asker on a card in For Human Attention was forgotten, file and all, on each restart
+        using var app = DargApp.Make();
+        var card = app.Card("voice mode", "For Human Attention",
+            "Voice.\n\n## Decision\n\n**Question:** Keep it?\n**Asked by:** agent asker1, 2026-11-22\n- **Yes** (recommended) → done: keep.\n- **No** → back: redo.\n**Context:** test.\n" + HowToCheck);
+        var store = AgentStore.Folder("proj", app.Home);
+        AgentStore.Save(store, new AgentRecord
+        {
+            Id = "asker1", Name = $"{card.Id} asker", Cwd = app.Repo, CardId = card.Id, Purpose = AgentPurposes.Work, SessionId = "s1",
+            Created = DateTime.Now.AddHours(-1), Updated = DateTime.Now.AddHours(-1),
+            Items = [new ItemRecord { Kind = "note", Text = "Turn done" }],
+        });
+        await app.Start();
+        await DargApp.Settle(1500);
+
+        Assert.Contains(app.Agents.Agents, a => a.Id == "asker1");
+        Assert.True(File.Exists(Path.Combine(store, "asker1.json")));
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
+    public async Task A_finished_task_agent_is_not_saved_back_once_it_has_gone()
+    {
+        // QA round 1: closing a forgotten agent's session ends it a moment later, and that save wrote its file back
+        using var app = DargApp.Make();
+        var card = app.Card("check the logo", "QA Ready", "The logo." + HowToCheck);
+        await app.Start();
+        await app.Api("qa-all", new { project = "proj" });
+        var qa = app.Agents.Agents.Single(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Qa);
+        var file = Path.Combine(AgentStore.Folder("proj", app.Home), qa.Id + ".json");
+
+        await app.Until(() => !app.Agents.Agents.Contains(qa), "the QA agent to go once its turn ended");
+        await app.Until(() => qa.State == AgentState.Saved || qa.State == AgentState.Exited, "its session to end");
+        await DargApp.Settle(1500);
+        AgentStore.Flush();
+        Assert.False(File.Exists(file), "the forgotten QA agent's file came back");
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
     public async Task An_older_agent_still_at_work_stays_then_goes_once_its_turn_ends()
     {
         Environment.SetEnvironmentVariable("FAKE_SECONDS", "4");

@@ -580,6 +580,10 @@ public partial class ProjectViewModel : ObservableObject
             // a card agent shows its card's state: "Complete, pending removal" once the card is done
             Agents.DoneCardIds = Board.DoneCardIds;
             Agents.CardBoards = Board.CardBoards;
+            // a finished task agent stays while its card waits on the person: set before the first RefreshCards below, which
+            // without it forgot the asker of every card waiting in For Human Attention on each start (WOR-0183); every board's
+            // cards, as for done, since an agent's card may sit on a board that isn't shown
+            Agents.AttentionCardIds = () => CardIndex.Read(Config.Boards).Where(c => c.InAttention).Select(c => c.Card.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
             Board.Reloaded += Agents.RefreshCards;
             // a plan's made cards show their column and agent as the board has them
             Board.Reloaded += () => { if (OnDesign) Design?.Reload(); };
@@ -699,7 +703,6 @@ public partial class ProjectViewModel : ObservableObject
                 foreach (var (card, d, agent) in owners) agent?.ShowDecision(card.Id, d, Board.Decide);
             }
             Board.Reloaded += SyncDecisions;
-            Agents.CardAwaitsDecision = Board.CardInAttention;
             Agents.Agents.CollectionChanged += (_, e) =>
             {
                 if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
