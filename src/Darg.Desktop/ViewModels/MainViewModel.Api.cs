@@ -68,6 +68,10 @@ public partial class MainViewModel
                           "made with the project's columns if there is none; cards are made in Blocked by order with the new ids in their Blocked by lines, each id is written into " +
                           "the plan's heading and the plan set to agreed. A card under 3/3 stops it (nothing made, the missing parts named). Questions still open stop it too " +
                           "until confirm: true. Run again it makes only the cards with no id and never deletes one. Only when Philip asks.", PlanCards);
+        Add("plan-features", "draft a plan for each feature of a project plan that has none, as the Design page's Draft feature plans button does (WOR-0179): " +
+                             "{project, plan, only?, confirm?}. plan is the project plan's file name or title; only is a list of feature titles (or titles separated by new lines), " +
+                             "else every feature without a plan. A planner starts on each with parent: set to the project plan, and each feature's title is linked to the file " +
+                             "named for its plan. Questions still open in the project plan stop it until confirm: true. Returns the planners' ids and files. Only when Philip asks.", PlanFeatures);
         Add("boards", "a project's boards column by column, empty columns too, as the phone draws them: {project}. Each board: name, inbox (where new-card puts a card), " +
                       "lists in order, each with id, name, kind (" + string.Join(", ", BoardLayouts.Kinds) + ", or empty for a plain column) and its cards " +
                       "(id, title, type, labels, priority, quality 0-3, agent: the live one's id and state, or null, " +
@@ -394,6 +398,32 @@ public partial class MainViewModel
         {
             ["board"] = r.Board, ["createdBoard"] = r.CreatedBoard,
             ["made"] = new JsonArray(r.Made.Select(m => (JsonNode?)new JsonObject { ["id"] = m.Id, ["title"] = m.Title, ["link"] = CardLinks.For(m.Id) }).ToArray()),
+        });
+    }
+
+    string PlanFeatures(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (p.Design is null) throw new ApiError($"{p.Name} has no docs folder, so no plans.");
+        var want = a.Need("plan").Trim();
+        var plan = PlanStore.List(p.Design.Folder).FirstOrDefault(x =>
+                       x.Slug.Equals(Path.GetFileNameWithoutExtension(want), StringComparison.OrdinalIgnoreCase) || x.Title.Equals(want, StringComparison.OrdinalIgnoreCase))
+                   ?? throw new ApiError($"No plan \"{want}\" in {p.Design.Folder}.");
+        IReadOnlyList<string>? only = null;
+        if (a.Get("only") is { } raw)
+        {
+            bool isList;
+            try { isList = JsonNode.Parse(raw) is JsonArray; } catch (System.Text.Json.JsonException) { isList = false; }
+            only = isList ? a.List("only") : raw.Split(['\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        var r = p.Design.MakeFeatures(plan.File, only, a.Get("confirm") == "true");
+        if (r.NeedsConfirm)
+            throw new ApiError($"{r.OpenQuestions.Count} question(s) in the plan are still open: {string.Join("; ", r.OpenQuestions)}. Nothing started; send confirm: true to draft the feature plans anyway.");
+        if (r.Started.Count == 0) throw new ApiError(r.Problem);
+        return Json(new JsonObject
+        {
+            ["started"] = new JsonArray(r.Started.Select(s => (JsonNode?)new JsonObject { ["feature"] = s.Title, ["file"] = s.File, ["agent"] = s.Agent }).ToArray()),
+            ["problem"] = r.Problem,
         });
     }
 

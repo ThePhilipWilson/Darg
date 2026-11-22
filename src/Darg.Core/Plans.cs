@@ -68,7 +68,21 @@ public sealed record PlanCard(string Id, string Title, string Description, strin
 }
 
 /// <summary>A feature a project plan lists: a line (or heading) with its feature plan linked once there is one.</summary>
-public sealed record PlanFeature(string Title, string Description, string Link);
+public sealed record PlanFeature(string Title, string Description, string Link)
+{
+    /// <summary>What the planner is given to draft the feature's plan from (WOR-0179): its title, then its line.</summary>
+    public string Idea => Description.Length > 0 ? $"{Title}: {Description}" : Title;
+    /// <summary>The plan file the link names (its file name without .md), or "" with no link to a markdown file here.</summary>
+    public string LinkSlug
+    {
+        get
+        {
+            var target = Link.Split('#')[0].Trim();
+            if (target.Length == 0 || target.Contains("://")) return "";
+            return target.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? Path.GetFileNameWithoutExtension(target.Replace('\\', '/').Split('/')[^1]) : "";
+        }
+    }
+}
 
 /// <summary>A plan file (WOR-0174, docs/FEATURE-PLANNING.md "The plan file"): properties, a title and intro, then Goals,
 /// Not doing, Questions, Design and Cards (or Features, for a project). Written by planner agents as plain
@@ -203,12 +217,20 @@ public sealed partial record PlanDoc(
 
     static PlanFeature Feature(string text, string description)
     {
+        var (head, rest) = SplitFeature(text);
+        // only a link in the title is the feature's plan; one in its line (a doc it points to) stays in the description
         var link = "";
-        if (LinkRx().Match(text) is { Success: true } m) { link = m.Groups[2].Value; text = text.Replace(m.Value, m.Groups[1].Value); }
-        var cut = Regex.Match(text, @"\s*(?::|\s[–—]\s|\s-\s)\s*");
-        var t = (cut.Success ? text[..cut.Index] : text).Trim().Trim('*').Trim();
-        var d = cut.Success ? text[(cut.Index + cut.Length)..].Trim() : "";
-        return new PlanFeature(t, (d + " " + description).Trim(), link);
+        if (LinkRx().Match(head) is { Success: true } m) { link = m.Groups[2].Value; head = head.Replace(m.Value, m.Groups[1].Value); }
+        return new PlanFeature(head.Trim().Trim('*').Trim(), (rest.Trim() + " " + description).Trim(), link);
+    }
+
+    /// <summary>A feature's line cut into its title and the rest at the first colon or spaced dash outside a link:
+    /// (<c>**[Android](android.md)**</c>, <c>the phone</c>); the rest is "" with no cut.</summary>
+    internal static (string Head, string After) SplitFeature(string text)
+    {
+        var masked = LinkRx().Replace(text, m => new string('\u0001', m.Length));
+        var cut = Regex.Match(masked, @"\s*(?::|\s[–—]\s|\s-\s)\s*");
+        return cut.Success ? (text[..cut.Index], text[(cut.Index + cut.Length)..]) : (text, "");
     }
 
     [GeneratedRegex(@"^([A-Za-z_][\w \-]*?)\s*:\s*(.*)$")] private static partial Regex PropRx();
@@ -243,16 +265,15 @@ public static class PlanStore
 
     public sealed record Node(PlanDoc Plan, List<Node> Children);
 
-    /// <summary>The plans as a tree by <c>parent</c> (a plan's file name or title, case aside). A plan whose parent
-    /// names none here, or itself, or a loop, is a root.</summary>
+    /// <summary>The plans as a tree by <c>parent</c> (a plan's file name or title, case aside). A plan with no
+    /// <c>parent</c> sits under a project plan whose Features link to it (WOR-0179: a feature plan written by hand
+    /// still lands under its project). A plan whose parent names none here, or itself, or a loop, is a root.</summary>
     public static List<Node> Tree(IReadOnlyList<PlanDoc> plans)
     {
         var nodes = plans.Select(p => new Node(p, [])).ToList();
         Node? ParentOf(Node n)
         {
-            if (n.Plan.Parent.Length == 0) return null;
-            var p = nodes.FirstOrDefault(x => x != n && (x.Plan.Slug.Equals(n.Plan.Parent, StringComparison.OrdinalIgnoreCase)
-                                                      || x.Plan.Title.Equals(n.Plan.Parent, StringComparison.OrdinalIgnoreCase)));
+            var p = Direct(n);
             // follow direct parents upward: arriving back at n (or never ending) is a loop, so n is a root
             var up = p;
             for (var steps = 0; up is not null; up = Direct(up), steps++)
@@ -260,13 +281,58 @@ public static class PlanStore
             return p;
         }
         Node? Direct(Node n) =>
-            n.Plan.Parent.Length == 0 ? null
-            : nodes.FirstOrDefault(x => x != n && (x.Plan.Slug.Equals(n.Plan.Parent, StringComparison.OrdinalIgnoreCase)
-                                                || x.Plan.Title.Equals(n.Plan.Parent, StringComparison.OrdinalIgnoreCase)));
+            n.Plan.Parent.Length > 0
+                ? nodes.FirstOrDefault(x => x != n && Names(x.Plan, n.Plan.Parent))
+                : nodes.FirstOrDefault(x => x != n && x.Plan.IsProject && x.Plan.Features.Any(f => f.LinkSlug.Equals(n.Plan.Slug, StringComparison.OrdinalIgnoreCase)));
         var roots = new List<Node>();
         foreach (var n in nodes) (ParentOf(n)?.Children ?? roots).Add(n);
         return roots;
     }
+
+    /// <summary>A plan's <c>parent</c> value names this plan: its file name without .md, or its title (case aside).</summary>
+    public static bool Names(PlanDoc plan, string parent) =>
+        parent.Length > 0 && (plan.Slug.Equals(parent, StringComparison.OrdinalIgnoreCase) || plan.Title.Equals(parent, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>A project plan's feature's own plan (WOR-0179): the plan its link names, else one under the project
+    /// (its <c>parent</c>) with the feature's title; null when it has none yet.</summary>
+    public static PlanDoc? FeaturePlan(PlanDoc project, PlanFeature feature, IReadOnlyList<PlanDoc> plans) =>
+        (feature.LinkSlug.Length > 0 ? plans.FirstOrDefault(p => p.Slug.Equals(feature.LinkSlug, StringComparison.OrdinalIgnoreCase)) : null)
+        ?? plans.FirstOrDefault(p => p != project && Names(project, p.Parent) && p.Title.Equals(feature.Title, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The features of a project plan still without a plan of their own (WOR-0179), so Make features can start a
+    /// planner on them: none found by <see cref="FeaturePlan"/>, and no planner still drafting the file its link names
+    /// (<paramref name="drafting"/>, given that file's name without .md). A link to a file that was never written, with no
+    /// planner at it, counts as no plan: pressing again starts another.</summary>
+    public static IReadOnlyList<PlanFeature> FeaturesToPlan(PlanDoc project, IReadOnlyList<PlanDoc> plans, Func<string, bool> drafting) =>
+        project.Features.Where(f => FeaturePlan(project, f, plans) is null && !(f.LinkSlug.Length > 0 && drafting(f.LinkSlug))).ToList();
+
+    /// <summary>Link a feature's title to its plan file (WOR-0179): <c>- **Android**: …</c> becomes
+    /// <c>- **[Android](android.md)**: …</c>, a <c>### Android</c> heading <c>### [Android](android.md)</c>, and a link
+    /// already there is replaced. Found by the feature's title; false when the Features part has none.</summary>
+    public static bool SetFeatureLink(string file, string title, string link) =>
+        Edit(file, lines =>
+        {
+            var inPart = false;
+            for (var i = PlanDoc.FrontMatterEnd(lines); i < lines.Count; i++)
+            {
+                var l = lines[i];
+                if (Regex.Match(l, @"^##[ \t]+(.+?)\s*#*\s*$") is { Success: true } h) { inPart = h.Groups[1].Value.Trim().Equals("Features", StringComparison.OrdinalIgnoreCase); continue; }
+                if (!inPart) continue;
+                var heading = Regex.Match(l, @"^(###[ \t]+)(.*)$");
+                var bullet = heading.Success ? Match.Empty : Regex.Match(l, @"^(\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]?\]\s*)?)(.*)$");
+                var m = heading.Success ? heading : bullet;
+                if (!m.Success) continue;
+                var line = m.Groups[2].Value;
+                // the title as the parser reads it; what follows it (the description, its own links) stays as written
+                var (head, rest) = PlanDoc.SplitFeature(line);
+                var name = Regex.Replace(head.Trim().Trim('*').Trim(), @"^\[([^\]]+)\]\([^)]*\)$", "$1");
+                if (!name.Equals(title.Trim(), StringComparison.OrdinalIgnoreCase)) continue;
+                var stars = Regex.Match(head.Trim(), @"^(\**)").Groups[1].Value;
+                lines[i] = m.Groups[1].Value + stars + $"[{name}]({link})" + stars + line[head.Length..];
+                return true;
+            }
+            return false;
+        });
 
     // ---- writing one part back: each edits its own lines and leaves every other byte alone ----
 

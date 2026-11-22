@@ -15,7 +15,7 @@ FAKE_SPAWN <file>  leaves a process running as agents leave an emulator (WOR-017
               hidden Windows PowerShell sleeping 10 minutes and exits, so nothing alive has it as a child; its id goes in
               the file (not a ping: DevServerTests counts those)
 FAKE_PLAN     writes a small plan to the message's "Plan file: <path>" line, as the planner does (WOR-0176): FAKE_OLD
-              in its Goals and its Design
+              in its Goals and its Design, and the prompt's "parent: <plan>" line in its properties if it has one (WOR-0179)
 FAKE_REWRITE  replaces FAKE_OLD with FAKE_NEW all through the message's plan file, as a planner asked to change one
               part might tidy the rest too
 """
@@ -162,8 +162,9 @@ def work(text):
             emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "new-card failed: %s" % e}]}})
     plan = re.search(r"Plan file: (.+)", text)
     if plan and "FAKE_PLAN" in text:
+        parent = re.search(r"^\s*parent: (\S+)\s*$", text, re.M)
         with open(plan.group(1).strip(), "w", encoding="utf-8") as f:
-            f.write(PLAN)
+            f.write(PLAN.replace("status: draft\n", "status: draft\nparent: %s\n" % parent.group(1), 1) if parent else PLAN)
         emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Drafted the plan."}]}})
     if plan and "FAKE_REWRITE" in text:
         path = plan.group(1).strip()

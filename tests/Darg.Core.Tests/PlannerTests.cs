@@ -50,6 +50,13 @@ public class PlannerTests : IDisposable
         Assert.DoesNotContain("## Cards", project);
         Assert.Contains("parent: darg", project);
         Assert.Contains("Don't commit the plan.", project);
+        Assert.Contains("Darg starts a planner on each and links its plan here", project);
+        Assert.DoesNotContain("one of the Features of the project plan", project);
+
+        // WOR-0179: a feature of a project plan reads that plan first and keeps to its frame
+        var feature = Planner.Prompt("Proj", "Search: find cards", PlanKind.Feature, file, null, null, [], null, parent: "darg");
+        Assert.Contains("parent: darg", feature);
+        Assert.Contains("one of the Features of the project plan " + Path.Combine(Path.GetDirectoryName(file)!, "darg.md") + ": read it first", feature);
     }
 
     /// <summary>The shape the prompt shows is what the Design page reads: a question with a recommended option, and a

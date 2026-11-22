@@ -68,6 +68,9 @@ public sealed partial class DesignViewModel : ObservableObject
     public Func<string, AgentViewModel?>? PlannerFor { get; set; }
     /// <summary>Start a planner on a plan that has none, with the first message for it.</summary>
     public Func<string, string, AgentViewModel?>? StartReviser { get; set; }
+    /// <summary>Start a planner on a project plan's feature (WOR-0179): the feature's line and the project plan's name for
+    /// its <c>parent:</c>, leaving the page where it is; returns the agent and the file Darg named for the plan.</summary>
+    public Func<string, string, (AgentViewModel Agent, string File)>? StartFeaturePlanner { get; set; }
     /// <summary>The agent the chat beside the page talks to: the shown plan's planner, or the one drafting a new plan.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowChat), nameof(HasPlanner), nameof(NoPlanner))] public partial AgentViewModel? Planner { get; set; }
     public bool HasPlanner => Planner is not null;
@@ -204,8 +207,11 @@ public sealed partial class DesignViewModel : ObservableObject
         });
     }
 
+    List<PlanDoc> _plans = [];
+
     void Apply(List<PlanDoc> plans, List<BoardCard> cards, List<AgentReport> log)
     {
+        _plans = plans;
         var keep = _selectAfter ?? SelectedNode?.Plan.File;
         _selectAfter = null;
         var expanded = Flatten(Tree).Where(n => !n.IsExpanded).Select(n => n.Plan.File).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -228,7 +234,7 @@ public sealed partial class DesignViewModel : ObservableObject
             return;
         }
         _selecting = true; SelectedNode = pick; _selecting = false;
-        Page = pick is null ? null : new PlanPage(this, pick.Plan, index, log);
+        Page = pick is null ? null : new PlanPage(this, pick.Plan, index, log, plans);
     }
 
     bool _selecting;
@@ -238,7 +244,7 @@ public sealed partial class DesignViewModel : ObservableObject
         if (value is not null) IsDrafting = false;
         // picking another plan reads it fresh, with the board as it is now
         Page = value is null ? null : new PlanPage(this, value.Plan, Blockers.Index(CardIndex.Read(_config.Boards)),
-            ReportsFolder is null ? [] : ReportStore.List(ReportsFolder));
+            ReportsFolder is null ? [] : ReportStore.List(ReportsFolder), _plans);
     }
 
     static IEnumerable<PlanNode> Flatten(IEnumerable<PlanNode> nodes) => nodes.SelectMany(n => Flatten(n.Children).Prepend(n));
@@ -335,6 +341,69 @@ public sealed partial class DesignViewModel : ObservableObject
         return result;
     }
 
+    /// <summary>A planner is still drafting the plan file named <paramref name="slug"/>: it isn't written yet and its
+    /// planner is at work, or waits on the person.</summary>
+    internal bool IsDraftingPlan(string slug)
+    {
+        var path = Path.Combine(Folder, slug + ".md");
+        return !File.Exists(path) && PlannerFor?.Invoke(path) is { IsLiveOnCard: true };
+    }
+
+    /// <summary>What <see cref="MakeFeatures"/> started, or why it started nothing.</summary>
+    public sealed record MadeFeatures(IReadOnlyList<(string Title, string File, string Agent)> Started, string Problem, bool NeedsConfirm, IReadOnlyList<string> OpenQuestions);
+
+    /// <summary>Draft a plan for each of a project plan's features still without one (WOR-0179, docs/FEATURE-PLANNING.md
+    /// "Whole projects"): those in <paramref name="only"/> by title, else all. A planner starts on each with the feature's
+    /// line and <c>parent:</c> set to the project plan, and the feature's title in the project plan is linked to the file
+    /// Darg named for it at once, so the row reads as drafting and the plan sits under its project however the planner
+    /// titles it. Open questions in the project plan need a second press (<paramref name="confirmOpen"/>), as Make cards
+    /// does; the project plan is set to agreed. The page stays on the project; each plan shows in the tree as its planner's
+    /// turn ends.</summary>
+    public MadeFeatures MakeFeatures(string file, IEnumerable<string>? only, bool confirmOpen)
+    {
+        MadeFeatures Stop(string problem, IReadOnlyList<string>? open = null) { Status = problem; return new([], problem, false, open ?? []); }
+        if (StartFeaturePlanner is null) return Stop("Planning needs the project's agents.");
+        PlanDoc plan; List<PlanDoc> plans;
+        try { plan = PlanDoc.Load(file); plans = PlanStore.List(Folder); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return Stop($"Couldn't read {Path.GetFileName(file)}: {e.Message}"); }
+        if (!plan.IsProject) return Stop($"{Path.GetFileName(file)} is a feature plan: only a project plan has features to plan.");
+        if (plan.Status == "dropped") return Stop("The plan is dropped.");
+        var open = plan.OpenQuestions.Select(q => q.Question).ToList();
+        var todo = PlanStore.FeaturesToPlan(plan, plans, IsDraftingPlan);
+        var pick = only?.Select(o => o.Trim()).Where(o => o.Length > 0).ToList();
+        if (pick is not null)
+            foreach (var o in pick.Where(o => !todo.Any(f => f.Title.Equals(o, StringComparison.OrdinalIgnoreCase))))
+                return Stop($"No feature \"{o}\" in the plan without a plan of its own.", open);
+        var rows = todo.Where(f => pick is null || pick.Any(o => o.Equals(f.Title, StringComparison.OrdinalIgnoreCase))).ToList();
+        if (rows.Count == 0) return Stop("Every feature in the plan has a plan of its own already.", open);
+        if (open.Count > 0 && !confirmOpen)
+        {
+            Status = $"{open.Count} {(open.Count == 1 ? "question is" : "questions are")} still open. Press again to draft the feature plans anyway.";
+            return new([], "", true, open);
+        }
+        var started = new List<(string, string, string)>();
+        var problem = "";
+        foreach (var f in rows)
+        {
+            try
+            {
+                var (agent, planFile) = StartFeaturePlanner(f.Idea, plan.Slug);
+                PlanStore.SetFeatureLink(file, f.Title, Path.GetFileName(planFile));
+                started.Add((f.Title, planFile, agent.Id));
+                AfterTurn(agent, Reload);
+            }
+            catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException)
+            { problem = $"Couldn't start a planner on \"{f.Title}\": {e.Message}"; break; }
+        }
+        try { if (started.Count > 0 && plan.Status != "agreed") PlanStore.SetProperty(file, "status", "agreed"); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { if (problem.Length == 0) problem = $"Couldn't set the plan agreed: {e.Message}"; }
+        Status = (started.Count == 0 ? "" : $"Drafting {started.Count} feature {(started.Count == 1 ? "plan" : "plans")}: " +
+                 string.Join(", ", started.Select(s => Path.GetFileName(s.Item2))) + $". Each shows under {(plan.Title.Length > 0 ? plan.Title : plan.Slug)} when its planner's turn ends; " +
+                 $"the links are in {Path.GetFileName(file)}, not committed. ") + problem;
+        Reload();
+        return new(started, problem, false, open);
+    }
+
     internal void ShowCard(string id)
     {
         if (OpenCard?.Invoke(id) != true) Status = $"No board of {_config.Name} has {id}.";
@@ -410,6 +479,43 @@ public sealed partial class PlanPage : ObservableObject
     public IReadOnlyList<PlanFeatureRow> Features { get; }
     public bool ShowFeatures => Plan.IsProject;
     public bool HasFeatures => Features.Count > 0;
+
+    // ---- Make features (WOR-0179): the ticked features without a plan each get a planner, parent set to this plan ----
+
+    /// <summary>Titles of the features the person unticked (all are ticked to start), kept across the page's reloads.</summary>
+    internal HashSet<string> UntickedFeatures => _owner.UntickedFor(File + "#features");
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(MakeFeaturesText), nameof(FeaturesOpenText))] public partial bool ConfirmingFeatures { get; set; }
+    public int FeatureMakeCount => Features.Count(f => f.Proposed && f.Ticked);
+    public bool CanMakeFeatures => FeatureMakeCount > 0;
+    public bool HasProposedFeatures => Features.Any(f => f.Proposed);
+    public string MakeFeaturesText => ConfirmingFeatures ? $"Draft {FeatureMakeCount} anyway"
+        : $"Draft {FeatureMakeCount} feature {(FeatureMakeCount == 1 ? "plan" : "plans")}";
+    public bool HasFeaturesOpenQuestions => Plan.OpenQuestions.Count > 0 && HasProposedFeatures;
+    public string FeaturesOpenText => "Still open: " + string.Join("; ", OpenQuestionList) + (ConfirmingFeatures ? ". Press again to draft the feature plans anyway." : ".");
+
+    internal void FeatureTickChanged(PlanFeatureRow row)
+    {
+        if (row.Ticked) UntickedFeatures.Remove(row.Title); else UntickedFeatures.Add(row.Title);
+        ConfirmingFeatures = false;
+        NotifyFeatures();
+    }
+
+    void NotifyFeatures()
+    {
+        OnPropertyChanged(nameof(FeatureMakeCount)); OnPropertyChanged(nameof(CanMakeFeatures)); OnPropertyChanged(nameof(MakeFeaturesText));
+        OnPropertyChanged(nameof(HasProposedFeatures)); OnPropertyChanged(nameof(HasFeaturesOpenQuestions)); OnPropertyChanged(nameof(FeaturesOpenText));
+    }
+
+    /// <summary>One press starts a planner on each ticked feature; with questions still open, the first press only says so.</summary>
+    [RelayCommand]
+    void MakeFeatures()
+    {
+        var only = Features.Where(f => f.Proposed && f.Ticked).Select(f => f.Title).ToList();
+        if (only.Count == 0) return;
+        var result = _owner.MakeFeatures(File, only, ConfirmingFeatures);
+        ConfirmingFeatures = result.NeedsConfirm;
+        NotifyFeatures();
+    }
     public IReadOnlyList<PlanLogRow> Log { get; }
     public bool HasLog => Log.Count > 0;
     public bool Editing => Goals.Editing || NotDoing.Editing || Design.Editing;
@@ -449,10 +555,14 @@ public sealed partial class PlanPage : ObservableObject
         NotifyMake();
     }
 
-    public PlanPage(DesignViewModel owner, PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index, IReadOnlyList<AgentReport> reports)
+    readonly IReadOnlyList<PlanDoc> _plans;
+
+    public PlanPage(DesignViewModel owner, PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index, IReadOnlyList<AgentReport> reports,
+        IReadOnlyList<PlanDoc>? plans = null)
     {
         _owner = owner;
         Plan = plan;
+        _plans = plans ?? [];
         string raw;
         try { raw = System.IO.File.ReadAllText(plan.File); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { raw = ""; }
         Goals = new PlanTextPart(owner, "Goals", PlanText.Section(raw, "Goals"), "What is different when it's done, a few lines.");
@@ -461,7 +571,7 @@ public sealed partial class PlanPage : ObservableObject
         NotDoing = new PlanTextPart(owner, notDoing, PlanText.Section(raw, notDoing), "What is out, so a card agent doesn't drift into it.") { Label = "Not doing" };
         Design = new PlanTextPart(owner, "Design", plan.Design, "The approach, the parts, what it builds on, risks.");
         Questions = plan.Questions.Select(q => new PlanQuestionRow(owner, q)).ToList();
-        Features = plan.Features.Select(f => new PlanFeatureRow(owner, f)).ToList();
+        Features = plan.Features.Select(f => new PlanFeatureRow(owner, this, plan, f, _plans, index)).ToList();
         var ids = plan.Cards.Where(c => c.Made).Select(c => c.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         // what has happened since: the made cards' reports, newest first (built here, never written into the plan)
         Log = reports.Where(r => ids.Contains(r.Card)).OrderByDescending(r => r.Date, StringComparer.Ordinal)
@@ -481,10 +591,18 @@ public sealed partial class PlanPage : ObservableObject
         NotifyMake();
         var (done, total) = DesignViewModel.Count(plan, index);
         var made = plan.Cards.Count(c => c.Made);
+        // a project's progress is its features' plans' cards (WOR-0179)
+        var featurePlans = plan.IsProject ? plan.Features.Select(f => PlanStore.FeaturePlan(plan, f, _plans)).OfType<PlanDoc>().Distinct().ToList() : [];
+        foreach (var fp in featurePlans)
+        {
+            var (d, t) = DesignViewModel.Count(fp, index);
+            done += d; total += t; made += fp.Cards.Count(c => c.Made);
+        }
         var state = plan.Status == "agreed" && made > 0 ? (done == total && total > 0 ? "built" : "building") : plan.Status;
         Summary = string.Join(" · ", new[]
         {
             $"{(plan.IsProject ? "Project" : "Feature")} plan, {state}",
+            plan.IsProject && plan.Features.Count > 0 ? $"{featurePlans.Count} of {plan.Features.Count} features planned" : "",
             total == 0 ? "" : $"{done} of {total} cards done" + (made < total ? $", {total - made} not made yet" : ""),
             plan.OpenQuestions.Count is var q and > 0 ? $"{q} {(q == 1 ? "question" : "questions")} open" : "",
         }.Where(s => s.Length > 0));
@@ -666,15 +784,46 @@ public sealed partial class PlanCardRow : ObservableObject
     void Open() { if (Made) _owner.ShowCard(Id); }
 }
 
-public sealed partial class PlanFeatureRow(DesignViewModel owner, PlanFeature feature)
+/// <summary>A feature of a project plan (WOR-0179). With a plan of its own: that plan's state and its cards' progress, and a
+/// click opens it. A planner drafting it: "drafting". Neither: a tick, for Make features to start a planner on it.</summary>
+public sealed partial class PlanFeatureRow : ObservableObject
 {
-    public string Title => feature.Title;
-    public string Description => feature.Description;
+    readonly DesignViewModel _owner;
+    readonly PlanPage? _page;
+    public string Title { get; }
+    public string Description { get; }
     public bool HasDescription => Description.Length > 0;
-    public bool HasLink => feature.Link.Length > 0;
+    /// <summary>Its own plan, found by its link or by title under this project.</summary>
+    public PlanDoc? Plan { get; }
+    public bool HasPlan => Plan is not null;
+    public bool Drafting { get; }
+    public bool Proposed => !HasPlan && !Drafting;
+    /// <summary>"agreed · 2/5 cards done", "drafting", or "proposed".</summary>
+    public string State { get; }
+    [ObservableProperty] public partial bool Ticked { get; set; } = true;
+    partial void OnTickedChanged(bool value) => _page?.FeatureTickChanged(this);
+    public string Tip => HasPlan ? $"Open the plan for {Title}" : Drafting ? "A planner is drafting its plan" : "Tick it and press Draft to have a planner draft its plan";
+
+    public PlanFeatureRow(DesignViewModel owner, PlanPage? page, PlanDoc project, PlanFeature feature, IReadOnlyList<PlanDoc> plans,
+        IReadOnlyDictionary<string, BoardCard> index)
+    {
+        _owner = owner;
+        Title = feature.Title;
+        Description = feature.Description;
+        Ticked = page is null || !page.UntickedFeatures.Contains(feature.Title);
+        _page = page;
+        Plan = PlanStore.FeaturePlan(project, feature, plans);
+        Drafting = Plan is null && feature.LinkSlug.Length > 0 && owner.IsDraftingPlan(feature.LinkSlug);
+        if (Plan is { } p)
+        {
+            var (done, total) = DesignViewModel.Count(p, index);
+            State = p.Status + (total > 0 ? $" · {done}/{total} cards done" : " · no cards yet");
+        }
+        else State = Drafting ? "drafting" : "proposed";
+    }
 
     [RelayCommand]
-    void Open() { if (HasLink) owner.ShowPlan(feature.Link); }
+    void Open() { if (Plan is { } p) _owner.ShowPlan(p.Slug); }
 }
 
 public sealed partial class PlanLogRow(DesignViewModel owner, AgentReport report)

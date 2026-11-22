@@ -350,6 +350,71 @@ public class PlansTests : IDisposable
         Assert.Contains("no card in the plan", PlanStore.MakeCards(typo, Boards("boards3")).Problem);
     }
 
+    /// <summary>WOR-0179: a feature's title is linked to the file named for its plan, however the line is written, and
+    /// the line reads back with the link and the rest unchanged.</summary>
+    [Fact]
+    public void A_features_title_is_linked_to_its_plan_whatever_shape_its_line_has()
+    {
+        var f = Save("---\nkind: project\n---\n# Darg\n\nIntro - with a dash.\n\n## Goals\n- Android: not a feature\n\n## Features\n" +
+                     "- **Android**: the phone, see [ANDROID.md](../ANDROID.md)\n" +
+                     "- Planning - the design page\n" +
+                     "* [ ] Themes\n" +
+                     "- [Search](old.md): find cards\n" +
+                     "\n## Design\n- Android: still not a feature\n", "darg.md");
+        Assert.True(PlanStore.SetFeatureLink(f, "android", "android.md"));
+        Assert.True(PlanStore.SetFeatureLink(f, "Planning", "planning.md"));
+        Assert.True(PlanStore.SetFeatureLink(f, "Themes", "themes.md"));
+        Assert.True(PlanStore.SetFeatureLink(f, "Search", "search.md"));
+        Assert.False(PlanStore.SetFeatureLink(f, "Nothing", "x.md"));
+        var text = File.ReadAllText(f);
+        Assert.Contains("- **[Android](android.md)**: the phone, see [ANDROID.md](../ANDROID.md)\n", text);
+        Assert.Contains("- [Planning](planning.md) - the design page\n", text);
+        Assert.Contains("* [ ] [Themes](themes.md)\n", text);
+        Assert.Contains("- [Search](search.md): find cards\n", text);
+        Assert.Contains("## Goals\n- Android: not a feature\n", text);
+        Assert.Contains("## Design\n- Android: still not a feature\n", text);
+        var plan = PlanDoc.Load(f);
+        Assert.Equal(["Android", "Planning", "Themes", "Search"], plan.Features.Select(x => x.Title));
+        Assert.Equal(["android", "planning", "themes", "search"], plan.Features.Select(x => x.LinkSlug));
+
+        // features written as ### headings instead
+        var headed = Save("# D\n\n## Features\n\n### Voice\nTalk to Fettle.\n\n### **Search**\nFind.\n", "headed.md");
+        Assert.True(PlanStore.SetFeatureLink(headed, "Voice", "voice.md"));
+        Assert.True(PlanStore.SetFeatureLink(headed, "Search", "search.md"));
+        Assert.Equal("# D\n\n## Features\n\n### [Voice](voice.md)\nTalk to Fettle.\n\n### **[Search](search.md)**\nFind.\n", File.ReadAllText(headed));
+        Assert.Equal([("Voice", "voice"), ("Search", "search")], PlanDoc.Load(headed).Features.Select(x => (x.Title, x.LinkSlug)));
+        Assert.Equal("the phone, see [ANDROID.md](../ANDROID.md)", plan.Features[0].Description);
+        Assert.Equal("Android: the phone, see [ANDROID.md](../ANDROID.md)", plan.Features[0].Idea);
+        // before it was linked, the doc in its line wasn't taken for its plan
+        Assert.Equal("", PlanDoc.Parse("## Features\n- **Android**: see [ANDROID.md](../ANDROID.md)\n").Features[0].Link);
+        Assert.Equal("Themes", plan.Features[2].Idea);
+    }
+
+    /// <summary>WOR-0179: a feature's plan is the one its link names, else one under the project with its title; the
+    /// tree puts a linked plan with no parent under its project; only features with neither, and no planner drafting
+    /// their linked file, are left to plan.</summary>
+    [Fact]
+    public void A_feature_finds_its_plan_by_link_or_parent_and_the_rest_are_left_to_plan()
+    {
+        Save("---\nkind: project\n---\n# Darg\n\n## Features\n- [Android](android.md): the phone\n- Themes: colours\n- [Search](search.md): find\n- [Voice](voice.md): talk\n- Notes\n", "darg.md");
+        Save("---\nkind: feature\n---\n# The phone app\n", "android.md");      // linked, no parent, its own title
+        Save("---\nkind: feature\nparent: Darg\n---\n# Themes\n", "themes-plan.md");   // not linked: under the project with the title
+        Save("---\nkind: feature\nparent: elsewhere\n---\n# Notes\n", "notes.md");    // a Notes plan, but under another project
+        var plans = PlanStore.List(_dir);
+        var darg = plans.Single(p => p.Slug == "darg");
+        Assert.Equal("android", PlanStore.FeaturePlan(darg, darg.Features[0], plans)?.Slug);
+        Assert.Equal("themes-plan", PlanStore.FeaturePlan(darg, darg.Features[1], plans)?.Slug);
+        Assert.Null(PlanStore.FeaturePlan(darg, darg.Features[2], plans));
+        Assert.Null(PlanStore.FeaturePlan(darg, darg.Features[4], plans));
+
+        // search.md is being drafted; voice.md was linked but never written and nobody is at it
+        var todo = PlanStore.FeaturesToPlan(darg, plans, slug => slug == "search");
+        Assert.Equal(["Voice", "Notes"], todo.Select(f => f.Title));
+
+        var root = PlanStore.Tree(plans).Single(n => n.Plan.Slug == "darg");
+        Assert.Equal(["android", "themes-plan"], root.Children.Select(c => c.Plan.Slug));
+    }
+
     [Fact]
     public void A_prefix_comes_from_the_plans_name()
     {

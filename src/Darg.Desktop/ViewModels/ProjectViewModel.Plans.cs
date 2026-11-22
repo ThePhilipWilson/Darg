@@ -8,8 +8,12 @@ public partial class ProjectViewModel
 {
     /// <summary>Start a planner on <paramref name="idea"/>: a new plan file named for it, drafted in full. The Design
     /// page shows the planner's chat at once and the plan when its turn ends.</summary>
+    /// <param name="parent">The project plan a feature plan sits under (its file name without .md): the planner reads it
+    /// and writes it as the new plan's <c>parent:</c> (WOR-0179).</param>
+    /// <param name="show">Open the planner's chat and the drafting note on the page; false when Make features starts
+    /// several from a project plan's page, which stays where it is.</param>
     /// <exception cref="InvalidOperationException">No agents, no docs folder, or no words.</exception>
-    public (AgentViewModel Agent, string File) StartPlan(string idea, PlanKind kind, string? parent = null)
+    public (AgentViewModel Agent, string File) StartPlan(string idea, PlanKind kind, string? parent = null, bool show = true)
     {
         if (Agents is null) throw new InvalidOperationException($"{Name} doesn't use agents.");
         if (Design is null) throw new InvalidOperationException($"{Name} has no docs folder for its plans to go in.");
@@ -20,7 +24,7 @@ public partial class ProjectViewModel
         var plans = Directory.EnumerateFiles(Design.Folder, "*.md").OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
         var prompt = Planner.Prompt(Name, idea, kind, file, Config.Docs, Config.Boards, plans, PlanCommits(), parent);
         var agent = Agents.StartPlanner(prompt, file, $"Plan: {ChatTitle.Guess(idea)}", idea, PlanDirs());
-        Design.Drafting(agent, file);
+        if (show) Design.Drafting(agent, file);
         return (agent, file);
     }
 

@@ -68,12 +68,19 @@ public static partial class Planner
             "1. Read first: the project's CLAUDE.md" + (docs is null ? "" : $", its docs ({docs})") + (boards is null ? "" : $", its boards ({boards}: what's built, under way and planned)") +
             (plans.Count > 0 ? ", the plans already written (" + string.Join(", ", plans) + "): if one already covers this, say so and stop rather than writing a second" : "") +
             ", and the code the " + (project ? "project" : "feature") + " touches.",
+        };
+        // a feature of a project plan (WOR-0179): the project's plan sets the frame this one is drafted in
+        if (!project && !string.IsNullOrWhiteSpace(parent))
+            lines.Add($"   This feature is one of the Features of the project plan {Path.Combine(Path.GetDirectoryName(file) ?? "", parent + ".md")}: read it first. " +
+                      "Its Goals, Not doing and answered Questions hold for this plan too; don't ask again what it has answered, and keep to this feature, not its siblings.");
+        lines.AddRange(new[]
+        {
             $"2. Write the plan to {file}, a new file, in this shape (the Design page reads these headings, so keep them):",
             "",
             "   ---",
             $"   kind: {(project ? "project" : "feature")}",
             "   status: draft",
-        };
+        });
         if (!string.IsNullOrWhiteSpace(parent)) lines.Add($"   parent: {parent}");
         lines.AddRange([
             "   ---",
@@ -124,7 +131,8 @@ public static partial class Planner
             "   Questions: two to four options each, exactly one marked (recommended), and no **Answer:** line (that's mine). Leave the part with just its heading if nothing waits on me.",
         ]);
         if (project)
-            lines.Add("   Features: a line each, small enough that one plan of a few cards builds it; the order they'd be built in.");
+            lines.Add("   Features: a line each, as **Title**: what it gives me, small enough that one plan of a few cards builds it; the order they'd be built in. " +
+                      "No links and no feature plans: I tick features on the Design page, and Darg starts a planner on each and links its plan here.");
         else
         {
             lines.AddRange([

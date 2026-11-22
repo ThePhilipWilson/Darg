@@ -122,6 +122,8 @@ Built in WOR-0176: Darg names the file before the planner starts, so the page sh
 
 A plan with `kind: project` has Goals, Not doing, Questions and Design as a feature plan does, and a Features part in place of Cards: a line per feature, linked to its feature plan once there is one. Ticking features and pressing the button starts the planner on each, with `parent:` set to the project plan. The tree then shows the project with its features under it, each with its progress rolled up from its cards. Darg's own [PLAN.md](PLAN.md) is this shape: the ask, the big calls, then the slices that became its first boards.
 
+Built in WOR-0179: each feature row shows its plan's status and cards done (found by the feature's link, else by a plan under the project with its title), or "drafting", or a tick. Draft feature plans starts a planner on each ticked one (`plan-features` in the API), told to read the project plan first, and links the feature's title to the file Darg named for it at once, so the plan sits under its project in the tree whatever the planner calls it; a linked plan with no `parent:` lands there too. Open questions in the project plan need a second press, as Make cards does, and the project plan is set to agreed. The project's progress in the tree and its page header is its features' cards added up.
+
 ## From plan to board
 
 Recommended: Philip ticks the cards on the page (all ticked to start) and one press makes them. Darg does the making in code, not the planner agent, so ids, order and blockers come out right every time:

@@ -190,26 +190,43 @@
 
             <ContentControl Content="{Binding Page.Design, FallbackValue={x:Null}}"/>
 
-            <!-- a project plan's features, each linked to its own plan once there is one -->
+            <!-- a project plan's features (WOR-0179): each with its own plan's state and progress once there is one; the ticked
+                 ones without get a planner each, parent set to this plan -->
             <Border Classes="part" IsVisible="{Binding Page.ShowFeatures, FallbackValue=False}">
-              <StackPanel Spacing="6">
+              <StackPanel Spacing="4">
                 <TextBlock Classes="part" Text="Features"/>
                 <TextBlock Classes="dim" Text="No features listed yet." IsVisible="{Binding !Page.HasFeatures, FallbackValue=False}"/>
                 <ItemsControl ItemsSource="{Binding Page.Features, FallbackValue={x:Null}}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:PlanFeatureRow">
-                      <Button Classes="row" Command="{Binding OpenCommand}" IsHitTestVisible="{Binding HasLink}" AutomationProperties.Name="{Binding Title}">
+                     <DockPanel>
+                      <CheckBox DockPanel.Dock="Left" IsChecked="{Binding Ticked}" IsVisible="{Binding Proposed}" VerticalAlignment="Top" Margin="0,2,0,0"
+                                ToolTip.Tip="Draft a plan for this feature" AutomationProperties.Name="{Binding Title, StringFormat='Plan {0}'}"/>
+                      <Button Classes="row" Command="{Binding OpenCommand}" IsHitTestVisible="{Binding HasPlan}" ToolTip.Tip="{Binding Tip}" AutomationProperties.Name="{Binding Title}">
                         <StackPanel Spacing="2">
                           <DockPanel>
-                            <TextBlock DockPanel.Dock="Right" Text="plan ›" Classes="dim small" IsVisible="{Binding HasLink}" VerticalAlignment="Center"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top" Margin="8,0,0,0">
+                              <Border Classes="column" IsVisible="{Binding HasPlan}">
+                                <TextBlock Text="{Binding State}" Classes="small"/>
+                              </Border>
+                              <TextBlock Text="{Binding State}" Foreground="{DynamicResource Info}" Classes="small" VerticalAlignment="Center" IsVisible="{Binding Drafting}"/>
+                              <TextBlock Text="{Binding State}" Classes="dim small" VerticalAlignment="Center" IsVisible="{Binding Proposed}"/>
+                              <TextBlock Text="plan ›" Classes="dim small" IsVisible="{Binding HasPlan}" VerticalAlignment="Center"/>
+                            </StackPanel>
                             <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                           </DockPanel>
                           <TextBlock Text="{Binding Description}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasDescription}"/>
                         </StackPanel>
                       </Button>
+                     </DockPanel>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <TextBlock Text="{Binding Page.FeaturesOpenText, FallbackValue=''}" Classes="blocker small" TextWrapping="Wrap"
+                           IsVisible="{Binding Page.HasFeaturesOpenQuestions, FallbackValue=False}"/>
+                <Button HorizontalAlignment="Left" Content="{Binding Page.MakeFeaturesText, FallbackValue=''}" Command="{Binding Page.MakeFeaturesCommand, FallbackValue={x:Null}}"
+                        IsEnabled="{Binding Page.CanMakeFeatures, FallbackValue=False}" IsVisible="{Binding Page.HasProposedFeatures, FallbackValue=False}"
+                        AutomationProperties.Name="Draft feature plans" ToolTip.Tip="Start a planner on each ticked feature: it drafts the feature's plan, under this one"/>
               </StackPanel>
             </Border>
 
