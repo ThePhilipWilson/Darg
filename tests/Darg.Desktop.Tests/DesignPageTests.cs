@@ -220,6 +220,32 @@ public class DesignPageTests
         Assert.Equal("", app.Crashes());
     }
 
+    /// <summary>WOR-0189: a reload asked for while one is reading used to be dropped, leaving the page on the old file.</summary>
+    [AvaloniaFact]
+    public async Task A_reload_asked_for_while_one_reads_runs_once_more_and_shows_the_newer_file()
+    {
+        using var app = DargApp.Make();
+        var card = app.Card("Remote access", "In Progress");
+        var design = Directory.CreateDirectory(Path.Combine(app.Docs, "design")).FullName;
+        var file = Path.Combine(design, "phone.md");
+        File.WriteAllText(file, FeaturePlan(card.Id));
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Design" });
+        var d = app.Project.Design!;
+        await app.Until(() => d.Page is not null, "the plan page");
+        using var read = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var reads = 0;
+        d.AfterRead = () => { if (Interlocked.Increment(ref reads) == 1) { read.Set(); release.Wait(TimeSpan.FromSeconds(20)); } };
+        d.Reload();
+        Assert.True(await Task.Run(() => read.Wait(TimeSpan.FromSeconds(20))), "the first reload reading");
+        File.WriteAllText(file, FeaturePlan(card.Id).Replace("A thin client over the API.", "A THICK client over the API."));
+        d.Reload(); // asked for while the first still holds the old read
+        release.Set();
+        await app.Until(() => d.Page is { } p && p.Design.Markdown.Contains("THICK"), "the page showing the second state");
+        Assert.True(Volatile.Read(ref reads) >= 2); // the file watcher may add a third
+    }
+
     [AvaloniaFact]
     public async Task Keeping_an_agents_choice_puts_the_persons_name_on_it_and_sends_nothing_back()
     {

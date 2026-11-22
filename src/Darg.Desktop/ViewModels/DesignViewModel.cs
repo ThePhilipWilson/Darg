@@ -17,7 +17,9 @@ public sealed partial class DesignViewModel : ObservableObject
 {
     readonly ProjectConfig _config;
     int _generation;
-    bool _pending;
+    bool _pending, _again;
+    /// <summary>Test seam: runs on the reading thread after the files are read, before the result is applied.</summary>
+    public Action? AfterRead { get; set; }
 
     /// <summary>The plans folder, <c>design/</c> in the project's docs folder.</summary>
     public string Folder { get; }
@@ -186,7 +188,7 @@ public sealed partial class DesignViewModel : ObservableObject
     /// <summary>Read the plans and the boards again, in the background; calls made while one runs fold into one more.</summary>
     public void Reload()
     {
-        if (_pending) return;
+        if (_pending) { _again = true; return; }
         _pending = true;
         var gen = ++_generation;
         var boards = _config.Boards;
@@ -201,10 +203,12 @@ public sealed partial class DesignViewModel : ObservableObject
                 log = reports is null ? [] : ReportStore.List(reports);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { plans = []; cards = []; log = []; }
+            AfterRead?.Invoke();
             Dispatcher.UIThread.Post(() =>
             {
                 _pending = false;
                 if (gen == _generation) Apply(plans, cards, log);
+                if (_again) { _again = false; Reload(); } // asked for while this one read: one more, reading the files as they are now
             });
         });
     }
