@@ -214,6 +214,47 @@ public class PlannerTests : IDisposable
     }
 
     [Fact]
+    public void A_planners_change_in_a_part_the_page_also_writes_still_goes_back()
+    {
+        // QA round 2: the planner, held to Goals, rewords one question; the person answers another meanwhile. The part
+        // was taken whole from the page's write, so the rewording stood and the status didn't name Questions.
+        var file = Path.Combine(_dir, "phone.md");
+        var two = Before.Replace("## Design", "### Second?\n- **Yes** (recommended): y.\n- **No**: n.\n\n## Design");
+        File.WriteAllText(file, two);
+        using var hold = PlanHold.Start(file, "Goals")!;
+        File.WriteAllText(file, File.ReadAllText(file).Replace("- Answer agents.", "- Answer agents fast.").Replace("### Second?", "### Second, reworded?"));
+        Assert.True(PlanStore.Answer(file, "Which way?", "That", "Philip", new DateTime(2026, 11, 22)));
+
+        var put = hold.Finish();
+
+        Assert.Equal(["Questions"], put);
+        var text = File.ReadAllText(file);
+        Assert.Contains("- Answer agents fast.", text);
+        Assert.Contains("**Answer:** That (Philip", text);
+        Assert.Contains("### Second?", text);
+        Assert.DoesNotContain("reworded", text);
+    }
+
+    [Fact]
+    public void Merge3_applies_the_writes_lines_to_mine_and_the_writes_win_where_both_changed()
+    {
+        const string pre = "a\nB\nc\nd\ne\nF\ng";    // the planner had changed b and f
+        const string mine = "a\nb\nc\nd\ne\nf\ng";   // as it was before the planner
+        Assert.Equal(mine + "\nh", Planner.Merge3(pre, mine, pre + "\nh"));                                    // a line added at the end
+        Assert.Equal("x\n" + mine, Planner.Merge3(pre, mine, "x\n" + pre));                                    // and at the start
+        Assert.Equal("a\nb\nc\nD\ne\nf\ng", Planner.Merge3(pre, mine, "a\nB\nc\nD\ne\nF\ng"));                 // a line between the planner's
+        Assert.Equal("a\nb\nc\nd\nd2\ne\nf\ng", Planner.Merge3(pre, mine, "a\nB\nc\nd\nd2\ne\nF\ng"));         // a line put in between
+        Assert.Equal("a\nb\nc\ne\nf\ng", Planner.Merge3(pre, mine, "a\nB\nc\ne\nF\ng"));                       // a line the write took out
+        Assert.Equal("a\nB!\nc\nd\ne\nf\ng", Planner.Merge3(pre, mine, "a\nB!\nc\nd\ne\nF\ng"));               // the same line: the write's stands
+        // right beside a line the planner changed, with no line between that both kept: the write's stretch stands whole
+        Assert.Equal("a\nB\nC\nd\ne\nf\ng", Planner.Merge3(pre, mine, "a\nB\nC\nd\ne\nF\ng"));
+        Assert.Equal(mine, Planner.Merge3(pre, mine, pre));
+        Assert.Equal("z", Planner.Merge3(mine, mine, "z"));
+        // the planner rewrote the file with LF where the plan had CRLF: lines still match, and the result keeps CRLF
+        Assert.Equal("a\r\nb\r\nc\r\nD\r\ne\r\nf\r\ng", Planner.Merge3(pre, mine.Replace("\n", "\r\n"), "a\nB\nc\nD\ne\nF\ng"));
+    }
+
+    [Fact]
     public void Kinds_read_as_typed()
     {
         Assert.Equal(PlanKind.Feature, Planner.ParseKind(null));

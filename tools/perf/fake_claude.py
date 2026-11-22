@@ -18,6 +18,8 @@ FAKE_PLAN     writes a small plan to the message's "Plan file: <path>" line, as 
               in its Goals and its Design, and the prompt's "parent: <plan>" line in its properties if it has one (WOR-0179)
 FAKE_REWRITE  replaces FAKE_OLD with FAKE_NEW all through the message's plan file, as a planner asked to change one
               part might tidy the rest too
+FAKE_REWORD   rewords an option in the plan file's Questions ("the slow one." to "the slow one, reworded."), as a
+              planner asked about another part might touch the part the person is answering in
 """
 import json, os, re, subprocess, sys, threading, time
 
@@ -171,6 +173,11 @@ def work(text):
         with open(path, encoding="utf-8") as f: body = f.read()
         with open(path, "w", encoding="utf-8") as f: f.write(body.replace("FAKE_OLD", "FAKE_NEW"))
         emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Changed the plan."}]}})
+    if plan and "FAKE_REWORD" in text:
+        path = plan.group(1).strip()
+        with open(path, encoding="utf-8") as f: body = f.read()
+        with open(path, "w", encoding="utf-8") as f: f.write(body.replace("the slow one.", "the slow one, reworded."))
+        emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Reworded a question."}]}})
     spawn = re.search(r"FAKE_SPAWN (\S+)", text)
     if spawn:
         command = ("(Start-Process -FilePath powershell -ArgumentList '-NoProfile','-Command','Start-Sleep 600' -WindowStyle Hidden -PassThru).Id"

@@ -230,24 +230,29 @@ public static partial class Planner
 
     static string Norm(string s) => string.Join("\n", s.Split('\n').Select(l => l.TrimEnd())).Trim('\n');
 
-    /// <summary><paramref name="basis"/> with every part that a write from <paramref name="pre"/> to
-    /// <paramref name="post"/> changed taken as <paramref name="post"/> has it (added where post has it, dropped if post
-    /// dropped it), and every other part left as <paramref name="basis"/> has it. How a write made during a planner's
-    /// one-part turn (an answer, Make cards' ids, an edit on the page) joins what the turn is compared with, so
-    /// <see cref="KeepOnly"/> leaves it standing.</summary>
+    /// <summary><paramref name="basis"/> with what a write from <paramref name="pre"/> to <paramref name="post"/>
+    /// changed applied to it, and nothing else. Within a part the write changed, only the write's own lines are taken
+    /// (<see cref="Merge3"/>: <paramref name="pre"/> already holds the planner's changes so far, which stay out); a part
+    /// the write added goes in where post has it, one it dropped goes. Every other part stays as
+    /// <paramref name="basis"/> has it. How a write made during a planner's one-part turn (an answer, Make cards' ids,
+    /// an edit on the page) joins what the turn is compared with, so <see cref="KeepOnly"/> leaves it standing and still
+    /// puts back what the planner changed beside it in the same part (WOR-0176, QA round 2).</summary>
     public static string Rebase(string basis, string pre, string post)
     {
         var changed = Differing(pre, post);
         if (changed.Count == 0) return basis;
         static bool Is(string a, string b) => a.Equals(b, StringComparison.OrdinalIgnoreCase);
         var from = Blocks(post);
+        var was = Blocks(pre);
         var result = new List<(string Heading, string Text)>();
         foreach (var block in Blocks(basis))
         {
             if (!changed.Any(c => Is(c, block.Heading))) { result.Add(block); continue; }
             if (result.Any(r => Is(r.Heading, block.Heading))) continue;   // a heading written twice: taken once, below
             var now = from.FirstOrDefault(p => Is(p.Heading, block.Heading));
-            if (now.Text is not null) result.Add(now);
+            if (now.Text is null) continue;
+            var then = was.FirstOrDefault(p => Is(p.Heading, block.Heading));
+            result.Add(then.Text is null ? now : (block.Heading, Merge3(then.Text, block.Text, now.Text)));
         }
         // parts the write added: after the part post has before them, else at the end
         for (var i = 0; i < from.Count; i++)
@@ -258,6 +263,60 @@ public static partial class Planner
             result.Insert(prev < 0 ? result.Count : prev + 1, from[i]);
         }
         return string.Join("\n", result.Select(r => r.Text));
+    }
+
+    /// <summary>A three-way merge by lines: <paramref name="mine"/> with the change from <paramref name="pre"/> to
+    /// <paramref name="post"/> applied, as diff3 does. Where both changed the same stretch (lines with no line between
+    /// them that both left alone), <paramref name="post"/>'s stretch wins whole: it's the person's write, so it must
+    /// stand, even if it carries a change of the planner's right beside it.</summary>
+    public static string Merge3(string pre, string mine, string post)
+    {
+        if (pre == post) return mine;
+        if (pre == mine) return post;
+        // lines compared without their \r, so a planner that rewrote the file with other line endings doesn't make
+        // every line differ; the result takes mine's
+        var crlf = mine.Contains("\r\n");
+        var o = pre.Replace("\r\n", "\n").Split('\n');
+        var a = mine.Replace("\r\n", "\n").Split('\n');
+        var b = post.Replace("\r\n", "\n").Split('\n');
+        var ma = Match(o, a);
+        var mb = Match(o, b);
+        var result = new List<string>();
+        int i = 0, j = 0, k = 0;
+        while (true)
+        {
+            // the next line of pre that both kept, from where we are
+            var l = i;
+            while (l < o.Length && (ma[l] < j || mb[l] < k)) l++;
+            var (ea, eb) = l < o.Length ? (ma[l], mb[l]) : (a.Length, b.Length);
+            if (l > i || ea > j || eb > k)
+            {
+                var co = o[i..l]; var ca = a[j..ea]; var cb = b[k..eb];
+                if (co.SequenceEqual(ca)) result.AddRange(cb);          // only the write changed this stretch
+                else if (co.SequenceEqual(cb)) result.AddRange(ca);     // only mine did
+                else result.AddRange(cb);                               // both: the person's write stands
+            }
+            if (l >= o.Length) break;
+            result.Add(o[l]);
+            i = l + 1; j = ea + 1; k = eb + 1;
+        }
+        return string.Join(crlf ? "\r\n" : "\n", result);
+    }
+
+    /// <summary>For each line of <paramref name="x"/>, the index of the line of <paramref name="y"/> it's matched to in
+    /// their longest common subsequence, or -1.</summary>
+    static int[] Match(string[] x, string[] y)
+    {
+        var len = new int[x.Length + 1, y.Length + 1];
+        for (var p = x.Length - 1; p >= 0; p--)
+            for (var q = y.Length - 1; q >= 0; q--)
+                len[p, q] = x[p] == y[q] ? len[p + 1, q + 1] + 1 : Math.Max(len[p + 1, q], len[p, q + 1]);
+        var m = Enumerable.Repeat(-1, x.Length).ToArray();
+        for (int p = 0, q = 0; p < x.Length && q < y.Length;)
+            if (x[p] == y[q]) { m[p] = q; p++; q++; }
+            else if (len[p + 1, q] >= len[p, q + 1]) p++;
+            else q++;
+        return m;
     }
 
     /// <summary>A plan's text cut at its <c>##</c> headings: first what comes before any (properties, title, intro)

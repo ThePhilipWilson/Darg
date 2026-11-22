@@ -140,6 +140,46 @@ public class PlannerTests
     }
 
     [AvaloniaFact]
+    public async Task The_planners_change_in_the_part_the_page_answers_in_still_goes_back()
+    {
+        // QA round 2: held to Goals, the planner also reworded an option in Questions; the person answered the question
+        // meanwhile, and the whole Questions part was taken from that write, so the rewording stood unreported
+        Environment.SetEnvironmentVariable("FAKE_SECONDS", "8");
+        try
+        {
+            using var app = DargApp.Make();
+            await app.Start();
+            await app.Api("show", new { project = "proj", section = "Design" });
+            var d = app.Project.Design!;
+            d.Idea = "Phone app: FAKE_PLAN";
+            d.StartPlanCommand.Execute(null);
+            var file = Path.Combine(app.Docs, "design", "phone-app.md");
+            await app.Until(() => d.Page?.File == file && d.Planner is { Working: false }, "the drafted plan open, its planner's turn over", 60);
+
+            d.ChangePart = "Goals";
+            d.Ask = "Make the goal sharper FAKE_REWRITE FAKE_REWORD";
+            d.AskPlannerCommand.Execute(null);
+            await app.Until(() => File.ReadAllText(file).Contains("the slow one, reworded."), "the planner at work, Questions touched too");
+            Assert.True(d.Planner!.Working);
+
+            d.Page!.Questions.Single().Options.Single(o => o.Label == "That way").PickCommand.Execute(null);
+            Assert.Contains("**Answer:** That way", File.ReadAllText(file));
+            Assert.True(d.Planner.Working);
+
+            await app.Until(() => d.Status.Contains("too: put back"), "the planner's turn over and its other changes put back", 60);
+            var text = File.ReadAllText(file);
+            Assert.Contains("FAKE_NEW goal", text);
+            Assert.Contains("**Answer:** That way", text);
+            Assert.Contains("- **That way**: the slow one.", text);
+            Assert.DoesNotContain("reworded", text);
+            Assert.Contains("Questions", d.Status);
+            Assert.Contains("Design", d.Status);
+            Assert.Equal("", app.Crashes());
+        }
+        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
+    }
+
+    [AvaloniaFact]
     public async Task Fettle_and_the_phone_start_a_plan_through_the_api()
     {
         Assert.Contains("plan", RemoteAccess.Commands);
