@@ -1506,6 +1506,12 @@ public sealed partial class CardViewModel : ObservableObject
     /// <summary>The agent working on this card (its state shows on the card, live), if any.</summary>
     public AgentViewModel? Agent { get; }
     public bool HasAgent => Agent is not null;
+    /// <summary>WOR-0187: the card is in its board's For Human Attention column, where waiting on the person is the point.</summary>
+    public bool InAttentionColumn { get; }
+    /// <summary>WOR-0187: it has an open, valid ## Decision and isn't in For Human Attention or Done: it waits on the person
+    /// from a column where nothing else says so, so its tile is outlined (as it is while an agent on it asks or has failed,
+    /// bound live to the agent in the view).</summary>
+    public bool DecisionOutside { get; }
     /// <summary>The card is in Done (WOR-0116): nothing starts on it; move it out first to redo it.</summary>
     public bool InDone { get; }
     /// <summary>Work on and Improve are offered: no agent on it, and it isn't in Done.</summary>
@@ -1551,6 +1557,8 @@ public sealed partial class CardViewModel : ObservableObject
         ImproveCommand = new RelayCommand(() => board.StartImprove(this));
         RunQaCommand = new RelayCommand(() => board.StartQa(this));
         InDone = board.IsDone(card.Id);
+        InAttentionColumn = board.InAttention(card);
+        DecisionOutside = !InAttentionColumn && !InDone && CardDecision.Read(card.Sections) is { Valid: true };
         var inQa = board.InQa(card);
         ShowRunQa = inQa && !QaWasRunning && !InDone;
         MoveTargets = [

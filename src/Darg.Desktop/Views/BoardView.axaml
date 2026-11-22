@@ -55,6 +55,12 @@
     <Style Selector="TextBlock.quality.zero"><Setter Property="Foreground" Value="{DynamicResource Zero}"/></Style>
     <Style Selector="TextBlock.quality.amber"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
     <Style Selector="TextBlock.quality.green"><Setter Property="Foreground" Value="{DynamicResource Ok}"/></Style>
+    <!-- WOR-0187: a card waiting on the person outside For Human Attention (an open decision, or an agent asking or failed) is outlined in the Warn colour -->
+    <Style Selector="Border.card.waits, Border.card.agentwaits:not(.inattn):not(.isdone), Border.card.agentfailed:not(.inattn):not(.isdone)">
+      <Setter Property="BorderBrush" Value="{DynamicResource Warn}"/>
+      <Setter Property="BorderThickness" Value="2"/>
+      <Setter Property="Padding" Value="8,6"/>
+    </Style>
     <!-- WOR-0172: a blocker still open on a tile, outlined in the Warn colour -->
     <Style Selector="Border.blocker">
       <Setter Property="BorderBrush" Value="{DynamicResource Warn}"/>
@@ -240,7 +246,7 @@
                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="7"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CardViewModel">
-                        <Border Classes="card" Classes.picked="{Binding IsPicked}" Cursor="Hand" ToolTip.Tip="{Binding Description}" Tag="{Binding}">
+                        <Border Classes="card" Classes.picked="{Binding IsPicked}" Classes.waits="{Binding DecisionOutside}" Classes.agentwaits="{Binding Agent.NeedsYou, FallbackValue=False}" Classes.agentfailed="{Binding Agent.IsFailed, FallbackValue=False}" Classes.inattn="{Binding InAttentionColumn}" Classes.isdone="{Binding InDone}" Cursor="Hand" ToolTip.Tip="{Binding Description}" Tag="{Binding}">
                           <Border.ContextMenu>
                             <ContextMenu ItemsSource="{Binding MoveTargets}">
                               <ContextMenu.Styles>
