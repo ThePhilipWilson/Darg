@@ -55,9 +55,9 @@
     <Style Selector="TextBlock.quality.zero"><Setter Property="Foreground" Value="{DynamicResource Zero}"/></Style>
     <Style Selector="TextBlock.quality.amber"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
     <Style Selector="TextBlock.quality.green"><Setter Property="Foreground" Value="{DynamicResource Ok}"/></Style>
-    <!-- WOR-0187: a card waiting on the person outside For Human Attention (an open decision, or an agent asking or failed) is outlined in the Warn colour -->
+    <!-- WOR-0187: a card waiting on the person outside For Human Attention (an open decision, or an agent asking or failed) is outlined in the theme's Accent (the app's needs-you colour, so it fits every theme) -->
     <Style Selector="Border.card.waits, Border.card.agentwaits:not(.inattn):not(.isdone), Border.card.agentfailed:not(.inattn):not(.isdone)">
-      <Setter Property="BorderBrush" Value="{DynamicResource Warn}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
       <Setter Property="BorderThickness" Value="2"/>
       <Setter Property="Padding" Value="8,6"/>
     </Style>

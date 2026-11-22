@@ -18,7 +18,7 @@ public class WaitingCardTests
         .Single(b => b.Classes.Contains("card") && b.DataContext is CardViewModel c && c.Id == id);
 
     static string Colour(IBrush? b) => b is ISolidColorBrush s ? s.Color.ToString() : "?";
-    static string Warn() => Avalonia.Application.Current!.TryGetResource("Warn", null, out var b) ? Colour(b as IBrush) : "?";
+    static string Outline() => Avalonia.Application.Current!.TryGetResource("Accent", null, out var b) ? Colour(b as IBrush) : "?";
 
     [AvaloniaFact]
     public async Task A_card_with_an_open_decision_outside_attention_is_outlined()
@@ -32,10 +32,10 @@ public class WaitingCardTests
         await DargApp.Settle();
 
         var tile = Tile(app, waiting.Id);
-        Assert.Equal(Warn(), Colour(tile.BorderBrush));
+        Assert.Equal(Outline(), Colour(tile.BorderBrush));
         Assert.Equal(2, tile.BorderThickness.Left);
-        Assert.NotEqual(Warn(), Colour(Tile(app, plain.Id).BorderBrush));
-        Assert.NotEqual(Warn(), Colour(Tile(app, inAttention.Id).BorderBrush)); // the column already says so
+        Assert.NotEqual(Outline(), Colour(Tile(app, plain.Id).BorderBrush));
+        Assert.NotEqual(Outline(), Colour(Tile(app, inAttention.Id).BorderBrush)); // the column already says so
         app.Shot("waiting");
     }
 }
