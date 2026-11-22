@@ -1,5 +1,6 @@
-using Darg.Core;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Darg.Core;
 using Darg.Desktop.ViewModels;
 
@@ -128,6 +129,12 @@ public class DesignPageTests
             Assert.Equal($"waits on {made.Id}", proposed.Blockers);
             await AvaloniaSettle();
             app.Shot("design");
+            // the page fills the width it's given, with no empty strip on the right of a wide window (QA, 2026-11-22)
+            var scroll = app.Window.GetVisualDescendants().OfType<ScrollViewer>().Single(s => s.Name == "PageScroll");
+            var parts = app.Window.GetVisualDescendants().OfType<StackPanel>().Single(s => s.Name == "PageParts");
+            // (left-aligned, the parts shrank to their widest text, ~460 px of a 640 px viewport beside the planner's chat)
+            Assert.True(scroll.Viewport.Width > 500, $"the page's viewport is {scroll.Viewport.Width} wide at a 1400 px window");
+            Assert.InRange(scroll.Viewport.Width - parts.Bounds.Width, 0, 40); // only the 18 px margins either side
 
             // tapping an option writes the Answer line into the plan, and the page shows it answered
             q.Options[0].PickCommand.Execute(null);

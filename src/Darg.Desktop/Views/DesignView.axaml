@@ -131,8 +131,9 @@
           </DockPanel>
         </Border>
 
-        <ScrollViewer>
-          <StackPanel Margin="18,14" MaxWidth="980" HorizontalAlignment="Left" Spacing="12">
+        <!-- the page fills the width it's given (Philip, 2026-11-22: no empty strip on a wide window) -->
+        <ScrollViewer x:Name="PageScroll">
+          <StackPanel x:Name="PageParts" Margin="18,14" Spacing="12">
             <views:MarkdownView Markdown="{Binding Page.Intro, FallbackValue=''}" IsVisible="{Binding Page.HasIntro, FallbackValue=False}"/>
             <ContentControl Content="{Binding Page.Goals, FallbackValue={x:Null}}"/>
             <ContentControl Content="{Binding Page.NotDoing, FallbackValue={x:Null}}"/>
