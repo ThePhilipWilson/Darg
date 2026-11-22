@@ -184,7 +184,8 @@ public class DesignPageTests
         await app.Api("work-on", new { project = "proj", card = first.Id });
         await app.Until(() => app.Prompts().Any(p => p.Contains("Work on this card")), "the card agent's prompt");
         var prompt = app.Prompts().First(p => p.Contains("Work on this card"));
-        Assert.Contains(file.Replace('\\', '/'), prompt);
+        Assert.Contains("docs/design/phone.md", prompt);   // relative to the repo, so the agent edits its own worktree's copy
+        Assert.DoesNotContain(file.Replace('\\', '/'), prompt);
         Assert.Contains("decided by agent, " + first.Id, prompt);
 
         // the agent writes its choice into the plan's Questions
@@ -209,7 +210,9 @@ public class DesignPageTests
         Assert.Equal(before, File.ReadAllText(file));
 
         // Change: the card goes back to its agent with the new answer as notes
+        Assert.Equal("Change", (string)Views.DesignView.ChangeLabel.Convert(q.Changing, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture)!);
         q.ChangeCommand.Execute(null);
+        Assert.Equal("Cancel", (string)Views.DesignView.ChangeLabel.Convert(q.Changing, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture)!);   // never a second Keep
         q.Options.First(o => o.Label.StartsWith("Own server")).PickCommand.Execute(null);
         Assert.Contains("Own server", File.ReadAllText(file));
         await app.Until(() => app.Prompts().Any(p => p.Contains("Own server") && p.Contains("Which relay?")), "the card sent back with the new answer");

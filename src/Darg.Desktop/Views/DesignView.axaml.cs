@@ -6,8 +6,8 @@ namespace Darg.Desktop.Views;
 /// <summary>The Design section (WOR-0175): the plan tree and the picked plan's page.</summary>
 public partial class DesignView : UserControl
 {
-    /// <summary>An answered question's button: Change, or Keep while its options are showing again.</summary>
-    public static readonly IValueConverter ChangeLabel = new FuncValueConverter<bool, string>(changing => changing ? "Keep" : "Change");
+    /// <summary>An answered question's button: Change, or Cancel while its options are showing again (Keep is the other button, which writes the person's name on an agent's answer).</summary>
+    public static readonly IValueConverter ChangeLabel = new FuncValueConverter<bool, string>(changing => changing ? "Cancel" : "Change");
 
     StickToBottom? _follow;
 

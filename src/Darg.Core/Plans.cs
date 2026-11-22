@@ -30,24 +30,48 @@ public static partial class PlanRules
         plans.FirstOrDefault(p => p.Cards.Any(c => c.Made && c.Id.Equals(cardId, StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>Lines for a card agent's prompt: where the plan is and the rule for a choice it settled.</summary>
-    public static IReadOnlyList<string> Prompt(string planFile, string cardId) =>
-    [
-        $"This card was made from the plan {planFile.Replace(Path.DirectorySeparatorChar, '/')} (intent only: the board holds progress, so never write how far along the work is into it).",
-        "If you make a choice the plan did not settle (a tool, a name, an id, an approach that had other options), add it to the plan's ## Questions as a ### heading " +
-        "with the options you weighed and the line `**Answer:** <your pick> (decided by agent, " + cardId + ", yyyy-MM-dd)`, in the same commit as the work. " +
-        "A question the plan already answers, or a detail nobody would weigh in on, doesn't go there. If the choice is mine to make rather than yours, ask with AskUserQuestion instead.",
-    ];
+    public static IReadOnlyList<string> Prompt(string planFile, string cardId)
+    {
+        // named relative to its repo: a card agent works in a worktree of its own, so the absolute path is the main
+        // checkout's copy, and an edit there is missing from the agent's commit
+        var rel = RepoRelative(planFile);
+        var where = rel is null
+            ? planFile.Replace(Path.DirectorySeparatorChar, '/')
+            : rel + " (in your own checkout of the repo, your worktree if you work in one; not the copy in another folder)";
+        return
+        [
+            $"This card was made from the plan {where}, intent only: the board holds progress, so never write how far along the work is into it.",
+            "If you make a choice the plan did not settle (a tool, a name, an id, an approach that had other options), add it to the plan's ## Questions as a ### heading " +
+            "with the options you weighed and the line `**Answer:** <your pick> (decided by agent, " + cardId + ", yyyy-MM-dd)`, in the same commit as the work. " +
+            "A question the plan already answers, or a detail nobody would weigh in on, doesn't go there. If the choice is mine to make rather than yours, ask with AskUserQuestion instead.",
+        ];
+    }
 
-    /// <summary>Set when the text records an agent's choice: "decided by agent", with the card after it when named.</summary>
+    /// <summary>The path from the repo holding the file (nearest folder above with a .git), with / as separator.</summary>
+    internal static string? RepoRelative(string file)
+    {
+        if (string.IsNullOrEmpty(file) || !Path.IsPathRooted(file)) return null;
+        for (var d = Path.GetDirectoryName(Path.GetFullPath(file)); d is not null; d = Path.GetDirectoryName(d))
+            if (Directory.Exists(Path.Combine(d, ".git")) || System.IO.File.Exists(Path.Combine(d, ".git")))
+                return Path.GetRelativePath(d, file).Replace(Path.DirectorySeparatorChar, '/');
+        return null;
+    }
+
+    /// <summary>Set when the text records an agent's choice. Agents drift from the shape they're told (the real plan's
+    /// lines read "agent for AND-0002 ... on Philip's behalf"), so any of these in the trailing (note) counts, or the
+    /// text itself when it has no note: "decided by agent", "decided by an agent", "decided by AND-0002's agent",
+    /// "agent for / by AND-0002", "chosen by an agent", "AND-0002 agent", "on Philip's behalf". The card is the first id in it.</summary>
     public static Decided? DecidedBy(string answer)
     {
-        var m = DecidedRx().Match(answer);
-        return m.Success ? new Decided(m.Groups[1].Success ? m.Groups[1].Value.ToUpperInvariant() : null) : null;
+        var note = NoteRx().Match(answer) is { Success: true } n ? n.Value : answer;
+        if (!AgentRx().IsMatch(note)) return null;
+        return new Decided(IdRx().Match(note) is { Success: true } m ? m.Value.ToUpperInvariant() : null);
     }
 
     public static string Pick(string answer) => NoteRx().Replace(answer, "").Trim();
 
-    [GeneratedRegex(@"\bdecided\s+by\s+(?:an\s+)?(?:card\s+)?agent\b(?:[\s,:]+(?:on\s+)?([A-Za-z][A-Za-z0-9]*-\d+))?", RegexOptions.IgnoreCase)] private static partial Regex DecidedRx();
+    [GeneratedRegex(@"\bagents?\b|\bon\s+(?:philip'?s|his|my|your)\s+behalf\b", RegexOptions.IgnoreCase)] private static partial Regex AgentRx();
+    [GeneratedRegex(@"\b[A-Za-z][A-Za-z0-9]*-\d+\b")] private static partial Regex IdRx();
     [GeneratedRegex(@"\s*\([^()]*\)\s*$")] private static partial Regex NoteRx();
 }
 

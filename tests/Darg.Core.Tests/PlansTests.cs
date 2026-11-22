@@ -213,6 +213,58 @@ public class PlansTests : IDisposable
         Assert.True(PlanRules.DecidedBy("Relay (decided by an agent)") is { Card: null });
     }
 
+    [Theory]
+    [InlineData("Tailscale (agent for AND-0002, 2026-11-20, on Philip's behalf; not installed, so only the home network works for now; keep or change)", "AND-0002")]
+    [InlineData("x (decided by AND-0003's agent, 2026-11-20)", "AND-0003")]
+    [InlineData("x (chosen by an agent, AND-0003, 2026-11-20)", "AND-0003")]
+    [InlineData("x (by agent AND-0004)", "AND-0004")]
+    [InlineData("x (AND-0005 agent, 2026-11-20)", "AND-0005")]
+    [InlineData("x (decided by agent AND-0006)", "AND-0006")]
+    [InlineData("x (picked on Philip's behalf)", null)]
+    [InlineData("x (Agent and-0007)", "AND-0007")]
+    public void An_agents_choice_is_recognised_however_the_agent_worded_it(string answer, string? card)
+    {
+        var d = PlanRules.DecidedBy(answer);
+        Assert.NotNull(d);
+        Assert.Equal(card, d!.Card);
+    }
+
+    [Theory]
+    [InlineData("ntfy (Philip, 2026-11-20, asked by AND-0006)")]
+    [InlineData("x (Philip, 2026-11-20)")]
+    [InlineData("x")]
+    public void A_choice_the_person_made_is_not_an_agents(string answer) => Assert.Null(PlanRules.DecidedBy(answer));
+
+    [Fact]
+    public void The_real_android_plans_answers_read_four_by_an_agent_and_one_by_philip()
+    {
+        var lines = new[]
+        {
+            "**Answer:** Thin client, Avalonia on Android (agent for AND-0001, 2026-11-20, on Philip's behalf; keep or change)",
+            "**Answer:** Tailscale (agent for AND-0002, 2026-11-20, on Philip's behalf; not installed, so only the home network works for now; keep or change)",
+            "**Answer:** ntfy (Philip, 2026-11-20, asked by AND-0006)",
+            "**Answer:** Under `D:\\Android` (agent for AND-0003, 2026-11-20, on Philip's behalf; keep or change)",
+            "**Answer:** `uk.co.philipwilson.darg` (agent for AND-0003, 2026-11-20, on Philip's behalf; the key is left to AND-0009; keep or change)",
+        };
+        var text = "# P\n\n## Questions\n\n" + string.Join("\n", lines.Select((l, i) => $"### Q{i}\n- **a**: x\n\n{l}\n"));
+        var qs = PlanDoc.Parse(text).Questions;
+        Assert.Equal([true, true, false, true, true], qs.Select(q => q.ByAgent));
+        Assert.Equal(["AND-0001", "AND-0002", null, "AND-0003", "AND-0003"], qs.Select(q => q.DecidedCard));
+        Assert.Equal("Tailscale", qs[1].Pick);
+    }
+
+    [Fact]
+    public void A_card_agent_is_given_the_plan_relative_to_its_repo_so_its_worktree_copy_is_the_one_edited()
+    {
+        var repo = Path.Combine(_dir, "repo");
+        Directory.CreateDirectory(Path.Combine(repo, ".git"));
+        var file = Path.Combine(repo, "docs", "design", "android.md");
+        var lines = string.Join("\n", PlanRules.Prompt(file, "AND-0002"));
+        Assert.Contains("docs/design/android.md", lines);
+        Assert.DoesNotContain(repo.Replace('\\', '/'), lines);
+        Assert.Contains("your own checkout", lines);
+    }
+
     [Fact]
     public void A_card_agent_is_given_its_plan_and_the_rule_for_a_choice_the_plan_left_open()
     {
