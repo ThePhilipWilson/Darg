@@ -244,7 +244,7 @@ public class PhoneBoardTests
         var shell = new ShellViewModel(Store(app, client.Connection), _ => client);
         var window = Phone(shell);
         var view = (ShellView)window.Content!;
-        var projects = Assert.IsType<ProjectsViewModel>(shell.Page);
+        var projects = shell.OpenProjects(); // the phone opens to Needs you (AND-0010); projects are a step on
         await DargApp.Wait(() => projects.Projects.Count == 1, "the projects");
         shell.Show(new ProjectPageViewModel(projects.Projects[0], shell));
         var page = (ProjectPageViewModel)shell.Page!;
