@@ -10,6 +10,14 @@ public class GitHubPageTests
 {
     static GitHubViewModel Open(DargApp app) => app.Project.Hub ?? throw new InvalidOperationException("The project has no GitHub page.");
 
+    /// <summary>What fake gh has logged so far. Read sharing writes: a gh call still running (a refresh) can have the log
+    /// open to append, and File.ReadAllText's read-only sharing then fails the test (it did, once, in a busy full run).</summary>
+    static string GhLog(DargApp app)
+    {
+        using var f = new FileStream(Path.Combine(app.Folder, "fake-gh.jsonl"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        return new StreamReader(f).ReadToEnd();
+    }
+
     static void Git(string folder, params string[] args)
     {
         var psi = new System.Diagnostics.ProcessStartInfo("git") { WorkingDirectory = folder, RedirectStandardError = true };
@@ -124,7 +132,7 @@ public class GitHubPageTests
         Assert.Equal("Notifications", hub.Tabs[(int)HubTab.Notifications]);
         await DargApp.Settle();
         Assert.Equal((HubTab.Notifications, "Count the coins right"), (hub.Tab, hub.Detail?.Title)); // the relabelled tabs keep the tab and the pick
-        Assert.Contains("notifications/threads/77", File.ReadAllText(Path.Combine(app.Folder, "fake-gh.jsonl")));
+        Assert.Contains("notifications/threads/77", GhLog(app));
 
         // the rest of the tabs read too
         hub.ShowTab(HubTab.Commits);
@@ -204,7 +212,7 @@ public class GitHubPageTests
         Assert.Equal("Coins vanish on reload", hub.Rows.Single().Title);
         hub.Selected = hub.Rows.Single();
         await app.Until(() => hub.Detail is not null, "the second repo's issue");
-        Assert.Contains("site", File.ReadAllLines(Path.Combine(app.Folder, "fake-gh.jsonl")).Last(l => l.Contains("issue(number")));
+        Assert.Contains("site", GhLog(app).Split('\n').Last(l => l.Contains("issue(number")));
         app.Shot("two-repos");
         Assert.Equal("", app.Crashes());
     }
