@@ -40,6 +40,22 @@ public sealed class MarkdownView : StackPanel
     /// <summary>Set by the app (WOR-0158): open a card's panel by its ID, false when no project has it. Unset,
     /// card links draw as plain links that do nothing.</summary>
     public static Func<string, bool>? OpenCard { get; set; }
+    /// <summary>Set by the app (WOR-0192): open a link to a markdown file (relative to the work in hand, or absolute)
+    /// in the Docs viewer. A view with no LinkClicked handler (transcripts, Fettle) tries it before handing a link
+    /// to the OS. Unset, such links go to the OS as before.</summary>
+    public static Func<string, bool>? OpenDoc { get; set; }
+
+    /// <summary>A link to a markdown file: a path ending in .md or .markdown (fragment and query left off); web, mail,
+    /// card, wiki and other-scheme links aren't. A drive path (D:/x.md) and a file: link are.</summary>
+    public static bool IsDocLink(string link)
+    {
+        link = link.Trim().Trim('<', '>');
+        if (link.StartsWith("wiki:", StringComparison.Ordinal) || CardLinks.IdOf(link) is not null) return false;
+        var colon = link.IndexOf(':');
+        if (colon > 1 && !link.StartsWith("file:", StringComparison.OrdinalIgnoreCase)) return false; // another scheme
+        var path = link.Split('#', '?')[0];
+        return path.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase);
+    }
     /// <summary>Set by the app: whether a prefix (WOR) is one of the instance's boards', so a bare WOR-0158 in the
     /// text is linked to its card. Unset, only card: links are.</summary>
     public static Func<string, bool>? IsCardPrefix { get; set; }
@@ -226,7 +242,7 @@ public sealed class MarkdownView : StackPanel
             if (s.Link is not null)
             {
                 run.Foreground = Link; run.TextDecorations = TextDecorations.Underline;
-                if (LinkClicked is not null || IsWeb(s.Link) || (OpenCard is not null && CardLinks.IdOf(s.Link) is not null))
+                if (LinkClicked is not null || IsWeb(s.Link) || (OpenDoc is not null && IsDocLink(s.Link)) || (OpenCard is not null && CardLinks.IdOf(s.Link) is not null))
                 {
                     // a clickable link: the run inside a small text block that takes the click
                     var target = s.Link;
@@ -271,6 +287,7 @@ public sealed class MarkdownView : StackPanel
     {
         if (CardLinks.IdOf(target) is { } card) { OpenCard?.Invoke(card); return; }
         if (LinkClicked is not null) { LinkClicked(target); return; }
+        if (OpenDoc is not null && IsDocLink(target) && OpenDoc(target)) return;
         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true }); }
         catch (Exception) { }
     }

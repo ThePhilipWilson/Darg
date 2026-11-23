@@ -153,6 +153,46 @@ public partial class MainViewModel : ObservableObject
         return vm;
     }
 
+    /// <summary>A link to a markdown file clicked where nothing else handles links (an agent's transcript, Fettle; WOR-0192):
+    /// it opens in a project's Docs section. A relative path is looked for from the repos and docs folder of the project
+    /// on screen, then the others'; the first that exists wins. A file inside another project's docs opens in that
+    /// project, else in the project on screen as outside its docs folder. A missing file still switches to Docs,
+    /// whose status line says so. False when the link can't be a file path.</summary>
+    public bool OpenDocLink(string link)
+    {
+        link = link.Trim().Trim('<', '>');
+        string path;
+        try
+        {
+            path = link.StartsWith("file:", StringComparison.OrdinalIgnoreCase) ? new Uri(link).LocalPath : Uri.UnescapeDataString(link.Split('#', '?')[0]);
+        }
+        catch (UriFormatException) { return false; }
+        path = path.Replace('\\', '/');
+        var order = Projects.Where(p => p == Selected).Concat(Projects.Where(p => p != Selected)).Where(p => p.Docs is not null).ToList();
+        if (order.Count == 0) return false;
+        string? full = null;
+        if (Path.IsPathRooted(path) && path.Length > 1 && (path[1] == ':' || path[0] == '/')) full = Path.GetFullPath(path);
+        else
+        {
+            foreach (var p in order)
+            {
+                var bases = p.Config.ExistingRepos().Append(p.Docs!.Folder).Append(Path.GetDirectoryName(Path.GetFullPath(p.Docs.Folder)) ?? "");
+                full = bases.Where(b => b.Length > 0).Select(b => Path.GetFullPath(Path.Combine(b, path.TrimStart('/')))).FirstOrDefault(File.Exists);
+                if (full is not null) break;
+            }
+            full ??= Path.GetFullPath(Path.Combine(order[0].Config.ExistingRepos().FirstOrDefault() ?? order[0].Docs!.Folder, path.TrimStart('/')));
+        }
+        Setup = null; ToolsPage = null; SettingsPage = null;
+        // the project whose docs hold it (the deepest folder wins), else the one on screen
+        var owner = order.Select(p => (p, rel: Path.GetRelativePath(Path.GetFullPath(p.Docs!.Folder), full)))
+            .Where(x => x.rel != ".." && !x.rel.StartsWith(".." + Path.DirectorySeparatorChar) && !x.rel.StartsWith("../") && !Path.IsPathRooted(x.rel))
+            .OrderByDescending(x => x.p.Docs!.Folder.Length).Select(x => x.p).FirstOrDefault() ?? order[0];
+        Selected = owner;
+        owner.OpenCommand.Execute(nameof(Section.Docs));
+        owner.Docs!.Show(full);
+        return true;
+    }
+
     /// <summary>A doc link that left a project's docs folder: if another project's docs hold the doc, that
     /// project comes up with it open (the deepest folder wins when one is inside another).</summary>
     bool ShowDocElsewhere(ProjectViewModel from, string full)

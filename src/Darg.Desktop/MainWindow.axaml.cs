@@ -22,6 +22,7 @@ public partial class MainWindow : Window
         DataContext = vm;
         // card links in any transcript or doc open the card (WOR-0158)
         Views.MarkdownView.OpenCard = vm.OpenCardLink;
+        Views.MarkdownView.OpenDoc = vm.OpenDocLink; // md links in transcripts open in Docs (WOR-0192)
         Views.MarkdownView.IsCardPrefix = vm.IsCardPrefix;
         Activated +=(_, _) => vm.WindowActive = true;
         Deactivated += (_, _) => vm.WindowActive = false;
