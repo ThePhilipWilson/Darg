@@ -109,7 +109,9 @@
         <Carousel.ItemTemplate>
           <DataTemplate DataType="vm:PhoneList">
             <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="6,8,6,8">
-              <StackPanel Spacing="8">
+              <!-- room under the last tile for the page's ✦ Fettle button, which sits above the quick-add bar: without it
+                   the last tile's ⇄ is under the button at the end of a long list (AND-0004's QA) -->
+              <StackPanel Spacing="8" Margin="0,0,0,96">
                 <TextBlock Text="Nothing here." Classes="dim" HorizontalAlignment="Center" Margin="0,24" IsVisible="{Binding Empty}"/>
                 <ItemsControl ItemsSource="{Binding Cards}">
                   <ItemsControl.ItemTemplate>

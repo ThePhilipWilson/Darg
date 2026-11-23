@@ -23,7 +23,8 @@
     <DataTemplate DataType="vm:AgentPageViewModel"><views:AgentPageView/></DataTemplate>
   </UserControl.DataTemplates>
 
-  <DockPanel>
+  <!-- Body: lifted above the soft keyboard while it's up (ShellView.FitAbove) -->
+  <DockPanel x:Name="Body">
     <!-- the header: back, the screen's title, the connection screen -->
     <Border DockPanel.Dock="Top" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1"
             Padding="4,0" MinHeight="56">

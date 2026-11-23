@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -169,6 +170,86 @@ public class PhoneBoardTests
         Assert.Null(board.Open);
         Shot(window, app, "held");
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task At_the_end_of_a_long_list_the_last_tiles_move_button_is_clear_of_Fettle()
+    {
+        using var app = DargApp.Make();
+        for (var i = 1; i <= 15; i++) app.Card($"Backlog card {i}");
+        await app.Start();
+        var (window, _, page, board) = await OpenBoard(app);
+        await DargApp.Wait(() => board.Current?.Cards.Count == 15, "the backlog on the phone");
+        await DargApp.Settle();
+
+        // scrolled right to the end, the last tile's ⇄ is where a thumb can reach it, not under the ✦ Fettle button
+        var list = window.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("tile") && b.IsEffectivelyVisible)
+            .FindAncestorOfType<ScrollViewer>()!; // the list's own scroller, not the Carousel's around it
+        list.Offset = new Vector(0, list.Extent.Height);
+        await DargApp.Settle();
+        Assert.True(list.Offset.Y > 0, "the list didn't scroll: too few cards to show the overlap");
+        var move = list.GetVisualDescendants().OfType<Button>().Last(b => b.Classes.Contains("side"));
+        var fab = window.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("fab") && b.IsEffectivelyVisible);
+        Assert.True(page.FettleShows);
+        var moveAt = Box(move, window);
+        var fabAt = Box(fab, window);
+        Shot(window, app, "long-list-end");
+        Assert.False(moveAt.Intersects(fabAt), $"the last tile's ⇄ at {moveAt} is under the Fettle button at {fabAt}");
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task The_quick_add_box_stays_above_the_soft_keyboard()
+    {
+        using var app = DargApp.Make();
+        app.Card("Paint the splash screen");
+        await app.Start();
+        var (window, view, _, board) = await OpenBoard(app);
+        await DargApp.Wait(() => board.Current?.Cards.Count == 1, "the backlog on the phone");
+        // on a phone the TopLevel pads its main view by the status and navigation bars (AutoSafeAreaPadding); the lift
+        // must leave that alone, or the header goes under the clock (it did, on the emulator, with the lift there)
+        var safeArea = new Thickness(0, 24, 0, 16);
+        view.Padding = safeArea;
+        await DargApp.Settle();
+        var box = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "QuickBox");
+        var add = window.GetVisualDescendants().OfType<Button>().Single(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Add card");
+        var before = Box(box, window);
+        Assert.True(before.Bottom > 700, $"the quick-add box starts at the foot of the phone, not at {before}");
+
+        // the keyboard comes up over the bottom 340 px (as Android reports it through the input pane): the box and its
+        // Add button move up to sit just above it, so what's typed shows
+        var keyboard = new Rect(0, 860 - 340, 412, 340);
+        view.FitAbove(keyboard);
+        await DargApp.Settle();
+        Shot(window, app, "keyboard");
+        var up = Box(box, window);
+        Assert.True(up.Bottom <= keyboard.Top, $"the quick-add box at {up} is under the keyboard at {keyboard}");
+        Assert.True(up.Bottom > keyboard.Top - 80, $"the quick-add box at {up} isn't just above the keyboard at {keyboard}");
+        Assert.True(Box(add, window).Bottom <= keyboard.Top, "the Add button is under the keyboard");
+        Assert.Equal(safeArea, view.Padding);
+
+        // and goes back down when it closes
+        view.FitAbove(default);
+        await DargApp.Settle();
+        Assert.Equal(before, Box(box, window));
+        window.Close();
+    }
+
+    static Rect Box(Visual c, Visual to) => new(c.TranslatePoint(default, to)!.Value, c.Bounds.Size);
+
+    /// <summary>The phone's shell on the project's page with the Board section picked.</summary>
+    static async Task<(Window, ShellView, ProjectPageViewModel, BoardSectionViewModel)> OpenBoard(DargApp app)
+    {
+        var client = Client();
+        var shell = new ShellViewModel(Store(app, client.Connection), _ => client);
+        var window = Phone(shell);
+        var view = (ShellView)window.Content!;
+        var projects = Assert.IsType<ProjectsViewModel>(shell.Page);
+        await DargApp.Wait(() => projects.Projects.Count == 1, "the projects");
+        shell.Show(new ProjectPageViewModel(projects.Projects[0], shell));
+        var page = (ProjectPageViewModel)shell.Page!;
+        page.PickCommand.Execute(page.Tabs.Single(t => t.Section.Name == "Board"));
+        return (window, view, page, page.Board!);
     }
 
     static Avalonia.Point Centre(Avalonia.Visual c) =>
