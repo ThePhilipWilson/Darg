@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             xmlns:views="using:Darg.Mobile.Views"
+             x:Class="Darg.Mobile.Views.ReadPageView"
+             x:DataType="vm:ReadPageViewModel"
+             x:Name="Root">
+  <DockPanel>
+    <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" Classes="dim" Margin="16,10,16,0"
+               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+    <Panel>
+    <ScrollViewer>
+      <!-- the bottom margin leaves the last lines clear of the Fettle button -->
+      <StackPanel Margin="16,12,16,96" Spacing="12">
+        <TextBlock Text="{Binding Details}" Classes="dim" TextWrapping="Wrap" IsVisible="{Binding HasDetails}"/>
+        <views:MarkdownView x:Name="Body" Markdown="{Binding Text}"/>
+      </StackPanel>
+    </ScrollViewer>
+    <!-- Fettle (AND-0007) over the page, told which doc is open -->
+    <Button Classes="fab" Content="✦ Fettle" Command="{Binding FettleCommand}" IsVisible="{Binding CanTalkToFettle}"
+            AutomationProperties.Name="Fettle"/>
+    </Panel>
+  </DockPanel>
+</UserControl>

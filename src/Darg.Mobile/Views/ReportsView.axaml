@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             xmlns:views="using:Darg.Mobile.Views"
+             x:Class="Darg.Mobile.Views.ReportsView"
+             x:DataType="vm:ReportsViewModel"
+             x:Name="Root">
+  <DockPanel Margin="16,8,16,0">
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+        <Button DockPanel.Dock="Right" Classes="icon" Content="⟳" Command="{Binding RefreshCommand}" AutomationProperties.Name="Refresh"/>
+        <TextBlock Text="Newest first; ● unread. Reading here leaves them unread on the PC." Classes="dim" VerticalAlignment="Center" TextWrapping="Wrap"/>
+      </DockPanel>
+      <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" Classes="dim" Margin="0,0,0,8"
+                 IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Reports}" Margin="0,0,0,96">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="vm:ReadRow">
+            <Button Classes="row" Command="{Binding #Root.((vm:ReportsViewModel)DataContext).OpenCommand}" CommandParameter="{Binding}"
+                    IsHitTestVisible="{Binding CanOpen}" AutomationProperties.Name="{Binding Title}">
+              <DockPanel>
+                <Border DockPanel.Dock="Right" Classes="badge" IsVisible="{Binding HasBadge}" VerticalAlignment="Top" Margin="8,0,0,0">
+                  <TextBlock Text="{Binding Badge}" Classes="badge"/>
+                </Border>
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Classes.strong="{Binding Strong}"/>
+                  <TextBlock Text="{Binding Detail}" Classes="dim" TextWrapping="Wrap" IsVisible="{Binding HasDetail}"/>
+                </StackPanel>
+              </DockPanel>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

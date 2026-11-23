@@ -98,6 +98,12 @@ public sealed partial class ShellViewModel : ObservableObject
         Show(new ConnectViewModel(this, null));
     }
 
+    /// <summary>A page's title changed after it showed (a doc's real title once it's read): the header follows.</summary>
+    internal void Retitle(PageViewModel page)
+    {
+        if (ReferenceEquals(Page, page)) Title = page.Title;
+    }
+
     [RelayCommand]
     void OpenSettings() => OpenSettingsPage();
 
@@ -284,6 +290,7 @@ public sealed partial class ProjectPageViewModel : PageViewModel
     /// where the desktop says the project has them; Terminal, Code, Preview and the rest stay desktop-only.</summary>
     public static readonly IReadOnlyList<PhoneSection> All =
     [
+        new("Home", "⌂", "AND-0008", "what's going on in this project"),
         new("Board", "▦", "AND-0004", "this project's boards, one list at a time"),
         new("Agents", "◉", "AND-0005", "this project's agents and their transcripts"),
         new("Notes", "✎", "AND-0008", "the notes wall"),
@@ -291,7 +298,7 @@ public sealed partial class ProjectPageViewModel : PageViewModel
         new("Reports", "✓", "AND-0008", "finished agents' reports"),
     ];
 
-    static readonly HashSet<string> Always = ["Agents", "Reports"];
+    static readonly HashSet<string> Always = ["Home", "Agents", "Reports"];
 
     public ProjectInfo Project { get; }
     public IReadOnlyList<SectionTab> Tabs { get; }
@@ -314,6 +321,13 @@ public sealed partial class ProjectPageViewModel : PageViewModel
 
     public bool CanTalkToFettle => _shell?.Client is not null;
 
+    readonly Dictionary<string, ReadSection> _read = [];
+
+    /// <summary>The picked section's own view model where its card has landed (Home, Notes, Docs and Reports:
+    /// AND-0008); null shows the placeholder. Each is made on its first showing and kept, read again with ⟳.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasContent))] object? _content;
+    public bool HasContent => Content is not null;
+
     public ProjectPageViewModel(ProjectInfo project, ShellViewModel? shell = null)
     {
         Project = project;
@@ -322,11 +336,34 @@ public sealed partial class ProjectPageViewModel : PageViewModel
                   .Select(s => new SectionTab(s)).ToList();
         _section = Tabs[0].Section;
         Tabs[0].On = true;
+        _content = ContentFor(_section);
     }
 
     partial void OnSectionChanged(PhoneSection value)
     {
         foreach (var t in Tabs) t.On = t.Section == value;
+        Content = ContentFor(value);
+    }
+
+    object? ContentFor(PhoneSection section)
+    {
+        if (_shell is null) return null;
+        if (!_read.TryGetValue(section.Name, out var read))
+        {
+            read = section.Name switch
+            {
+                "Home" => new HomeViewModel(_shell, Project.Id),
+                "Notes" => new NotesViewModel(_shell, Project.Id),
+                "Docs" => new DocsViewModel(_shell, Project.Id),
+                "Reports" => new ReportsViewModel(_shell, Project.Id),
+                _ => null!,
+            };
+            if (read is null) return null;
+            read.AskFettle = FettleFrom;
+            _read[section.Name] = read;
+        }
+        read.EnsureLoaded();
+        return read;
     }
 
     [RelayCommand]
@@ -335,6 +372,19 @@ public sealed partial class ProjectPageViewModel : PageViewModel
     /// <summary>Opens Fettle full screen (AND-0007); the same chat each time for this page, so it carries on.</summary>
     [RelayCommand]
     public void Fettle()
+    {
+        OpenDoc = null; // from the page itself no doc is open; a doc page's own button sets it (FettleFrom)
+        ShowFettle();
+    }
+
+    /// <summary>Fettle from a doc or report this page opened (AND-0008): told the doc that's open, if it's one.</summary>
+    internal void FettleFrom(ReadPageViewModel page)
+    {
+        OpenDoc = page.DocPath;
+        ShowFettle();
+    }
+
+    void ShowFettle()
     {
         if (_shell?.Client is not { } client) return;
         _fettle ??= FettleChatViewModel.For(client, Project, () => Showing);

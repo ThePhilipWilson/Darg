@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             xmlns:views="using:Darg.Mobile.Views"
+             x:Class="Darg.Mobile.Views.NotesView"
+             x:DataType="vm:NotesViewModel"
+             x:Name="Root">
+  <DockPanel Margin="16,8,16,0">
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+        <Button DockPanel.Dock="Right" Classes="icon" Content="⟳" Command="{Binding RefreshCommand}" AutomationProperties.Name="Refresh"/>
+        <TextBlock Text="The notes wall, a column at a time. Read only." Classes="dim" VerticalAlignment="Center" TextWrapping="Wrap"/>
+      </DockPanel>
+      <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" Classes="dim" Margin="0,0,0,8"
+                 IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Groups}" Margin="0,0,0,96">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="vm:NoteGroup">
+            <StackPanel Margin="0,8,0,4" Spacing="8">
+              <TextBlock Text="{Binding Heading}" Classes="section"/>
+              <ItemsControl ItemsSource="{Binding Notes}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="vm:NoteRow">
+                    <!-- post-it paper keeps its own colours whatever the theme, as on the desktop's wall -->
+                    <Border Background="{Binding Colour, Converter={x:Static views:NotePaper.Brush}}" CornerRadius="4" Padding="14,12" Margin="0,0,0,10">
+                      <StackPanel Spacing="6">
+                        <views:MarkdownView Markdown="{Binding Text}" Ink="#2a2620" BaseSize="16" Spacing="6"/>
+                        <TextBlock Text="{Binding Meta}" Foreground="#5a5348" FontSize="13" TextWrapping="Wrap" IsVisible="{Binding HasMeta}"/>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

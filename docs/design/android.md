@@ -73,6 +73,24 @@ Darg on the phone: a window onto the desktop for answering what waits on Philip,
 
 **Answer:** Both Google's code scanner in the app and a `darg://pair` link the camera app opens (decided by agent, AND-0011, 2026-11-23)
 
+### Which section does a project open to on the phone?
+- **Home** (recommended): the overview the desktop opens a project to, first in the bottom bar.
+- **Board**: the first tab before AND-0008.
+
+**Answer:** Home (decided by agent, AND-0008, 2026-11-23)
+
+### Do pictures in a doc or report load on the phone?
+- **Named, not drawn** (recommended): each shows as a chip with its name; the files are on the PC and the phone's commands serve no files.
+- **Fetched through a new image command**: more to open on the remote port, for pictures that are mostly screenshots for the PC.
+
+**Answer:** Named, not drawn (decided by agent, AND-0008, 2026-11-23)
+
+### Does reading a report on the phone mark it read?
+- **No, it stays unread on the PC** (recommended): the phone is read-only in v1, and the PC's dot is what says it still needs a proper look.
+- **Yes**: the phone writes `read: true` as the desktop does.
+
+**Answer:** No, it stays unread on the PC (decided by agent, AND-0008, 2026-11-23)
+
 ## Design
 A thin remote client: a native Avalonia Android app over the desktop's Darg API, with the PC as the hub. The phone holds no agents, repos or boards of its own and never edits board or note files; it caches what it last saw for reading offline.
 

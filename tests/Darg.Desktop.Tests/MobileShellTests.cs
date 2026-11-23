@@ -45,11 +45,11 @@ public class MobileShellTests
 
         shell.Show(new ProjectPageViewModel(proj));
         var page = Assert.IsType<ProjectPageViewModel>(shell.Page);
-        // the phone's sections the desktop says this project has (it has a board and docs), Agents and Reports always
+        // the phone's sections the desktop says this project has (it has a board and docs), Home, Agents and Reports always
         var tabs = page.Tabs.Select(t => t.Section.Name).ToList();
-        Assert.Equal(["Board", "Agents", "Docs", "Reports"], tabs.Where(n => n != "Notes"));
+        Assert.Equal(["Home", "Board", "Agents", "Docs", "Reports"], tabs.Where(n => n != "Notes"));
         Assert.Equal(proj.Sections.Contains("Notes"), tabs.Contains("Notes"));
-        Assert.Equal("Board", page.Section.Name);
+        Assert.Equal("Home", page.Section.Name);
         Assert.True(shell.CanGoBack);
         page.PickCommand.Execute(page.Tabs.First(t => t.Section.Name == "Agents"));
         Assert.True(page.Tabs.Single(t => t.On).Section.Name == "Agents");

@@ -13,6 +13,11 @@
     <DataTemplate DataType="vm:ProjectsViewModel"><views:ProjectsView/></DataTemplate>
     <DataTemplate DataType="vm:ProjectPageViewModel"><views:ProjectPageView/></DataTemplate>
     <DataTemplate DataType="vm:FettleChatViewModel"><views:FettleChatView/></DataTemplate>
+    <DataTemplate DataType="vm:HomeViewModel"><views:HomeView/></DataTemplate>
+    <DataTemplate DataType="vm:NotesViewModel"><views:NotesView/></DataTemplate>
+    <DataTemplate DataType="vm:DocsViewModel"><views:DocsView/></DataTemplate>
+    <DataTemplate DataType="vm:ReportsViewModel"><views:ReportsView/></DataTemplate>
+    <DataTemplate DataType="vm:ReadPageViewModel"><views:ReadPageView/></DataTemplate>
   </UserControl.DataTemplates>
 
   <DockPanel>

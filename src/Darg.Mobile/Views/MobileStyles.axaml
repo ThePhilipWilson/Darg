@@ -16,6 +16,24 @@
     <Setter Property="FontSize" Value="20"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
   </Style>
+  <Style Selector="TextBlock.section">
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+    <Setter Property="Margin" Value="2,4,0,6"/>
+  </Style>
+  <Style Selector="TextBlock.strong">
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+  <Style Selector="Border.badge">
+    <Setter Property="Background" Value="{DynamicResource LabelBg}"/>
+    <Setter Property="CornerRadius" Value="8"/>
+    <Setter Property="Padding" Value="8,2"/>
+  </Style>
+  <Style Selector="TextBlock.badge">
+    <Setter Property="Foreground" Value="{DynamicResource LabelInk}"/>
+    <Setter Property="FontSize" Value="13"/>
+  </Style>
   <Style Selector="TextBox">
     <Setter Property="MinHeight" Value="48"/>
     <Setter Property="FontSize" Value="16"/>

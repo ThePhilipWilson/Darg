@@ -34,7 +34,10 @@ public class MobileFettleTests
         await connecting;
         var projects = Assert.IsType<ProjectsViewModel>(shell.Page);
         projects.OpenCommand.Execute(projects.Projects.Single());
-        return (shell, Assert.IsType<ProjectPageViewModel>(shell.Page), window);
+        var page = Assert.IsType<ProjectPageViewModel>(shell.Page);
+        // a project opens to Home (AND-0008); these tests talk to Fettle from the Board
+        page.PickCommand.Execute(page.Tabs.Single(t => t.Section.Name == "Board"));
+        return (shell, page, window);
     }
 
     [AvaloniaFact]

@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             xmlns:views="using:Darg.Mobile.Views"
+             x:Class="Darg.Mobile.Views.DocsView"
+             x:DataType="vm:DocsViewModel"
+             x:Name="Root">
+  <DockPanel Margin="16,8,16,0">
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+        <Button DockPanel.Dock="Right" Classes="icon" Content="⟳" Command="{Binding RefreshCommand}" AutomationProperties.Name="Refresh"/>
+        <TextBlock Text="The docs folder: tap a folder to open it, a doc to read it." Classes="dim" VerticalAlignment="Center" TextWrapping="Wrap"/>
+      </DockPanel>
+      <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" Classes="dim" Margin="0,0,0,8"
+                 IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Visible}" Margin="0,0,0,96">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="vm:DocEntry">
+            <Button Classes="row" Command="{Binding #Root.((vm:DocsViewModel)DataContext).OpenCommand}" CommandParameter="{Binding}"
+                    Margin="{Binding Indent}" AutomationProperties.Name="{Binding Name}">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Text="{Binding Glyph}" Classes="dim" Width="24" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding Name}" TextWrapping="Wrap" Classes.strong="{Binding IsFolder}" VerticalAlignment="Center"/>
+              </DockPanel>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>
