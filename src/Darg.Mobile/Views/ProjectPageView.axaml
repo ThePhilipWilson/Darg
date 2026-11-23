@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Darg.Mobile.ViewModels"
+             xmlns:views="using:Darg.Mobile.Views"
              x:Class="Darg.Mobile.Views.ProjectPageView"
              x:DataType="vm:ProjectPageViewModel"
              x:Name="Root">
@@ -25,15 +26,20 @@
       </ItemsControl>
     </Border>
     <Panel>
-    <ContentControl Content="{Binding Content}" IsVisible="{Binding HasContent}"/>
-    <StackPanel Margin="20" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding !HasContent}">
-      <TextBlock Text="{Binding Section.Glyph}" FontSize="40" HorizontalAlignment="Center"/>
-      <TextBlock Text="{Binding Section.Name}" Classes="title" HorizontalAlignment="Center"/>
-      <TextBlock Text="{Binding Placeholder}" Classes="dim" TextWrapping="Wrap" TextAlignment="Center"/>
-    </StackPanel>
-    <!-- Fettle (AND-0007), over whatever section shows, bottom right where a thumb reaches -->
-    <Button Classes="fab" Content="✦ Fettle" Command="{Binding FettleCommand}" IsVisible="{Binding CanTalkToFettle}"
-            AutomationProperties.Name="Fettle"/>
+      <!-- Home, Notes, Docs and Reports (AND-0008) -->
+      <ContentControl Content="{Binding Content}" IsVisible="{Binding HasContent}"/>
+      <!-- the Board section (AND-0004) -->
+      <views:BoardSectionView DataContext="{Binding Board}" IsVisible="{Binding #Root.((vm:ProjectPageViewModel)DataContext).ShowsBoard}"/>
+      <!-- the sections whose cards haven't landed yet -->
+      <StackPanel Margin="20" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding ShowsPlaceholder}">
+        <TextBlock Text="{Binding Section.Glyph}" FontSize="40" HorizontalAlignment="Center"/>
+        <TextBlock Text="{Binding Section.Name}" Classes="title" HorizontalAlignment="Center"/>
+        <TextBlock Text="{Binding Placeholder}" Classes="dim" TextWrapping="Wrap" TextAlignment="Center"/>
+      </StackPanel>
+      <!-- Fettle (AND-0007), over whatever section shows, bottom right where a thumb reaches; on the board it sits above
+           the quick-add bar and steps aside while the move sheet is up -->
+      <Button Classes="fab" Classes.raised="{Binding ShowsBoard}" Content="✦ Fettle" Command="{Binding FettleCommand}" IsVisible="{Binding FettleShows}"
+              AutomationProperties.Name="Fettle"/>
     </Panel>
   </DockPanel>
 </UserControl>

@@ -91,6 +91,13 @@ Darg on the phone: a window onto the desktop for answering what waits on Philip,
 
 **Answer:** No, it stays unread on the PC (decided by agent, AND-0008, 2026-11-23)
 
+### How does the phone's board lay out its lists and move a card?
+- **One list at a time, swiped, with a move sheet** (recommended): each list fills the screen, a strip of names with counts picks one, and ⇄ or a long press on a card puts up its board's other lists as big buttons.
+- **Long-press drag between lists**: with one list on screen there is nowhere to drop, so the swipe would have to turn mid-drag.
+- **Every list stacked down one page**: one long scroll that buries everything after the backlog.
+
+**Answer:** One list at a time, swiped, with a move sheet (decided by agent, AND-0004, 2026-11-23)
+
 ## Design
 A thin remote client: a native Avalonia Android app over the desktop's Darg API, with the PC as the hub. The phone holds no agents, repos or boards of its own and never edits board or note files; it caches what it last saw for reading offline.
 

@@ -8,6 +8,9 @@ namespace Darg.Mobile.ViewModels;
 public abstract partial class PageViewModel : ObservableObject
 {
     public abstract string Title { get; }
+
+    /// <summary>Android's back on this page: true when the page dealt with it itself (closed something open on it).</summary>
+    public virtual bool HandleBack() => false;
 }
 
 /// <summary>The phone app's root (AND-0003): a stack of screens with a back step, starting at the project list when
@@ -68,6 +71,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
     public bool Back()
     {
+        if (Page?.HandleBack() == true) return true;
         if (_stack.Count <= 1) return false;
         _stack.Pop();
         Sync();
@@ -325,23 +329,53 @@ public sealed partial class ProjectPageViewModel : PageViewModel
 
     /// <summary>The picked section's own view model where its card has landed (Home, Notes, Docs and Reports:
     /// AND-0008); null shows the placeholder. Each is made on its first showing and kept, read again with ⟳.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasContent))] object? _content;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasContent))] [NotifyPropertyChangedFor(nameof(ShowsPlaceholder))] object? _content;
     public bool HasContent => Content is not null;
+
+    /// <summary>The placeholder shows for a section whose card has not landed: no content and not the board.</summary>
+    public bool ShowsPlaceholder => !HasContent && !ShowsBoard;
+
+    /// <summary>Fettle's button shows when connected, but not over the board's move sheet, whose buttons it would cover.</summary>
+    public bool FettleShows => CanTalkToFettle && !(ShowsBoard && Board!.SheetUp);
+
+    /// <summary>The Board section (AND-0004), when the project has a board and the phone is connected.</summary>
+    public BoardSectionViewModel? Board { get; }
+
+    /// <summary>Whether the board is what shows above the bar (else the section's placeholder).</summary>
+    public bool ShowsBoard => Section.Name == "Board" && Board is not null;
 
     public ProjectPageViewModel(ProjectInfo project, ShellViewModel? shell = null)
     {
         Project = project;
         _shell = shell;
+        if (shell?.Client is { } client && project.Sections.Contains("Board", StringComparer.OrdinalIgnoreCase))
+        {
+            Board = new BoardSectionViewModel((command, args) => client.Call(command, args), project.Id);
+            // the card open on the board is the one Fettle is told this page shows
+            Board.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(BoardSectionViewModel.Open) && ShowsBoard) OpenCard = Board.Open?.Card.Id;
+                if (e.PropertyName == nameof(BoardSectionViewModel.SheetUp)) OnPropertyChanged(nameof(FettleShows));
+            };
+        }
         Tabs = All.Where(s => Always.Contains(s.Name) || project.Sections.Contains(s.Name, StringComparer.OrdinalIgnoreCase))
                   .Select(s => new SectionTab(s)).ToList();
         _section = Tabs[0].Section;
         Tabs[0].On = true;
         _content = ContentFor(_section);
+        if (ShowsBoard) _ = Board!.Refresh();
     }
+
+    public override bool HandleBack() => ShowsBoard && Board!.HandleBack();
 
     partial void OnSectionChanged(PhoneSection value)
     {
         foreach (var t in Tabs) t.On = t.Section == value;
+        OnPropertyChanged(nameof(ShowsBoard));
+        OnPropertyChanged(nameof(FettleShows));
+        OnPropertyChanged(nameof(ShowsPlaceholder));
+        if (Board is not null) OpenCard = ShowsBoard ? Board.Open?.Card.Id : null; // a card left open on the board isn't what another section shows
+        if (ShowsBoard) _ = Board!.Refresh(); // each visit reads it again: the PC may have moved cards meanwhile
         Content = ContentFor(value);
     }
 

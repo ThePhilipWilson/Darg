@@ -95,4 +95,8 @@
     <Setter Property="VerticalAlignment" Value="Bottom"/>
     <Setter Property="Margin" Value="16"/>
   </Style>
+  <!-- over the Board section, clear of its quick-add bar (AND-0004) -->
+  <Style Selector="Button.fab.raised">
+    <Setter Property="Margin" Value="16,16,16,92"/>
+  </Style>
 </Styles>

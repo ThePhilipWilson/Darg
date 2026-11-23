@@ -1,0 +1,202 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             x:Class="Darg.Mobile.Views.BoardSectionView"
+             x:DataType="vm:BoardSectionViewModel"
+             x:Name="Root">
+  <!-- AND-0004: a board on a phone held upright. One list at a time, swiped sideways (the next list peeks in at the
+       edge to say so) or picked from the strip of names; a tap opens a card, ⇄ or a long press moves it, and the
+       box at the foot adds a card to the list showing. -->
+  <UserControl.Styles>
+    <Style Selector="Button.strip">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Padding" Value="14,6"/>
+      <Setter Property="BorderThickness" Value="0,0,0,3"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.strip.on">
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+    </Style>
+    <Style Selector="Button.strip.on TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.tile">
+      <Setter Property="Background" Value="{DynamicResource Panel2}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+      <Setter Property="BorderThickness" Value="1,1,0,1"/>
+      <Setter Property="CornerRadius" Value="10,0,0,10"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Padding" Value="14,10"/>
+      <Setter Property="MinHeight" Value="64"/>
+    </Style>
+    <!-- a long press also works with a mouse (the emulator's pointer, the headless tests); hold starts from whatever
+         part of the tile is under the pointer, so every part of it allows it -->
+    <Style Selector="Button.tile, Button.tile :is(InputElement)">
+      <Setter Property="InputElement.IsHoldWithMouseEnabled" Value="True"/>
+    </Style>
+    <Style Selector="Button.side">
+      <Setter Property="Background" Value="{DynamicResource Panel2}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="0,10,10,0"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="MinWidth" Value="52"/>
+      <Setter Property="FontSize" Value="20"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.target">
+      <Setter Property="Background" Value="{DynamicResource Panel2}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="MinHeight" Value="52"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="0,0,0,6"/>
+    </Style>
+    <!-- the ticket-quality star as the desktop colours it: red at 0 or 1, amber at 2, green at 3 -->
+    <Style Selector="TextBlock.star"><Setter Property="Foreground" Value="{DynamicResource Bad}"/></Style>
+    <Style Selector="TextBlock.star.fair"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
+    <Style Selector="TextBlock.star.good"><Setter Property="Foreground" Value="{DynamicResource Ok}"/></Style>
+  </UserControl.Styles>
+
+  <Grid>
+    <DockPanel>
+      <!-- board picker, when there's more than one board (a project's stories) -->
+      <DockPanel DockPanel.Dock="Top" Margin="8,6,8,0" IsVisible="{Binding HasBoards}">
+        <Button DockPanel.Dock="Right" Classes="icon" Content="⟳" Command="{Binding RefreshCommand}" AutomationProperties.Name="Refresh board"/>
+        <ComboBox ItemsSource="{Binding Boards}" SelectedItem="{Binding Board}" HorizontalAlignment="Stretch" MinHeight="48"
+                  AutomationProperties.Name="Board"/>
+      </DockPanel>
+
+      <!-- the lists by name with their counts; the one showing is underlined -->
+      <ScrollViewer x:Name="Strip" DockPanel.Dock="Top" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                    BorderBrush="{DynamicResource Line}">
+        <ItemsControl x:Name="StripItems" ItemsSource="{Binding Lists}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="vm:PhoneList">
+              <Button Classes="strip" Classes.on="{Binding On}" Command="{Binding #Root.((vm:BoardSectionViewModel)DataContext).ShowListCommand}"
+                      CommandParameter="{Binding}" AutomationProperties.Name="{Binding Label}">
+                <TextBlock Text="{Binding Label}" FontSize="15"/>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <!-- quick-add: a card at the end of the list showing -->
+      <Border DockPanel.Dock="Bottom" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="8">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{Binding Status}" Classes="dim" Classes.bad="{Binding Bad}" TextWrapping="Wrap" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Classes="primary" Content="Add" Margin="6,0,0,0" Command="{Binding QuickAddCommand}" AutomationProperties.Name="Add card"/>
+            <TextBox x:Name="QuickBox" Text="{Binding QuickTitle}" PlaceholderText="{Binding Current.Name, StringFormat='Add a card to {0}…', FallbackValue='Add a card…'}"
+                     AutomationProperties.Name="New card title"/>
+          </DockPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- the lists, a page each, swiped between -->
+      <Carousel x:Name="Pages" ItemsSource="{Binding Lists}" SelectedIndex="{Binding ListIndex}" IsSwipeEnabled="True" ViewportFraction="0.92">
+        <Carousel.ItemTemplate>
+          <DataTemplate DataType="vm:PhoneList">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled" Padding="6,8,6,8">
+              <StackPanel Spacing="8">
+                <TextBlock Text="Nothing here." Classes="dim" HorizontalAlignment="Center" Margin="0,24" IsVisible="{Binding Empty}"/>
+                <ItemsControl ItemsSource="{Binding Cards}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:PhoneCard">
+                      <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                        <Button Classes="tile" Command="{Binding #Root.((vm:BoardSectionViewModel)DataContext).OpenCardCommand}" CommandParameter="{Binding}"
+                                AutomationProperties.Name="{Binding Title}">
+                          <StackPanel Spacing="3">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <TextBlock Text="{Binding Id}" Classes="dim" FontSize="13"/>
+                              <TextBlock Text="{Binding Star}" FontSize="13" Classes="star" Classes.fair="{Binding IsFair}" Classes.good="{Binding IsGood}"/>
+                              <Border Background="{DynamicResource BugBg}" CornerRadius="4" Padding="5,0" IsVisible="{Binding IsBug}">
+                                <TextBlock Text="bug" FontSize="12" Foreground="{DynamicResource BugInk}"/>
+                              </Border>
+                              <TextBlock Text="{Binding Agent, StringFormat='◉ {0}'}" FontSize="13" Foreground="{DynamicResource Accent}" IsVisible="{Binding HasAgent}"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="16"/>
+                            <TextBlock Text="{Binding Labels}" Classes="dim" FontSize="13" TextWrapping="Wrap" IsVisible="{Binding HasLabels}"/>
+                            <TextBlock Text="{Binding Blockers, StringFormat='⛔ {0}'}" FontSize="13" Foreground="{DynamicResource Warn}" TextWrapping="Wrap"
+                                       IsVisible="{Binding HasBlockers}"/>
+                          </StackPanel>
+                        </Button>
+                        <Button Grid.Column="1" Classes="side" Content="⇄" Command="{Binding #Root.((vm:BoardSectionViewModel)DataContext).StartMoveCommand}"
+                                CommandParameter="{Binding}" AutomationProperties.Name="{Binding Id, StringFormat='Move {0}'}"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </ScrollViewer>
+          </DataTemplate>
+        </Carousel.ItemTemplate>
+      </Carousel>
+    </DockPanel>
+
+    <!-- a card open to read, over the board -->
+    <Border Background="{DynamicResource Bg}" IsVisible="{Binding Open, Converter={x:Static ObjectConverters.IsNotNull}}">
+      <DockPanel DataContext="{Binding Open}" x:DataType="vm:PhoneCardDetail">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="4">
+          <DockPanel>
+            <Button DockPanel.Dock="Left" Classes="icon" Content="✕" Command="{Binding #Root.((vm:BoardSectionViewModel)DataContext).CloseCardCommand}"
+                    AutomationProperties.Name="Close card"/>
+            <Button DockPanel.Dock="Right" Classes="primary" Content="Move…" Margin="0,0,4,0" VerticalContentAlignment="Center"
+                    Command="{Binding #Root.((vm:BoardSectionViewModel)DataContext).StartMoveCommand}" CommandParameter="{Binding Card}"
+                    AutomationProperties.Name="Move card"/>
+            <TextBlock Text="{Binding Card.Id}" Classes="dim" VerticalAlignment="Center" Margin="8,0"/>
+          </DockPanel>
+        </Border>
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="16,12" Spacing="10">
+            <SelectableTextBlock Text="{Binding Card.Title}" Classes="title" TextWrapping="Wrap" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
+            <TextBlock Classes="dim" TextWrapping="Wrap">
+              <Run Text="{Binding Column}"/><Run Text=" · "/><Run Text="{Binding Card.Meta}"/>
+            </TextBlock>
+            <Border Background="{DynamicResource AccentWash}" BorderBrush="{DynamicResource Accent}" BorderThickness="1" CornerRadius="8" Padding="12,8"
+                    IsVisible="{Binding HasDecision}">
+              <SelectableTextBlock Text="{Binding Decision}" TextWrapping="Wrap" Foreground="{DynamicResource Ink}"/>
+            </Border>
+            <SelectableTextBlock Text="{Binding Body}" TextWrapping="Wrap" FontSize="16" LineHeight="23" Foreground="{DynamicResource Ink}"/>
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+
+    <!-- the move sheet: every other list of the board, thumb-sized -->
+    <Grid IsVisible="{Binding SheetUp}" RowDefinitions="*,Auto">
+      <Border Grid.RowSpan="2" Background="#99000000" PointerPressed="Scrim_PointerPressed"/>
+      <Border Grid.Row="1" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0"
+              CornerRadius="16,16,0,0" Padding="16,12,16,16">
+        <StackPanel Spacing="6">
+          <TextBlock Text="{Binding Moving.Id, StringFormat='Move {0} to…'}" Classes="title"/>
+          <TextBlock Text="{Binding Moving.Title}" Classes="dim" TextWrapping="Wrap" Margin="0,0,0,6"/>
+          <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding MoveTargets}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:PhoneList">
+                  <Button Classes="target" Command="{Binding #Root.((vm:BoardSectionViewModel)DataContext).MoveToCommand}" CommandParameter="{Binding}"
+                          AutomationProperties.Name="{Binding Name, StringFormat='To {0}'}">
+                    <TextBlock Text="{Binding Label}"/>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+          <Button Content="Cancel" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Command="{Binding CancelMoveCommand}"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>
