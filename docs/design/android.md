@@ -98,6 +98,13 @@ Darg on the phone: a window onto the desktop for answering what waits on Philip,
 
 **Answer:** One list at a time, swiped, with a move sheet (decided by agent, AND-0004, 2026-11-23)
 
+### How does an open transcript on the phone stay current?
+- **Poll the `agent` command with `since`** (recommended): every 2 s while on screen, only entries from the first one that can still change; nothing new to keep open on the PC.
+- **A stream (server-sent events or a websocket)**: instant, but a new long-lived connection kind for both servers and the phone's TLS pinning.
+- **Re-read the whole transcript each poll**: simplest, too heavy for long transcripts on mobile data.
+
+**Answer:** Poll the `agent` command with `since` (decided by agent, AND-0005, 2026-11-23)
+
 ## Design
 A thin remote client: a native Avalonia Android app over the desktop's Darg API, with the PC as the hub. The phone holds no agents, repos or boards of its own and never edits board or note files; it caches what it last saw for reading offline.
 
