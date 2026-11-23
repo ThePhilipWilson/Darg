@@ -90,16 +90,6 @@
         </DockPanel>
         <Button DockPanel.Dock="Left" Content="+ Board" Command="{Binding NewBoardCommand}" Margin="0,0,12,0"
                 ToolTip.Tip="Make a new board, or have an agent sort the cards into a board per story"/>
-        <ItemsControl DockPanel.Dock="Left" x:Name="BoardTabs" ItemsSource="{Binding Tabs}" Margin="0,0,12,0">
-          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:BoardTab">
-              <Button Classes="chip boardtab" Classes.all="{Binding IsShown}" Content="{Binding Name}" Command="{Binding PickCommand}"
-                      Margin="0" Padding="12,4" FontSize="13" AutomationProperties.Name="{Binding Name}"
-                      ToolTip.Tip="Click: show only this board. Ctrl+click: add it to the boards showing, or take it off."/>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
         <Button DockPanel.Dock="Right" Classes="primary" Content="+ Card" Command="{Binding NewCardCommand}" Margin="12,0,0,0"/>
         <CheckBox DockPanel.Dock="Right" Content="Show completed" IsChecked="{Binding ShowCompleted}" Margin="12,0,0,0"/>
         <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding CountText}" VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
@@ -113,6 +103,18 @@
           <Button Content="Pick all" Command="{Binding PickAllCommand}"
                   ToolTip.Tip="Pick every card showing (Ctrl+A). A column's own Pick all picks just that column; Ctrl- or Shift-click picks one at a time."/>
         </StackPanel>
+        <views:OverflowRow DockPanel.Dock="Left" x:Name="BoardTabRow" Reserve="200" Margin="0,0,12,0">
+        <ItemsControl x:Name="BoardTabs" ItemsSource="{Binding Tabs}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><views:OverflowTabsPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:BoardTab">
+              <Button Classes="chip boardtab" Classes.all="{Binding IsShown}" Content="{Binding Name}" Command="{Binding PickCommand}"
+                      Margin="0" Padding="12,4" FontSize="13" AutomationProperties.Name="{Binding Name}"
+                      ToolTip.Tip="Click: show only this board. Ctrl+click: add it to the boards showing, or take it off."/>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        </views:OverflowRow>
         <TextBox Text="{Binding Filter}" PlaceholderText="Filter by ID, title or description…" MaxWidth="460" HorizontalAlignment="Left" MinWidth="60"/>
       </DockPanel>
     </Border>
