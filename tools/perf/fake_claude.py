@@ -10,6 +10,8 @@ FAKE_LOG      a file: each start (its args and folder), each message it is sent 
 A message can steer the turn (AND-0007), for tests of what Fettle does:
 FAKE_ASK      asks an AskUserQuestion ("Which board?": Main or Elsewhere) before the work, waits for the answer and
               logs it as "answered"
+FAKE_PERMIT   asks to use Bash ("echo fake") before the work, waits for Allow or Deny and logs it as "permitted"
+              (AND-0010)
 FAKE_CARD <project>: <title>   calls the Darg API's new-card ($DARG_API) as Fettle does, and replies with its link
 FAKE_SPAWN <file>  leaves a process running as agents leave an emulator (WOR-0170): pwsh's Start-Process starts a
               hidden Windows PowerShell sleeping 10 minutes and exits, so nothing alive has it as a child; its id goes in
@@ -102,6 +104,17 @@ def ask(n, image=None):
     log("answered", response=answer)
     return answer
 
+def permit(n):
+    rid = "perm-%d-%d" % (os.getpid(), n)
+    slot = [threading.Event(), None]
+    waiting[rid] = slot
+    emit({"type": "control_request", "request_id": rid, "request": {"subtype": "can_use_tool", "tool_name": "Bash",
+          "input": {"command": "echo fake", "description": "Say fake"}, "tool_use_id": "tp%d" % n}})
+    slot[0].wait()
+    answer = slot[1] or {}
+    log("permitted", response=answer)
+    return answer
+
 def new_card(project, title):
     import urllib.request
     body = json.dumps({"project": project, "title": title}).encode("utf-8")
@@ -155,6 +168,10 @@ def work(text):
         answer = ask(asks, img.group(1) if img else None)
         picked = next(iter(((answer.get("updatedInput") or {}).get("answers") or {}).values()), "nothing")
         emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Picked: " + picked}]}})
+    if "FAKE_PERMIT" in text:
+        asks += 1
+        answer = permit(asks)
+        emit({"type": "assistant", "message": {"content": [{"type": "text", "text": "Bash: " + str(answer.get("behavior"))}]}})
     made = re.search(r"FAKE_CARD (\S+): (.+)", text)
     if made:
         try:

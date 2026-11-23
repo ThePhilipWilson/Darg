@@ -105,6 +105,12 @@ Darg on the phone: a window onto the desktop for answering what waits on Philip,
 
 **Answer:** Poll the `agent` command with `since` (decided by agent, AND-0005, 2026-11-23)
 
+### Do Fettle's own questions show on Needs you, beside agents' asks and card decisions?
+- **No, only project agents' asks and card decisions** (recommended): Fettle's phone chat (AND-0007) shows and answers its own questions where the conversation is; on the desktop he is at the PC.
+- **Yes, every Fettle chat's too**: one place for everything, but a question would show twice while the phone's Fettle chat is open.
+
+**Answer:** No, only project agents' asks and card decisions (decided by agent, AND-0010, 2026-11-23)
+
 ## Design
 A thin remote client: a native Avalonia Android app over the desktop's Darg API, with the PC as the hub. The phone holds no agents, repos or boards of its own and never edits board or note files; it caches what it last saw for reading offline.
 

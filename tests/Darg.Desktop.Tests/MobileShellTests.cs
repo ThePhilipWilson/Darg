@@ -10,7 +10,7 @@ using Darg.Mobile.Views;
 namespace Darg.Desktop.Tests;
 
 /// <summary>AND-0003: the phone app's shell, run headless against the real desktop app's API over HTTP, as the
-/// phone reaches it through adb reverse: connect, list the projects, open one, go back.</summary>
+/// phone reaches it through adb reverse: connect, Needs you (AND-0010), list the projects, open one, go back.</summary>
 public class MobileShellTests
 {
     [AvaloniaFact]
@@ -35,13 +35,20 @@ public class MobileShellTests
         var connecting = connect.Connect();
         await DargApp.Wait(() => connecting.IsCompleted, "the phone to connect");
         await connecting;
+        // connected, the first screen is Needs you (AND-0010); the projects are a step on, listed at once from the connect
+        var needs = Assert.IsType<NeedsYouViewModel>(shell.Page);
+        Assert.False(shell.CanGoBack);
+        await DargApp.Wait(() => needs.Empty, "Needs you to read that nothing waits");
+        await DargApp.Settle();
+        Shot(window, app, "2-needs-you");
+        needs.OpenProjectsCommand.Execute(null);
         var projects = Assert.IsType<ProjectsViewModel>(shell.Page);
         var proj = Assert.Single(projects.Projects);
         Assert.Equal("Proj", proj.Name);
         Assert.Equal("proj", proj.Id);
         Assert.Equal(store.Load(), new Connection(connect.Address, connect.Token));
         await DargApp.Settle();
-        Shot(window, app, "2-projects");
+        Shot(window, app, "3-projects");
 
         shell.Show(new ProjectPageViewModel(proj));
         var page = Assert.IsType<ProjectPageViewModel>(shell.Page);
@@ -54,16 +61,20 @@ public class MobileShellTests
         page.PickCommand.Execute(page.Tabs.First(t => t.Section.Name == "Agents"));
         Assert.True(page.Tabs.Single(t => t.On).Section.Name == "Agents");
         await DargApp.Settle();
-        Shot(window, app, "3-project");
+        Shot(window, app, "4-project");
 
         Assert.True(shell.Back());
         Assert.IsType<ProjectsViewModel>(shell.Page);
+        Assert.True(shell.Back());
+        Assert.IsType<NeedsYouViewModel>(shell.Page);
         Assert.False(shell.Back()); // the first screen: Android's back leaves the app
 
-        // opened again, the saved connection goes straight to the projects
+        // opened again, the saved connection goes straight to Needs you, which reads the desktop
         var again = new ShellViewModel(store);
-        var list = Assert.IsType<ProjectsViewModel>(again.Page);
-        await DargApp.Wait(() => list.Projects.Count == 1, "the saved connection to list the projects");
+        var first = Assert.IsType<NeedsYouViewModel>(again.Page);
+        await first.Refresh();
+        Assert.True(first.Empty);
+        Assert.False(first.Bad, first.Status);
         window.Close();
         Assert.Equal("", app.Crashes());
     }

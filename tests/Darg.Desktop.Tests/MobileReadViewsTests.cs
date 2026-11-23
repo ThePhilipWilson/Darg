@@ -39,7 +39,7 @@ public class MobileReadViewsTests
         store.Save(new Connection(parsed.Address, parsed.Token!));
         var shell = new ShellViewModel(store);
         var window = Phone(shell);
-        var projects = Assert.IsType<ProjectsViewModel>(shell.Page);
+        var projects = shell.OpenProjects();
         await DargApp.Wait(() => projects.Projects.Count == 1, "the project list");
         projects.OpenCommand.Execute(projects.Projects[0]);
         var page = Assert.IsType<ProjectPageViewModel>(shell.Page);

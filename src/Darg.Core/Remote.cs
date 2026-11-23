@@ -41,6 +41,7 @@ public static class RemoteAccess
         "fettle-say", "fettle", "fettle-answer", "fettle-chats", // AND-0007's Fettle from the phone
         "say", "decide", "send-back", "new-card", "work-on", "close-agents",
         "plan", // WOR-0176: start a planner from a sentence
+        "needs-you", "answer", // AND-0010's Needs you screen
     };
 
     /// <summary>A device token: 32 random bytes, URL-safe base64.</summary>

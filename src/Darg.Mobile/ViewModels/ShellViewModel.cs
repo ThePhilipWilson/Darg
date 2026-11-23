@@ -13,8 +13,8 @@ public abstract partial class PageViewModel : ObservableObject
     public virtual bool HandleBack() => false;
 }
 
-/// <summary>The phone app's root (AND-0003): a stack of screens with a back step, starting at the project list when
-/// a connection is saved and at the connection screen when not. Android's back button calls <see cref="Back"/>.</summary>
+/// <summary>The phone app's root (AND-0003): a stack of screens with a back step, starting at Needs you (AND-0010; the
+/// projects are a step on from it) when a connection is saved and at the connection screen when not. Android's back button calls <see cref="Back"/>.</summary>
 public sealed partial class ShellViewModel : ObservableObject
 {
     readonly Stack<PageViewModel> _stack = new();
@@ -38,23 +38,20 @@ public sealed partial class ShellViewModel : ObservableObject
         if (saved is { IsComplete: true })
         {
             Client = _clientFor(saved);
-            var projects = new ProjectsViewModel(this);
-            Show(projects);
-            _ = projects.Refresh();
+            Show(new NeedsYouViewModel(this)); // its view reads the desktop as it comes on screen
         }
         else Show(new ConnectViewModel(this, saved));
     }
 
-    /// <summary>Saves a connection that has just answered and goes to its projects (the list it fetched, so no second call).</summary>
+    /// <summary>Saves a connection that has just answered and goes to the first screen, Needs you (AND-0010), with the
+    /// projects a step on from it (the list it fetched shows there at once).</summary>
     internal void Connected(Connection c, DargClient client, IReadOnlyList<ProjectInfo> projects)
     {
         Store.Save(c);
         if (!ReferenceEquals(Client, client)) Client?.Dispose();
         Client = client;
         _stack.Clear();
-        var page = new ProjectsViewModel(this);
-        page.Fill(projects);
-        Show(page);
+        Show(new NeedsYouViewModel(this, projects));
     }
 
     internal DargClient ClientFor(Connection c) => _clientFor(c);

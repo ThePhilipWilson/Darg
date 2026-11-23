@@ -11,6 +11,7 @@
   <UserControl.DataTemplates>
     <DataTemplate DataType="vm:ConnectViewModel"><views:ConnectView/></DataTemplate>
     <DataTemplate DataType="vm:ProjectsViewModel"><views:ProjectsView/></DataTemplate>
+    <DataTemplate DataType="vm:NeedsYouViewModel"><views:NeedsYouView/></DataTemplate>
     <DataTemplate DataType="vm:ProjectPageViewModel"><views:ProjectPageView/></DataTemplate>
     <DataTemplate DataType="vm:FettleChatViewModel"><views:FettleChatView/></DataTemplate>
     <DataTemplate DataType="vm:HomeViewModel"><views:HomeView/></DataTemplate>

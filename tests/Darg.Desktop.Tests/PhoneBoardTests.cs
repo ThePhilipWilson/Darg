@@ -29,7 +29,7 @@ public class PhoneBoardTests
         using var client = Client();
         var shell = new ShellViewModel(Store(app, client.Connection), _ => client);
         var window = Phone(shell);
-        var project = Assert.IsType<ProjectsViewModel>(shell.Page);
+        var project = shell.OpenProjects();
         await DargApp.Wait(() => project.Projects.Count == 1, "the projects");
         shell.Show(new ProjectPageViewModel(project.Projects[0], shell));
         var page = Assert.IsType<ProjectPageViewModel>(shell.Page);
@@ -137,7 +137,7 @@ public class PhoneBoardTests
         using var client = Client();
         var shell = new ShellViewModel(Store(app, client.Connection), _ => client);
         var window = Phone(shell);
-        var projects = Assert.IsType<ProjectsViewModel>(shell.Page);
+        var projects = shell.OpenProjects();
         await DargApp.Wait(() => projects.Projects.Count == 1, "the projects");
         shell.Show(new ProjectPageViewModel(projects.Projects[0], shell));
         var page = (ProjectPageViewModel)shell.Page!;

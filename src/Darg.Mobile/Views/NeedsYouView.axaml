@@ -1,0 +1,124 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             x:Class="Darg.Mobile.Views.NeedsYouView"
+             x:DataType="vm:NeedsYouViewModel">
+  <!-- AND-0010: the first screen. What waits on Philip in every project, each answered with a tap. -->
+  <UserControl.Styles>
+    <Style Selector="Border.need">
+      <Setter Property="Background" Value="{DynamicResource Panel}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="Padding" Value="14,12"/>
+      <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+    <Style Selector="Border.need.ask">
+      <Setter Property="Background" Value="{DynamicResource AccentWash}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+    </Style>
+    <Style Selector="TextBlock.kicker">
+      <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+      <Setter Property="FontSize" Value="13"/>
+    </Style>
+    <Style Selector="Button.option">
+      <Setter Property="Background" Value="{DynamicResource Bg}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Padding" Value="14,10"/>
+    </Style>
+    <Style Selector="Button.option.rec">
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+      <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="Button.option.on">
+      <Setter Property="Background" Value="{DynamicResource Accent}"/>
+    </Style>
+    <Style Selector="Button.option.on TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+    </Style>
+    <Style Selector="TextBlock.rec">
+      <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel Margin="16,12,16,0">
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+      <Button DockPanel.Dock="Right" Classes="icon" Content="⟳" Command="{Binding RefreshCommand}" AutomationProperties.Name="Refresh"/>
+      <Button DockPanel.Dock="Left" Content="Projects ›" Command="{Binding OpenProjectsCommand}" AutomationProperties.Name="Projects"/>
+      <TextBlock/>
+    </DockPanel>
+    <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" Margin="0,0,0,8"
+               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,48,0,0" IsVisible="{Binding Empty}">
+      <TextBlock Text="✓" FontSize="40" HorizontalAlignment="Center" Foreground="{DynamicResource Ok}"/>
+      <TextBlock Text="Nothing waiting on you." Classes="title" HorizontalAlignment="Center"/>
+      <TextBlock Text="Agents' questions and cards waiting on a decision show here, from every project." Classes="dim"
+                 TextWrapping="Wrap" TextAlignment="Center"/>
+    </StackPanel>
+    <ScrollViewer>
+      <ItemsControl ItemsSource="{Binding Items}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="vm:NeedViewModel">
+            <Border Classes="need" Classes.ask="{Binding !IsDecision}">
+              <StackPanel Spacing="8">
+                <TextBlock Text="{Binding Kicker}" Classes="kicker" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding About}" Classes="dim" TextWrapping="Wrap" IsVisible="{Binding HasAbout}"/>
+                <TextBlock Text="{Binding Heading}" FontWeight="SemiBold" TextWrapping="Wrap" IsVisible="{Binding HasHeading}"/>
+                <TextBlock Text="{Binding Item.Detail}" Classes="dim" TextWrapping="Wrap" IsVisible="{Binding HasDetail}"/>
+
+                <!-- a question's (or a decision's) options -->
+                <ItemsControl ItemsSource="{Binding Questions}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:NeedQuestionViewModel">
+                      <StackPanel Spacing="6" Margin="0,0,0,6">
+                        <TextBlock Text="{Binding Header}" Classes="kicker" IsVisible="{Binding HasHeader}"/>
+                        <TextBlock Text="{Binding Text}" FontWeight="SemiBold" TextWrapping="Wrap" IsVisible="{Binding HasText}"/>
+                        <ItemsControl ItemsSource="{Binding Options}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:NeedChoiceViewModel">
+                              <Button Classes="option" Classes.rec="{Binding Recommended}" Classes.on="{Binding On}" Margin="0,0,0,6"
+                                      Command="{Binding TapCommand}" AutomationProperties.Name="{Binding Label}">
+                                <StackPanel Spacing="2">
+                                  <DockPanel>
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding ActionText}" Classes="dim" Margin="8,0,0,0"
+                                               VerticalAlignment="Top" IsVisible="{Binding HasAction}"/>
+                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                  </DockPanel>
+                                  <TextBlock Text="recommended" Classes="rec" IsVisible="{Binding Recommended}"/>
+                                  <TextBlock Text="{Binding Description}" Classes="dim" TextWrapping="Wrap" IsVisible="{Binding HasDescription}"/>
+                                </StackPanel>
+                              </Button>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- a decision's notes go with the pick (a card with no decision needs them to Send back) -->
+                <TextBox Text="{Binding Notes}" PlaceholderText="Notes (optional)" TextWrapping="Wrap" AcceptsReturn="True"
+                         IsVisible="{Binding IsDecision}" AutomationProperties.Name="Notes"/>
+                <Button Classes="primary" Content="Send" Command="{Binding SendCommand}" IsVisible="{Binding NeedsSend}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.Name="Send"/>
+                <Grid ColumnDefinitions="*,12,*" IsVisible="{Binding IsPermission}">
+                  <Button Grid.Column="0" Classes="primary" Content="Allow" Command="{Binding AllowCommand}"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.Name="Allow"/>
+                  <Button Grid.Column="2" Content="Deny" Command="{Binding DenyCommand}"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.Name="Deny"/>
+                </Grid>
+                <TextBlock Text="{Binding Error}" Classes="bad" TextWrapping="Wrap"
+                           IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

@@ -38,7 +38,7 @@ public class PhonePairingTests
 
         connect.PairText = link;
         await connect.Pair();
-        var projects = Assert.IsType<ProjectsViewModel>(shell.Page);
+        var projects = shell.OpenProjects();
         Assert.Equal("proj", Assert.Single(projects.Projects).Id);
 
         // what's kept: the address over https on the phone port, a token of its own, the pin, and the PC's name
@@ -56,9 +56,9 @@ public class PhonePairingTests
         var phone = app.Main.SettingsPage?.Phone ?? throw new InvalidOperationException("Settings didn't open.");
         await app.Until(() => phone.Devices.Count == 1, "Settings to list the phone");
 
-        // opened again, the saved pairing goes straight to the projects over the pinned route
+        // opened again, the saved pairing opens to Needs you, the projects a step on, over the pinned route
         var again = new ShellViewModel(store);
-        var list = Assert.IsType<ProjectsViewModel>(again.Page);
+        var list = again.OpenProjects();
         await app.Until(() => list.Projects.Count == 1, "the saved pairing to list the projects");
 
         // a second phone, so the server stays up when the first is revoked (the last revoke stops it listening)
@@ -101,7 +101,7 @@ public class PhonePairingTests
         // and the code is still good for the right certificate
         connect.PairText = await Link(app);
         await connect.Pair();
-        Assert.IsType<ProjectsViewModel>(shell.Page);
+        shell.OpenProjects();
         Assert.Single(RemoteHost.Devices.All());
     }
 

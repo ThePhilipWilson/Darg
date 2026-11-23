@@ -35,7 +35,7 @@ public class MobileAgentsTests
             store.Save(new Connection(parsed.Address, parsed.Token!));
             var shell = new ShellViewModel(store);
             var window = Phone(shell);
-            var projects = Assert.IsType<ProjectsViewModel>(shell.Page);
+            var projects = shell.OpenProjects();
             await DargApp.Wait(() => projects.Projects.Count == 1, "the projects");
 
             var page = new ProjectPageViewModel(projects.Projects[0], shell);

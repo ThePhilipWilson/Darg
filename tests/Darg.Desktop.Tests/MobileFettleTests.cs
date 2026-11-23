@@ -32,7 +32,7 @@ public class MobileFettleTests
         var connecting = connect.Connect();
         await DargApp.Wait(() => connecting.IsCompleted, "the phone to connect");
         await connecting;
-        var projects = Assert.IsType<ProjectsViewModel>(shell.Page);
+        var projects = shell.OpenProjects();
         projects.OpenCommand.Execute(projects.Projects.Single());
         var page = Assert.IsType<ProjectPageViewModel>(shell.Page);
         // a project opens to Home (AND-0008); these tests talk to Fettle from the Board

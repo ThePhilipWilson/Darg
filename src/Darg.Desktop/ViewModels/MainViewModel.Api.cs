@@ -110,6 +110,7 @@ public partial class MainViewModel
                              "for a question, {chat, allow: true|false} for a tool it wants to use.", FettleAnswer);
         Add("fettle-chats", "for the phone app, not Fettle: a project's Fettle chats, newest first: {project}. Each: id, name, updated.", FettleChats);
         RegisterPhoneApi(api);
+        RegisterNeedsYouApi(api);
     }
 
     static string Json(JsonNode n) => DargApi.Json(n);
@@ -404,7 +405,8 @@ public partial class MainViewModel
         var id = a.Need("card");
         if (p.Board.Show(id) is null) throw new ApiError($"No card {id} on {p.Name}'s boards.");
         if (p.Board.Decide(id, a.Need("answer"), a.Get("notes") ?? "") is { } error) throw new ApiError(error);
-        return $"Answered {id}: {a.Need("answer")}.";
+        // JSON, as the phone's client reads every reply (its Needs you screen calls this, AND-0010)
+        return Json(new JsonObject { ["id"] = id.Trim().ToUpperInvariant(), ["answer"] = a.Need("answer"), ["answered"] = $"Answered {id}: {a.Need("answer")}." });
     }
 
     string PlanCards(ApiArgs a)
@@ -640,24 +642,7 @@ public partial class MainViewModel
         var waiting = chat.Items.OfType<IPending>().LastOrDefault(x => x.Pending) as TranscriptItem
                       ?? throw new ApiError($"Fettle isn't waiting on anything in \"{chat.Name}\".");
         var from = chat.Items.IndexOf(waiting);
-        switch (waiting)
-        {
-            case QuestionItem q:
-                var given = a.Get("answers") is { } json ? JsonNode.Parse(json) as JsonObject : null;
-                if (given is null || given.Count == 0) throw new ApiError("Missing \"answers\": each question's text to the label picked.");
-                foreach (var g in q.Questions)
-                {
-                    var answer = (string?)given[g.Question]
-                                 ?? (q.Questions.Count == 1 && given.Count == 1 ? (string?)given.First().Value : null) // one question: its text needn't match exactly
-                                 ?? throw new ApiError($"No answer for \"{g.Question}\".");
-                    q.Pick(g.Question, answer);
-                }
-                break;
-            case PermissionItem p:
-                var allow = a.Need("allow") is "true" or "1" or "yes";
-                (allow ? p.AllowCommand : p.DenyCommand).Execute(null);
-                break;
-        }
+        AnswerPending(waiting, a);
         return FettleRead(chat, from);
     }
 
