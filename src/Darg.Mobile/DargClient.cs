@@ -12,21 +12,40 @@ public sealed record ProjectInfo(string Id, string Name, IReadOnlyList<string> S
 }
 
 /// <summary>A call to the desktop that didn't work, with a message fit to show on the phone as it is.</summary>
-public sealed class DargClientException(string message, Exception? inner = null) : Exception(message, inner);
+public sealed class DargClientException(string message, Exception? inner = null) : Exception(message, inner)
+{
+    /// <summary>The desktop answered 401: this phone's token is no good (revoked); only pairing again helps.</summary>
+    public bool Unpaired { get; init; }
+}
 
 /// <summary>Talks to the desktop app's Darg API (<c>POST /api/&lt;token&gt;/&lt;command&gt;</c>): every read and action
 /// the phone makes goes through it, the same code the desktop's buttons run (docs/ANDROID.md).</summary>
 public sealed class DargClient(Connection connection, HttpMessageHandler? handler = null) : IDisposable
 {
-    readonly HttpClient _http = new(handler ?? new HttpClientHandler()) { Timeout = TimeSpan.FromSeconds(10) };
+    // a paired connection talks only to the certificate it pinned (AND-0011), unless a test hands in a handler
+    readonly HttpClient _http = Make(connection, handler);
 
     public Connection Connection { get; } = connection;
+
+    /// <summary>A JSON body with its length known: the phone server (RemoteServer) wants a Content-Length and refuses a chunked body with a 411.</summary>
+    internal static StringContent Body(object args) => new(System.Text.Json.JsonSerializer.Serialize(args), System.Text.Encoding.UTF8, "application/json");
+
+    static HttpClient Make(Connection c, HttpMessageHandler? handler)
+    {
+        var http = new HttpClient(handler ?? (c.IsPinned ? PinnedTls.Handler(c.Fingerprint) : new HttpClientHandler())) { Timeout = TimeSpan.FromSeconds(10) };
+        if (c.IsPinned) http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", c.Token);
+        return http;
+    }
 
     /// <summary>Runs a command with its arguments as a JSON object and gives back what it answered.</summary>
     public async Task<JsonNode?> Call(string command, object? args = null, CancellationToken ct = default)
     {
         HttpResponseMessage res;
-        try { res = await _http.PostAsJsonAsync($"{Connection.ApiBase}/{command}", args ?? new { }, ct); }
+        try { res = await _http.PostAsync($"{Connection.ApiBase}/{command}", Body(args ?? new { }), ct); }
+        catch (HttpRequestException e) when (Connection.IsPinned && PinnedTls.IsCertificateFailure(e))
+        {
+            throw new DargClientException($"{Connection.Address} showed a different certificate from the one this phone paired with, so nothing was sent. If you changed PC or reinstalled Darg, pair again; otherwise someone on this network is pretending to be it.", e);
+        }
         catch (HttpRequestException e) { throw new DargClientException(Unreachable(e), e); }
         catch (TaskCanceledException e) when (!ct.IsCancellationRequested)
         {
@@ -35,6 +54,10 @@ public sealed class DargClient(Connection connection, HttpMessageHandler? handle
         using (res)
         {
             var body = await res.Content.ReadAsStringAsync(ct);
+            if (res.StatusCode is HttpStatusCode.Unauthorized && Connection.IsPinned)
+                throw new DargClientException("Darg no longer knows this phone: it was revoked in Settings, or the pairing was undone. Pair again from the Settings QR.") { Unpaired = true };
+            if (res.StatusCode is HttpStatusCode.Forbidden && Connection.IsPinned)
+                throw new DargClientException($"A phone isn't allowed to call {command}.");
             if (res.StatusCode is HttpStatusCode.Forbidden)
                 throw new DargClientException("Darg refused the token. Copy it again from the desktop (over USB, tools/android.ps1 -NoBuild on the PC does it).");
             if (res.StatusCode is HttpStatusCode.NotFound)

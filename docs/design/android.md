@@ -66,6 +66,13 @@ Darg on the phone: a window onto the desktop for answering what waits on Philip,
 
 **Answer:** The system recogniser as an activity for its result (decided by agent, AND-0007, 2026-11-23)
 
+### How does the phone read the pairing QR?
+- **Both Google's code scanner in the app and a `darg://pair` link the camera app opens** (recommended): Play services draws the scanner, so the app asks for no camera permission and has no camera code; the link route works with any camera and a pasted link is the fallback.
+- **A camera library inside the app (ZXing or ML Kit's own)**: a camera permission, a preview to build and test, and a decoder to carry.
+- **Paste or type the link only**: nothing to scan, which isn't what the card asks.
+
+**Answer:** Both Google's code scanner in the app and a `darg://pair` link the camera app opens (decided by agent, AND-0011, 2026-11-23)
+
 ## Design
 A thin remote client: a native Avalonia Android app over the desktop's Darg API, with the PC as the hub. The phone holds no agents, repos or boards of its own and never edits board or note files; it caches what it last saw for reading offline.
 

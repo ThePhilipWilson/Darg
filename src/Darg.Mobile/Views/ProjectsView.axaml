@@ -8,8 +8,10 @@
   <DockPanel Margin="16,12,16,0">
     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
       <Button DockPanel.Dock="Right" Classes="icon" Content="⟳" Command="{Binding RefreshCommand}" AutomationProperties.Name="Refresh"/>
-      <TextBlock Text="{Binding Where, StringFormat='Connected to {0}'}" Classes="dim" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+      <TextBlock Text="{Binding Where}" Classes="dim" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" AutomationProperties.Name="Connection status"/>
     </DockPanel>
+    <Button DockPanel.Dock="Top" Classes="primary" Content="Pair again" Command="{Binding PairAgainCommand}" IsVisible="{Binding Unpaired}"
+            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Margin="0,0,0,8" AutomationProperties.Name="Pair again"/>
     <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" Margin="0,0,0,8"
                IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
     <ScrollViewer>

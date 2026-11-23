@@ -74,8 +74,34 @@ public sealed partial class ShellViewModel : ObservableObject
         return true;
     }
 
+    /// <summary>A pairing link has arrived (scanned in the app, or opened from the phone's camera): open the connection
+    /// screen with it filled in and pair at once.</summary>
+    public Task PairWith(string link)
+    {
+        if (Page is not ConnectViewModel connect)
+        {
+            connect = new ConnectViewModel(this, Store.Load() ?? Client?.Connection);
+            Show(connect);
+        }
+        connect.PairText = link;
+        return connect.Pair();
+    }
+
+    /// <summary>Forgets this phone's connection and goes back to the connection screen. The desktop still lists the phone
+    /// until it's revoked in Settings; pairing again makes a new entry.</summary>
+    internal void Forget()
+    {
+        Store.Clear();
+        Client?.Dispose();
+        Client = null;
+        _stack.Clear();
+        Show(new ConnectViewModel(this, null));
+    }
+
     [RelayCommand]
-    void OpenSettings()
+    void OpenSettings() => OpenSettingsPage();
+
+    internal void OpenSettingsPage()
     {
         if (Page is ConnectViewModel) return;
         Show(new ConnectViewModel(this, Store.Load() ?? Client?.Connection));
@@ -99,9 +125,23 @@ public sealed partial class ConnectViewModel : PageViewModel
 
     [ObservableProperty] string _address;
     [ObservableProperty] string _token;
+    [ObservableProperty] string _pairText = "";
     [ObservableProperty] string _status = "";
     [ObservableProperty] bool _bad;
-    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(ConnectCommand))] bool _busy;
+    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(ConnectCommand), nameof(PairCommand))] bool _busy;
+
+    /// <summary>How the phone is connected now, when it is (the pairing, certificate and address), else empty.</summary>
+    public string Current { get; }
+
+    /// <summary>Whether this phone has a connection saved, for the Forget button.</summary>
+    public bool HasConnection => Current.Length > 0;
+
+    /// <summary>Whether the host can scan a QR in the app (Android sets <see cref="App.Scanner"/>).</summary>
+    public bool CanScan => App.Scanner is not null;
+
+    public string PairHelp =>
+        "On the PC: Settings → Phone → Pair a phone shows a QR. Scan it here (or with the camera, which opens this app), " +
+        "or paste the darg://pair link. The phone then trusts that PC's certificate and no other.";
 
     public string Help =>
         "Over USB: run pwsh -File tools/android.ps1 -NoBuild on the PC; it forwards the port and fills both boxes in. " +
@@ -112,6 +152,51 @@ public sealed partial class ConnectViewModel : PageViewModel
         _shell = shell;
         _address = current?.Address is { Length: > 0 } a ? a : Connection.DefaultAddress;
         _token = current?.Token ?? "";
+        Current = current is { IsComplete: true } ? current.Route : "";
+    }
+
+    [RelayCommand]
+    async Task Scan()
+    {
+        if (App.Scanner is not { } scan) return;
+        try
+        {
+            var text = await scan();
+            if (string.IsNullOrWhiteSpace(text)) return; // cancelled
+            PairText = text;
+            await Pair();
+        }
+        catch (Exception e) when (e is not OperationCanceledException) { Fail($"The scanner didn't work: {e.Message}. Paste the link instead."); }
+    }
+
+    [RelayCommand]
+    void Forget() => _shell.Forget();
+
+    bool CanPair() => !Busy;
+
+    /// <summary>Pairs with the link in the box: the code for a token over TLS pinned to the QR's certificate, kept with
+    /// the pin; then the project list proves it.</summary>
+    [RelayCommand(CanExecute = nameof(CanPair))]
+    public async Task Pair()
+    {
+        if (PairingLink.Parse(PairText) is not { } link)
+        {
+            Fail("That isn't a Darg pairing link: it starts darg://pair and comes from the QR in Darg's Settings → Phone.");
+            return;
+        }
+        Busy = true; Bad = false; Status = $"Pairing with {link.Name}…";
+        DargClient? client = null;
+        try
+        {
+            var c = await Pairer.Pair(link, App.DeviceName);
+            client = _shell.ClientFor(c);
+            var projects = await client.Projects();
+            PairText = "";
+            Status = $"Paired with {c.Name}: {projects.Count} project{(projects.Count == 1 ? "" : "s")}.";
+            _shell.Connected(c, client, projects);
+        }
+        catch (DargClientException e) { client?.Dispose(); Fail(e.Message); }
+        finally { Busy = false; }
     }
 
     /// <summary>A pasted API address carries the token: split it into the two boxes as it lands.</summary>
@@ -159,7 +244,13 @@ public sealed partial class ProjectsViewModel(ShellViewModel shell) : PageViewMo
     [ObservableProperty] bool _bad;
     [ObservableProperty] bool _busy;
 
-    public string Where => shell.Client?.Connection.Address ?? "";
+    public string Where => shell.Client?.Connection.Route ?? "";
+
+    /// <summary>The desktop no longer knows this phone (revoked): Pair again goes to the connection screen.</summary>
+    [ObservableProperty] bool _unpaired;
+
+    [RelayCommand]
+    void PairAgain() => shell.OpenSettingsPage();
 
     internal void Fill(IReadOnlyList<ProjectInfo> projects)
     {
@@ -174,8 +265,8 @@ public sealed partial class ProjectsViewModel(ShellViewModel shell) : PageViewMo
     {
         if (shell.Client is not { } client || Busy) return;
         Busy = true; Status = "Loading…"; Bad = false;
-        try { Fill(await client.Projects()); }
-        catch (DargClientException e) { Bad = true; Status = e.Message; }
+        try { Fill(await client.Projects()); Unpaired = false; }
+        catch (DargClientException e) { Bad = true; Status = e.Message; Unpaired = e.Unpaired; }
         finally { Busy = false; }
     }
 

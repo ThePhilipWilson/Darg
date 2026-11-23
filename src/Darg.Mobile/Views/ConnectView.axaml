@@ -5,14 +5,28 @@
              x:DataType="vm:ConnectViewModel">
   <ScrollViewer>
     <StackPanel Margin="20" Spacing="12">
+      <TextBlock Text="{Binding Current}" TextWrapping="Wrap" IsVisible="{Binding HasConnection}" AutomationProperties.Name="Connection status"/>
+      <Button Content="Forget this connection" Command="{Binding ForgetCommand}" IsVisible="{Binding HasConnection}"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.Name="Forget this connection"/>
+
+      <TextBlock Text="Pair with Darg" FontWeight="SemiBold"/>
+      <Button Classes="primary" Content="Scan the QR" Command="{Binding ScanCommand}" IsVisible="{Binding CanScan}"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.Name="Scan the QR"/>
+      <TextBox Text="{Binding PairText}" PlaceholderText="darg://pair?…" AutomationProperties.Name="Pairing link"/>
+      <Button Content="Pair" Command="{Binding PairCommand}" HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Center" AutomationProperties.Name="Pair"/>
+      <TextBlock Text="{Binding PairHelp}" Classes="dim" TextWrapping="Wrap"/>
+
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+      <TextBlock Text="Or over USB" FontWeight="SemiBold" Margin="0,16,0,0"/>
       <TextBlock Text="Desktop address" Classes="dim"/>
       <TextBox Text="{Binding Address}" PlaceholderText="http://localhost:47817" AutomationProperties.Name="Desktop address"/>
       <TextBlock Text="Token" Classes="dim"/>
       <TextBox Text="{Binding Token}" PlaceholderText="32 letters and digits from the desktop" AutomationProperties.Name="Token"/>
-      <Button Classes="primary" Content="Connect" Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch"
+      <Button Content="Connect" Command="{Binding ConnectCommand}" HorizontalAlignment="Stretch"
               HorizontalContentAlignment="Center" AutomationProperties.Name="Connect"/>
-      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-      <TextBlock Text="{Binding Help}" Classes="dim" TextWrapping="Wrap" Margin="0,12,0,0"/>
+      <TextBlock Text="{Binding Help}" Classes="dim" TextWrapping="Wrap"/>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

@@ -6,15 +6,24 @@ namespace Darg.Mobile;
 /// <summary>Where the desktop's Darg API is and the token it wants: the phone's one setting (AND-0003).
 /// <see cref="Address"/> is scheme, host and port with no path (<c>http://localhost:47817</c>, which over USB
 /// is the PC through <c>adb reverse</c>).</summary>
-public sealed record Connection(string Address, string Token)
+public sealed record Connection(string Address, string Token, string Fingerprint = "", string Name = "")
 {
     /// <summary>The desktop's usual port (ArtifactServer's), reached over USB with adb reverse.</summary>
     public const string DefaultAddress = "http://localhost:47817";
 
     public bool IsComplete => Address.Length > 0 && Token.Length > 0;
 
-    /// <summary>The API's root, token included: POST to this plus /&lt;command&gt; runs one.</summary>
-    public string ApiBase => $"{Address}/api/{Uri.EscapeDataString(Token)}";
+    /// <summary>Paired (AND-0011): https to the phone port, the certificate pinned by this SHA-256, the token sent as a Bearer header.
+    /// Without one it's the USB route of AND-0003: plain http to localhost with the instance's token in the URL.</summary>
+    public bool IsPinned => Fingerprint.Length > 0;
+
+    /// <summary>The API's root: POST to this plus /&lt;command&gt; runs one. The USB route's has the token in it; a paired one's doesn't (the header carries it).</summary>
+    public string ApiBase => IsPinned ? $"{Address}/api" : $"{Address}/api/{Uri.EscapeDataString(Token)}";
+
+    /// <summary>One line for the screen: how this phone reaches the desktop.</summary>
+    public string Route => IsPinned
+        ? $"Paired with {(Name.Length > 0 ? Name : Address)} · certificate pinned ({Fingerprint[..8]}…) · {Address}"
+        : $"USB route · {Address}";
 
     /// <summary>Reads what was typed or pasted into the address box: a whole API address as the desktop gives it
     /// (<c>http://host:47817/api/&lt;token&gt;</c>, which fills in the token too), or a host with or without a
@@ -51,7 +60,9 @@ public sealed class ConnectionStore(string file)
             using var doc = JsonDocument.Parse(System.IO.File.ReadAllText(File));
             var address = doc.RootElement.TryGetProperty("address", out var a) ? a.GetString() ?? "" : "";
             var token = doc.RootElement.TryGetProperty("token", out var t) ? t.GetString() ?? "" : "";
-            return new Connection(address.TrimEnd('/'), token.Trim());
+            var fp = doc.RootElement.TryGetProperty("fingerprint", out var f) ? f.GetString() ?? "" : "";
+            var name = doc.RootElement.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+            return new Connection(address.TrimEnd('/'), token.Trim(), fp.Trim().ToLowerInvariant(), name);
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return null; }
     }
@@ -59,6 +70,12 @@ public sealed class ConnectionStore(string file)
     public void Save(Connection c)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(File)!);
-        System.IO.File.WriteAllText(File, JsonSerializer.Serialize(new { address = c.Address, token = c.Token }));
+        System.IO.File.WriteAllText(File, JsonSerializer.Serialize(new { address = c.Address, token = c.Token, fingerprint = c.Fingerprint, name = c.Name }));
+    }
+
+    /// <summary>Forgets the connection: this phone stops being paired from its side (the desktop's Revoke is the other half).</summary>
+    public void Clear()
+    {
+        try { System.IO.File.Delete(File); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 }
