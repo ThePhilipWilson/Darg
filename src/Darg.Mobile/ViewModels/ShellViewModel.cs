@@ -180,7 +180,7 @@ public sealed partial class ProjectsViewModel(ShellViewModel shell) : PageViewMo
     }
 
     [RelayCommand]
-    void Open(ProjectInfo project) => shell.Show(new ProjectPageViewModel(project));
+    void Open(ProjectInfo project) => shell.Show(new ProjectPageViewModel(project, shell));
 }
 
 /// <summary>A section the phone has for a project, and the card that fills it in.</summary>
@@ -210,9 +210,23 @@ public sealed partial class ProjectPageViewModel : PageViewModel
 
     public string Placeholder => $"Coming with {Section.Card}: {Section.What}.";
 
-    public ProjectPageViewModel(ProjectInfo project)
+    readonly ShellViewModel? _shell;
+    FettleChatViewModel? _fettle;
+
+    /// <summary>The card or doc open in the section showing, which Fettle is told about: set by the section that opens
+    /// one (AND-0004's card panel, AND-0008's doc reader).</summary>
+    [ObservableProperty] string? _openCard;
+    [ObservableProperty] string? _openDoc;
+
+    /// <summary>What this page shows, as Fettle is told it with each message.</summary>
+    public PhoneView Showing => new(Section.Name, OpenCard, OpenDoc);
+
+    public bool CanTalkToFettle => _shell?.Client is not null;
+
+    public ProjectPageViewModel(ProjectInfo project, ShellViewModel? shell = null)
     {
         Project = project;
+        _shell = shell;
         Tabs = All.Where(s => Always.Contains(s.Name) || project.Sections.Contains(s.Name, StringComparer.OrdinalIgnoreCase))
                   .Select(s => new SectionTab(s)).ToList();
         _section = Tabs[0].Section;
@@ -226,6 +240,15 @@ public sealed partial class ProjectPageViewModel : PageViewModel
 
     [RelayCommand]
     void Pick(SectionTab tab) => Section = tab.Section;
+
+    /// <summary>Opens Fettle full screen (AND-0007); the same chat each time for this page, so it carries on.</summary>
+    [RelayCommand]
+    public void Fettle()
+    {
+        if (_shell?.Client is not { } client) return;
+        _fettle ??= FettleChatViewModel.For(client, Project, () => Showing);
+        _shell.Show(_fettle);
+    }
 }
 
 /// <summary>A section's button in the bottom bar, lit when it's the one showing.</summary>

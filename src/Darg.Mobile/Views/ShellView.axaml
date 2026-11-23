@@ -12,6 +12,7 @@
     <DataTemplate DataType="vm:ConnectViewModel"><views:ConnectView/></DataTemplate>
     <DataTemplate DataType="vm:ProjectsViewModel"><views:ProjectsView/></DataTemplate>
     <DataTemplate DataType="vm:ProjectPageViewModel"><views:ProjectPageView/></DataTemplate>
+    <DataTemplate DataType="vm:FettleChatViewModel"><views:FettleChatView/></DataTemplate>
   </UserControl.DataTemplates>
 
   <DockPanel>

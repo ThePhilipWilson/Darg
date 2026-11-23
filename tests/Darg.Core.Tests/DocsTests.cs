@@ -207,14 +207,18 @@ public sealed class DocsTests
         var plan = PlanDoc.Load(Path.Combine(Docs(), "design", "android.md"));
         Assert.Equal("feature", plan.Kind);
         Assert.Equal("Android", plan.Board);
-        Assert.Equal(5, plan.Questions.Count);
+        // Card agents add the choices they make to Questions as they work, so the first five are pinned and the rest
+        // only have to be answered and say which card decided them.
+        Assert.True(plan.Questions.Count >= 5, $"{plan.Questions.Count} questions");
         Assert.All(plan.Questions, q => Assert.False(q.Open, q.Question));
+        var first = plan.Questions.Take(5).ToList();
         // Four answers were card agents' choices and must read as such, so the page offers Keep and Change on them
         // (WOR-0178's "decided by agent, CARD, date"); ntfy was Philip's, so it must not.
-        Assert.Equal(["AND-0001", "AND-0002", "AND-0003", "AND-0003"], plan.Questions.Where(q => q.ByAgent).Select(q => q.DecidedCard));
+        Assert.Equal(["AND-0001", "AND-0002", "AND-0003", "AND-0003"], first.Where(q => q.ByAgent).Select(q => q.DecidedCard));
         Assert.False(plan.Questions.Single(q => q.Pick == "ntfy").ByAgent);
         Assert.Equal(["Thin client, Avalonia on Android", "Tailscale", "ntfy", "Under `D:\\Android`", "`uk.co.philipwilson.darg`"],
-            plan.Questions.Select(q => q.Pick));
+            first.Select(q => q.Pick));
+        Assert.All(plan.Questions.Where(q => q.ByAgent), q => Assert.Matches(@"^AND-\d{4}$", q.DecidedCard ?? ""));
         // A card row shows Where and the description as plain text, so a markdown link would show raw.
         Assert.All(plan.Cards, c => Assert.DoesNotContain("](", c.Description + " " + c.Where + " " + c.Done));
         Assert.Equal(Enumerable.Range(1, 11).Select(n => $"AND-{n:0000}"), plan.Cards.Select(c => c.Id).OrderBy(i => i));

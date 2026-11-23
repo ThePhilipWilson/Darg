@@ -2,5 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" android:installLocation="auto">
   <uses-permission android:name="android.permission.INTERNET" />
   <!-- cleartext: the desktop's API is plain http on the home network or through adb reverse (AND-0002 decides the encrypted route) -->
+  <!-- Fettle's mic (AND-0007): lets the app see the speech recogniser (package visibility, Android 11 on) -->
+  <queries>
+    <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent>
+  </queries>
   <application android:label="Darg" android:icon="@drawable/icon" android:usesCleartextTraffic="true" />
 </manifest>

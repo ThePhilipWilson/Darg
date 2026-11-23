@@ -24,10 +24,15 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
     </Border>
+    <Panel>
     <StackPanel Margin="20" Spacing="8" VerticalAlignment="Center">
       <TextBlock Text="{Binding Section.Glyph}" FontSize="40" HorizontalAlignment="Center"/>
       <TextBlock Text="{Binding Section.Name}" Classes="title" HorizontalAlignment="Center"/>
       <TextBlock Text="{Binding Placeholder}" Classes="dim" TextWrapping="Wrap" TextAlignment="Center"/>
     </StackPanel>
+    <!-- Fettle (AND-0007), over whatever section shows, bottom right where a thumb reaches -->
+    <Button Classes="fab" Content="✦ Fettle" Command="{Binding FettleCommand}" IsVisible="{Binding CanTalkToFettle}"
+            AutomationProperties.Name="Fettle"/>
+    </Panel>
   </DockPanel>
 </UserControl>

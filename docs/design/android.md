@@ -53,6 +53,19 @@ Darg on the phone: a window onto the desktop for answering what waits on Philip,
 
 **Answer:** `uk.co.philipwilson.darg` (decided by agent, AND-0003, 2026-11-20; the key is left to AND-0009)
 
+### Is Fettle on the phone a bottom sheet or a full-screen chat?
+- **Full screen, from a ✦ Fettle button on every project page** (recommended): room for a question's options and the keyboard at once; Back returns to the page, and the same chat carries on next time.
+- **A bottom sheet over the section**: the section stays partly in view, but the keyboard and a question's options leave the chat a sliver.
+
+**Answer:** Full screen, from a ✦ Fettle button on every project page (decided by agent, AND-0007, 2026-11-23)
+
+### How does the phone take dictation for Fettle?
+- **The system recogniser as an activity for its result** (recommended): Google's listening sheet; the recogniser holds the microphone, so the app asks for no RECORD_AUDIO permission. The words land in the box for a glance, then Send.
+- **`SpeechRecognizer` inside the app**: no sheet over the app, but needs RECORD_AUDIO and its own listening UI.
+- **The keyboard's own mic only**: no code, but Fettle isn't told the words were spoken, so it can't read past speech-to-text slips.
+
+**Answer:** The system recogniser as an activity for its result (decided by agent, AND-0007, 2026-11-23)
+
 ## Design
 A thin remote client: a native Avalonia Android app over the desktop's Darg API, with the PC as the hub. The phone holds no agents, repos or boards of its own and never edits board or note files; it caches what it last saw for reading offline.
 

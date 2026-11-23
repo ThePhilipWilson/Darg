@@ -1,0 +1,112 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Mobile.ViewModels"
+             x:Class="Darg.Mobile.Views.FettleChatView"
+             x:DataType="vm:FettleChatViewModel">
+  <DockPanel>
+    <!-- the box at the bottom, where a thumb reaches: what Fettle sees, the mic, the words, Send -->
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource Chrome}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="8">
+      <StackPanel Spacing="6">
+        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Classes.bad="{Binding Bad}" Margin="4,0"
+                   IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Right" Text="Fettle is working…" Classes="dim" IsVisible="{Binding Busy}" Margin="8,0,4,0"/>
+          <TextBlock Text="{Binding Sees}" Classes="dim" TextTrimming="CharacterEllipsis" Margin="4,0"/>
+        </DockPanel>
+        <DockPanel>
+          <Button DockPanel.Dock="Left" Classes="icon" Content="🎤" Command="{Binding DictateCommand}" IsVisible="{Binding CanDictate}"
+                  Classes.on="{Binding Listening}" AutomationProperties.Name="Dictate" ToolTip.Tip="Say it instead of typing"/>
+          <Button DockPanel.Dock="Right" Classes="primary" Content="Send" Command="{Binding SendCommand}" Margin="6,0,0,0"
+                  VerticalAlignment="Bottom" AutomationProperties.Name="Send"/>
+          <TextBox Text="{Binding Compose}" PlaceholderText="Ask Fettle, or tell it to make a card…" AcceptsReturn="True"
+                   TextWrapping="Wrap" MaxHeight="160" AutomationProperties.Name="Message Fettle"/>
+        </DockPanel>
+      </StackPanel>
+    </Border>
+
+    <!-- above it, a bar to start over -->
+    <DockPanel DockPanel.Dock="Top" Margin="12,6,6,0">
+      <Button DockPanel.Dock="Right" Content="+ New chat" Command="{Binding NewChatCommand}" Background="Transparent"
+              IsVisible="{Binding !Empty}" AutomationProperties.Name="New chat"/>
+      <TextBlock/>
+    </DockPanel>
+
+    <Grid>
+      <StackPanel Margin="24" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding Empty}">
+        <TextBlock Text="✦" FontSize="40" HorizontalAlignment="Center" Foreground="{DynamicResource Accent}"/>
+        <TextBlock Text="Talk to Fettle" Classes="title" HorizontalAlignment="Center"/>
+        <TextBlock Classes="dim" TextWrapping="Wrap" TextAlignment="Center"
+                   Text="It knows the project and what's on screen. Tap the mic and say what you want: &quot;make a card to fix the login timeout&quot;."/>
+      </StackPanel>
+      <ScrollViewer x:Name="Scroll" IsVisible="{Binding !Empty}">
+        <ItemsControl ItemsSource="{Binding Rows}" Margin="12,8">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="vm:FettleRow">
+              <StackPanel Margin="0,4">
+                <!-- his words, on the right -->
+                <Border IsVisible="{Binding IsUser}" HorizontalAlignment="Right" MaxWidth="320" CornerRadius="14,14,4,14"
+                        Background="{DynamicResource Accent}" Padding="12,8">
+                  <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{DynamicResource OnAccent}"/>
+                </Border>
+                <!-- Fettle's, on the left -->
+                <Border IsVisible="{Binding IsFettle}" HorizontalAlignment="Left" MaxWidth="340" CornerRadius="14,14,14,4"
+                        Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" Padding="12,8">
+                  <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{DynamicResource Ink}" FontSize="16"/>
+                </Border>
+                <!-- a step or note: one dim line -->
+                <TextBlock IsVisible="{Binding IsStep}" Text="{Binding Text}" Classes="dim" TextTrimming="CharacterEllipsis" Margin="8,0"/>
+                <!-- a permission ask -->
+                <Border IsVisible="{Binding IsPermission}" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Accent}"
+                        BorderThickness="1" CornerRadius="10" Padding="12,8">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding PermissionText}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Detail}" Classes="dim" TextWrapping="Wrap" MaxLines="6"
+                               IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <UniformGrid Rows="1" IsVisible="{Binding PermissionWaiting}">
+                      <Button Classes="primary" Content="Allow" Command="{Binding AllowCommand}" HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Center" Margin="0,0,4,0" AutomationProperties.Name="Allow"/>
+                      <Button Content="Deny" Command="{Binding DenyCommand}" HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Center" Margin="4,0,0,0" AutomationProperties.Name="Deny"/>
+                    </UniformGrid>
+                  </StackPanel>
+                </Border>
+                <!-- a question: each part's options as buttons -->
+                <Border IsVisible="{Binding IsQuestion}" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Accent}"
+                        BorderThickness="1" CornerRadius="10" Padding="12,8">
+                  <StackPanel Spacing="8">
+                    <ItemsControl ItemsSource="{Binding Questions}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:QuestionRow">
+                          <StackPanel Spacing="6" Margin="0,0,0,6">
+                            <TextBlock Text="{Binding Header}" Classes="dim" IsVisible="{Binding Header, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            <TextBlock Text="{Binding Question}" TextWrapping="Wrap" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding ChosenLine}" Foreground="{DynamicResource Accent}" TextWrapping="Wrap" IsVisible="{Binding Answered}"/>
+                            <ItemsControl ItemsSource="{Binding Options}" IsVisible="{Binding Open}">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="vm:OptionRow">
+                                  <Button Classes="row" Classes.on="{Binding Picked}" Command="{Binding TapCommand}" AutomationProperties.Name="{Binding Label}">
+                                    <StackPanel Spacing="2">
+                                      <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                      <TextBlock Text="{Binding Description}" Classes="dim" TextWrapping="Wrap" IsVisible="{Binding HasDescription}"/>
+                                    </StackPanel>
+                                  </Button>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Classes="primary" Content="Send answers" Command="{Binding SendAnswersCommand}" IsVisible="{Binding NeedsSendButton}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.Name="Send answers"/>
+                    <TextBlock Text="Or type your own answer below." Classes="dim" IsVisible="{Binding Pending}"/>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</UserControl>
