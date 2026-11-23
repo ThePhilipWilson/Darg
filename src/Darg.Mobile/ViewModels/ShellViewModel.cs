@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
+using Avalonia;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Darg.Core;
 
 namespace Darg.Mobile.ViewModels;
 
@@ -23,6 +26,31 @@ public sealed partial class ShellViewModel : ObservableObject
     public ConnectionStore Store { get; }
     public DargClient? Client { get; private set; }
 
+    /// <summary>The theme and the desktop's last answers, kept beside the connection (AND-0009).</summary>
+    public PhoneData Data { get; }
+
+    /// <summary>The desktop's themes, which the settings screen offers.</summary>
+    public IReadOnlyList<Theme> Themes => Darg.Core.Themes.All;
+
+    /// <summary>The theme in use; setting it restyles the app at once and is remembered.</summary>
+    public Theme Theme
+    {
+        get => _theme;
+        set
+        {
+            if (value is null || !SetProperty(ref _theme, value)) return;
+            Data.SaveTheme(value);
+            if (Application.Current is { } app) App.ApplyTheme(app, value);
+        }
+    }
+    Theme _theme;
+
+    /// <summary>The PC isn't answering (AND-0009): the banner under the header says so, and what shows is what it
+    /// answered last.</summary>
+    [ObservableProperty] bool _offline;
+    [ObservableProperty] string _offlineText = "";
+    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(TryAgainCommand))] bool _trying;
+
     [ObservableProperty] PageViewModel? _page;
     [ObservableProperty] bool _canGoBack;
     [ObservableProperty] string _title = "Darg";
@@ -33,11 +61,13 @@ public sealed partial class ShellViewModel : ObservableObject
     public ShellViewModel(ConnectionStore store, Func<Connection, DargClient>? clientFor = null)
     {
         Store = store;
+        Data = PhoneData.Beside(store);
+        _theme = Data.LoadTheme();
         _clientFor = clientFor ?? (c => new DargClient(c));
         var saved = store.Load();
         if (saved is { IsComplete: true })
         {
-            Client = _clientFor(saved);
+            Watch(ClientFor(saved));
             Show(new NeedsYouViewModel(this)); // its view reads the desktop as it comes on screen
         }
         else Show(new ConnectViewModel(this, saved));
@@ -48,13 +78,71 @@ public sealed partial class ShellViewModel : ObservableObject
     internal void Connected(Connection c, DargClient client, IReadOnlyList<ProjectInfo> projects)
     {
         Store.Save(c);
-        if (!ReferenceEquals(Client, client)) Client?.Dispose();
-        Client = client;
+        if (!ReferenceEquals(Client, client)) { Unwatch(Client); Client?.Dispose(); }
+        Watch(client);
         _stack.Clear();
         Show(new NeedsYouViewModel(this, projects));
     }
 
-    internal DargClient ClientFor(Connection c) => _clientFor(c);
+    /// <summary>A client for a connection, keeping its reads' answers for when the PC is off.</summary>
+    internal DargClient ClientFor(Connection c)
+    {
+        var client = _clientFor(c);
+        client.Cache ??= Data.Answers;
+        return client;
+    }
+
+    /// <summary>Makes a client the one in use and follows its offline state into the banner.</summary>
+    void Watch(DargClient client)
+    {
+        Client = client;
+        client.OfflineChanged += OnOfflineChanged;
+        SyncOffline();
+    }
+
+    void Unwatch(DargClient? client)
+    {
+        if (client is not null) client.OfflineChanged -= OnOfflineChanged;
+    }
+
+    void OnOfflineChanged()
+    {
+        if (Dispatcher.UIThread.CheckAccess()) SyncOffline();
+        else Dispatcher.UIThread.Post(SyncOffline);
+    }
+
+    void SyncOffline()
+    {
+        var was = Offline;
+        Offline = Client?.Offline == true;
+        OfflineText = Client is not { Offline: true } c ? ""
+            : c.ShowingFrom is { } at ? $"Offline: the PC isn't answering. What shows is from {PhoneData.When(at, DateTimeOffset.Now)}; nothing can be sent."
+            : "Offline: the PC isn't answering, and this phone has nothing kept to show here.";
+        if (was && !Offline) _ = RefreshShowing(); // back: what's on screen is old, so read it again
+    }
+
+    bool CanTryAgain() => !Trying;
+
+    /// <summary>The banner's Try again: asks the PC now rather than at the next poll.</summary>
+    [RelayCommand(CanExecute = nameof(CanTryAgain))]
+    async Task TryAgain()
+    {
+        if (Client is not { } client) return;
+        Trying = true;
+        try { await client.TryAgain(); }
+        finally { Trying = false; SyncOffline(); }
+    }
+
+    /// <summary>Reads the screen showing again (the PC came back).</summary>
+    internal Task RefreshShowing() => Page switch
+    {
+        ProjectsViewModel p => p.Refresh(),
+        NeedsYouViewModel n => n.Refresh(),
+        ReadPageViewModel r => r.Refresh(),
+        AgentPageViewModel a => a.Refresh(),
+        ProjectPageViewModel pp => pp.RefreshShowing(),
+        _ => Task.CompletedTask,
+    };
 
     public void Show(PageViewModel page)
     {
@@ -93,8 +181,11 @@ public sealed partial class ShellViewModel : ObservableObject
     internal void Forget()
     {
         Store.Clear();
+        Data.Answers.Clear(); // what this desktop said isn't kept once the phone has forgotten it
+        Unwatch(Client);
         Client?.Dispose();
         Client = null;
+        SyncOffline();
         _stack.Clear();
         Show(new ConnectViewModel(this, null));
     }
@@ -128,7 +219,8 @@ public sealed partial class ConnectViewModel : PageViewModel
 {
     readonly ShellViewModel _shell;
 
-    public override string Title => "Connect to Darg";
+    /// <summary>"Settings" once connected (the header's ⚙ opens it, with the theme), "Connect to Darg" before.</summary>
+    public override string Title => HasConnection ? "Settings" : "Connect to Darg";
 
     [ObservableProperty] string _address;
     [ObservableProperty] string _token;
@@ -142,6 +234,15 @@ public sealed partial class ConnectViewModel : PageViewModel
 
     /// <summary>Whether this phone has a connection saved, for the Forget button.</summary>
     public bool HasConnection => Current.Length > 0;
+
+    /// <summary>The look: Dark, Light or Girlypop, the desktop's themes; picking one restyles the app at once.</summary>
+    public IReadOnlyList<Theme> Themes => _shell.Themes;
+
+    public Theme Theme
+    {
+        get => _shell.Theme;
+        set { _shell.Theme = value; OnPropertyChanged(); }
+    }
 
     /// <summary>Whether the host can scan a QR in the app (Android sets <see cref="App.Scanner"/>).</summary>
     public bool CanScan => App.Scanner is not null;
@@ -365,6 +466,11 @@ public sealed partial class ProjectPageViewModel : PageViewModel
     }
 
     public override bool HandleBack() => ShowsBoard && Board!.HandleBack();
+
+    /// <summary>Reads the section showing again (the PC came back after being off).</summary>
+    internal Task RefreshShowing() =>
+        ShowsBoard ? Board!.Refresh()
+        : Content switch { ReadSection r => r.Refresh(), AgentsListViewModel a => a.Refresh(), _ => Task.CompletedTask };
 
     partial void OnSectionChanged(PhoneSection value)
     {

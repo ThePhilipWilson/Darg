@@ -111,6 +111,26 @@ Darg on the phone: a window onto the desktop for answering what waits on Philip,
 
 **Answer:** No, only project agents' asks and card decisions (decided by agent, AND-0010, 2026-11-23)
 
+### What does the phone show with the PC off?
+- **Every read's last answer, kept by the client, under one banner** (recommended): Needs you, boards, agents, transcripts and docs all show what they last read, the banner says when from, and anything that does something still goes to the PC and says nothing was sent.
+- **Only the project list, kept by its screen**: little code, but Needs you, the first screen, would be empty.
+- **An error page until the PC answers**: nothing to read on the move.
+
+**Answer:** Every read's last answer, kept by the client, under one banner (decided by agent, AND-0009, 2026-11-23)
+
+### Does the phone follow the desktop's theme or keep its own?
+- **Its own, picked in the phone's Settings** (recommended): the phone may want Light in daylight while the PC is Dark, and it works with the PC off.
+- **The desktop's, read from it**: one pick, but a new command, and no theme until the PC answers.
+
+**Answer:** Its own, picked in the phone's Settings (decided by agent, AND-0009, 2026-11-23)
+
+### Where is the release signing key kept?
+- **A keystore `tools/android-release.ps1` makes on its first run in `D:\Android\keys`, outside the repo** (recommended): on Philip's PC beside the toolchain, never committed; the folder has to be backed up, since an update only installs over a copy signed with the same key.
+- **In the repo, encrypted**: one less thing to back up, but a key in the repo for a password to guard.
+- **The SDK's debug key**: nothing to keep, but it differs per machine, so a build from another PC couldn't update the app.
+
+**Answer:** A keystore made on the first run in `D:\Android\keys`, outside the repo (decided by agent, AND-0009, 2026-11-23)
+
 ## Design
 A thin remote client: a native Avalonia Android app over the desktop's Darg API, with the PC as the hub. The phone holds no agents, repos or boards of its own and never edits board or note files; it caches what it last saw for reading offline.
 

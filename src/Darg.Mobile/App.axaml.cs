@@ -46,7 +46,7 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
-        ApplyTheme(this, Themes.Dark);
+        ApplyTheme(this, PhoneData.Beside(Store()).LoadTheme()); // the theme picked last time
     }
 
     /// <summary>A Core theme's colours as brushes in the app's resources (the desktop's ThemeManager does the same).</summary>

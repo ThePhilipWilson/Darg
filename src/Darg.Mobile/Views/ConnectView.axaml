@@ -1,10 +1,44 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Darg.Mobile.ViewModels"
+             xmlns:core="using:Darg.Core"
              x:Class="Darg.Mobile.Views.ConnectView"
              x:DataType="vm:ConnectViewModel">
   <ScrollViewer>
     <StackPanel Margin="20" Spacing="12">
+      <!-- the desktop's themes (AND-0009): a tap restyles the app at once -->
+      <TextBlock Text="Theme" FontWeight="SemiBold"/>
+      <ListBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}" Background="Transparent" AutomationProperties.Name="Theme">
+        <ListBox.Styles>
+          <!-- finger-sized, and the pick in the theme's own accent rather than Fluent's -->
+          <Style Selector="ListBoxItem">
+            <Setter Property="MinHeight" Value="48"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+          </Style>
+          <Style Selector="ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Panel}"/>
+            <Setter Property="CornerRadius" Value="10"/>
+          </Style>
+          <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Accent}"/>
+          </Style>
+          <Style Selector="ListBoxItem:selected TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+          </Style>
+        </ListBox.Styles>
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="core:Theme">
+            <TextBlock Text="{Binding Name}" HorizontalAlignment="Center" AutomationProperties.Name="{Binding Name}"/>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
       <TextBlock Text="{Binding Current}" TextWrapping="Wrap" IsVisible="{Binding HasConnection}" AutomationProperties.Name="Connection status"/>
       <Button Content="Forget this connection" Command="{Binding ForgetCommand}" IsVisible="{Binding HasConnection}"
               HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" AutomationProperties.Name="Forget this connection"/>

@@ -94,6 +94,18 @@ pwsh -File tools/android.ps1 -StopEmulator            # when done
 
 `adb reverse` makes the phone's `localhost:47817` the desktop, so an emulator or a USB phone needs no pairing; a real phone away from the PC pairs through Settings' Phone part ([REMOTE.md](REMOTE.md)). `-Emulator` never starts a second emulator (it waits for the one running) and stops one that hasn't booted in 5 minutes. An agent that starts an emulator stops it with `-StopEmulator` once done: one left running beside several test suites helped run the PC out of memory ([architecture.md](architecture.md#agents)). The approach and scope are in [ANDROID.md](ANDROID.md).
 
+### A release to install without adb
+
+```powershell
+pwsh -File tools/android-release.ps1 [-Version 0.2] [-Aab]   # a signed APK (or AAB) in D:\Android\release
+```
+
+It signs with `D:\Android\keys\darg-release.keystore`, which the first run makes, with its password beside it in `darg-release.pass`. Both stay out of the repo. **Back that folder up**: Android only installs an update over a copy signed with the same key, so a lost key means uninstalling Darg on the phone (and pairing again) to move to a new one. The version code is the build time in minutes since 2026-01-01, so each build installs over the one before. `apksigner` checks the APK is signed with that key and not the debug key. To install, copy the APK to the phone (USB, a cloud drive, a message to yourself), open it, and let the app that opened it install unknown apps when Android asks. Then pair from Settings → Phone on the PC ([REMOTE.md](REMOTE.md)). An AAB is only for an app store; sideloading takes the APK.
+
+### With the PC off
+
+The phone keeps the desktop's last answer to every read (`AnswerCache`, in an `answers` folder beside its connection file). When the PC doesn't answer, each screen shows what it read last, under a banner saying when that was from, with a Try again button. Anything that does something (a tap on a decision, a message to an agent) still goes to the PC, and with the PC off it says nothing was sent. While offline, a read tries the PC in the background every 5 seconds, so the banner goes by itself when the PC is back and the screen is read again. Forget this connection deletes what was kept.
+
 ## The live copy
 
 An experiment (WOR-0126):

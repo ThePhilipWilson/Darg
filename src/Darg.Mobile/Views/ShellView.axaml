@@ -36,6 +36,15 @@
         <TextBlock Text="{Binding Title}" Classes="title" VerticalAlignment="Center" Margin="12,0" TextTrimming="CharacterEllipsis"/>
       </DockPanel>
     </Border>
+    <!-- the PC isn't answering (AND-0009): what shows below is what it answered last -->
+    <Border DockPanel.Dock="Top" IsVisible="{Binding Offline}" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Warn}"
+            BorderThickness="0,0,0,2" Padding="12,6" AutomationProperties.Name="Offline">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="Try again" Command="{Binding TryAgainCommand}" VerticalAlignment="Center"
+                Margin="8,0,0,0" AutomationProperties.Name="Try again"/>
+        <TextBlock Text="{Binding OfflineText}" TextWrapping="Wrap" Foreground="{DynamicResource Warn}" FontSize="14" VerticalAlignment="Center"/>
+      </DockPanel>
+    </Border>
     <ContentControl Content="{Binding Page}"/>
   </DockPanel>
 </UserControl>

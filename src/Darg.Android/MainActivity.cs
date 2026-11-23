@@ -11,7 +11,8 @@ namespace Darg.Android;
     Label = "Darg",
     Name = "uk.co.philipwilson.darg.MainActivity", // a fixed name, so tools/android.ps1 can start it with am start
     Theme = "@style/DargTheme",
-    Icon = "@drawable/icon",
+    Icon = "@mipmap/ic_launcher",
+    RoundIcon = "@mipmap/ic_launcher_round",
     MainLauncher = true,
     LaunchMode = LaunchMode.SingleTask, // a pairing link opened from the camera reaches the running app, not a second one
     ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize)]

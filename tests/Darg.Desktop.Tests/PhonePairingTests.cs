@@ -74,11 +74,13 @@ public class PhonePairingTests
         Assert.True(list.Unpaired);
         Assert.Contains("Pair again", list.Status);
 
-        // the last phone revoked too: the PC stops listening, so a call fails outright rather than answering
+        // the last phone revoked too: the PC stops listening, so the call gets no answer at all, which reads as the PC
+        // being off (AND-0009): the phone goes offline and shows the projects it read last
         phone.Devices.Single().RevokeCommand.Execute(null);
         await app.Until(() => phone.Devices.Count == 0, "Settings to drop the last phone");
         await list.Refresh();
-        Assert.True(list.Bad);
+        await app.Until(() => again.Offline, "the phone to say the PC isn't answering");
+        Assert.Equal("proj", Assert.Single(list.Projects).Id);
         Assert.Equal("", app.Crashes());
     }
 

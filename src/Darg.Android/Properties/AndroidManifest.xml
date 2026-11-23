@@ -6,5 +6,6 @@
   <queries>
     <intent><action android:name="android.speech.action.RECOGNIZE_SPEECH" /></intent>
   </queries>
-  <application android:label="Darg" android:icon="@drawable/icon" android:usesCleartextTraffic="true" />
+  <!-- Fettle as the icon (AND-0009): an adaptive icon from Android 8 (mipmap-anydpi-v26), PNGs before -->
+  <application android:label="Darg" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:usesCleartextTraffic="true" />
 </manifest>

@@ -133,10 +133,13 @@ public class MobileAgentsTests
             Assert.False(page.Loading);
             Assert.False(Reading(window)?.IsEffectivelyVisible ?? false, "the reading line goes once the entries are in");
 
-            // a first read that fails: the line goes too, and the page says why instead
+            // a first read that fails: the line goes too, and the page says why instead. A phone of its own, since this one
+            // now keeps the answer above and would show that with the PC off (AND-0009)
             var refused = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
             refused.SetException(new HttpRequestException("refused"));
-            var shell2 = new ShellViewModel(store, c => new DargClient(c, new Held(() => refused.Task)));
+            var store2 = new ConnectionStore(Path.Combine(folder, "fresh", "connection.json"));
+            store2.Save(new Connection("http://localhost:1", "t"));
+            var shell2 = new ShellViewModel(store2, c => new DargClient(c, new Held(() => refused.Task)));
             var failing = new AgentPageViewModel(shell2, "a1", "header");
             Assert.True(failing.Loading);
             await failing.Refresh();
