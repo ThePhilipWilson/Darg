@@ -102,6 +102,65 @@ public class MobileAgentsTests
         }
     }
 
+    /// <summary>AND-0005's QA: a long transcript took 6 to 10 s to show on the emulator with nothing on the page, which read as
+    /// an agent with nothing in it. The page says it's reading until the first read lands, and drops it whether that read
+    /// brings entries or fails.</summary>
+    [AvaloniaFact]
+    public async Task The_transcript_says_it_is_reading_until_the_first_read_lands()
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "darg-reading-" + Guid.NewGuid().ToString("N")[..8])).FullName;
+        try
+        {
+            var store = new ConnectionStore(Path.Combine(folder, "connection.json"));
+            store.Save(new Connection("http://localhost:1", "t"));
+            var held = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var shell = new ShellViewModel(store, c => new DargClient(c, new Held(() => held.Task)));
+            var window = Phone(shell);
+
+            var page = new AgentPageViewModel(shell, "a1", "header");
+            shell.Show(page);
+            Dispatcher.UIThread.RunJobs();
+            await DargApp.Settle(200);
+            Assert.Empty(page.Entries);
+            Assert.True(Reading(window)?.IsEffectivelyVisible, "the page says it's reading while the first read is under way");
+            Shot(window, Directory.CreateDirectory(Path.Combine(Sandbox.Root, nameof(The_transcript_says_it_is_reading_until_the_first_read_lands))).FullName, "5-reading");
+
+            held.SetResult("""
+                {"name":"header","status":"idle","state":"Done","items":[{"i":0,"kind":"user","text":"tidy the header"},{"i":1,"kind":"agent","text":"Tidied."}],"total":2,"next":2}
+                """);
+            await DargApp.Wait(() => page.Entries.Count == 2, "the entries to land");
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(page.Loading);
+            Assert.False(Reading(window)?.IsEffectivelyVisible ?? false, "the reading line goes once the entries are in");
+
+            // a first read that fails: the line goes too, and the page says why instead
+            var refused = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            refused.SetException(new HttpRequestException("refused"));
+            var shell2 = new ShellViewModel(store, c => new DargClient(c, new Held(() => refused.Task)));
+            var failing = new AgentPageViewModel(shell2, "a1", "header");
+            Assert.True(failing.Loading);
+            await failing.Refresh();
+            Assert.False(failing.Loading);
+            Assert.True(failing.Bad);
+            Assert.NotEqual("", failing.Status);
+            window.Close();
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    static TextBlock? Reading(Window window) =>
+        window.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Text == "Reading the transcript…");
+
+    /// <summary>Answers the agent command when the test lets it (<paramref name="agent"/>), anything else at once with an empty list.</summary>
+    sealed class Held(Func<Task<string>> agent) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            new(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(request.RequestUri!.Segments[^1] == "agent" ? await agent().WaitAsync(ct) : "[]"),
+            };
+    }
+
     static Window Phone(ShellViewModel shell)
     {
         var window = new Window { Width = 412, Height = 860, Content = new ShellView { DataContext = shell } };
@@ -110,13 +169,15 @@ public class MobileAgentsTests
         return window;
     }
 
-    static void Shot(Window window, DargApp app, string name)
+    static void Shot(Window window, DargApp app, string name) => Shot(window, app.Folder, name);
+
+    static void Shot(Window window, string folder, string name)
     {
         Dispatcher.UIThread.RunJobs();
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         var frame = window.CaptureRenderedFrame() ?? throw new InvalidOperationException("Nothing was drawn.");
 #pragma warning disable CS0618
-        frame.Save(Path.Combine(app.Folder, "phone-" + name + ".png"));
+        frame.Save(Path.Combine(folder, "phone-" + name + ".png"));
 #pragma warning restore CS0618
     }
 }

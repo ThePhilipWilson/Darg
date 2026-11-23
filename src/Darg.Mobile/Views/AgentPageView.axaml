@@ -21,6 +21,10 @@
                  AutomationProperties.Name="Message"/>
       </DockPanel>
     </Border>
+    <Panel>
+    <!-- until the first read lands: a long transcript takes seconds to come and draw, and a blank page read as an empty agent -->
+    <TextBlock Text="Reading the transcript…" Classes="dim" IsVisible="{Binding Loading}" HorizontalAlignment="Center" VerticalAlignment="Center"
+               AutomationProperties.Name="Reading the transcript"/>
     <ScrollViewer x:Name="Scroll" HorizontalScrollBarVisibility="Disabled">
       <ItemsControl ItemsSource="{Binding Entries}" Margin="12,8">
         <ItemsControl.ItemTemplate>
@@ -48,6 +52,7 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
     </ScrollViewer>
+    </Panel>
   </DockPanel>
   <UserControl.Styles>
     <Style Selector="Border.mine">

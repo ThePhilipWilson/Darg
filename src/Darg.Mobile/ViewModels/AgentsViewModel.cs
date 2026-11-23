@@ -95,6 +95,9 @@ public sealed partial class AgentPageViewModel : PageViewModel, IPolled
     [ObservableProperty] bool _needsYou;
     [ObservableProperty] string _status = "";
     [ObservableProperty] bool _bad;
+    /// <summary>Until the first read lands (or fails): the page says it's reading rather than looking like an agent with
+    /// nothing in it, since a long transcript takes seconds to come and draw on a phone.</summary>
+    [ObservableProperty] bool _loading = true;
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(SendCommand))] string _compose = "";
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(SendCommand))] bool _sending;
 
@@ -136,6 +139,9 @@ public sealed partial class AgentPageViewModel : PageViewModel, IPolled
             Status = NeedsYou ? "It's waiting on a question or a permission: answer it on the PC." : "";
         }
         catch (Exception e) when (e is DargClientException or ApiError) { Bad = true; Status = e.Message; }
+        // anything else (an answer in a shape this build doesn't expect) says so rather than leaving the reading line up for good
+        catch (Exception e) { Bad = true; Status = $"Couldn't read it: {e.GetType().Name}: {e.Message}"; }
+        finally { Loading = false; }
     }
 
     bool CanSend() => !Sending && Compose.Trim().Length > 0;
