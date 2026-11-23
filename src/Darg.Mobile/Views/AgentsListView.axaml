@@ -14,7 +14,8 @@
     <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Classes="dim" Classes.bad="{Binding Bad}" Margin="0,0,0,8"
                IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
     <ScrollViewer>
-      <ItemsControl ItemsSource="{Binding Agents}">
+      <!-- room under the last row for the page's ✦ Fettle button, as the other section lists leave -->
+      <ItemsControl ItemsSource="{Binding Agents}" Margin="0,0,0,96">
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="core:RemoteAgent">
             <Button Classes="row" Classes.needs="{Binding NeedsYou}" Command="{Binding #Root.((vm:AgentsListViewModel)DataContext).OpenCommand}"

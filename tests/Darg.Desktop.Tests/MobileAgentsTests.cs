@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -47,6 +48,15 @@ public class MobileAgentsTests
             // the row spans the phone's width (a thumb hits it anywhere), not docked to the left at its text's width
             var row = window.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("row"));
             Assert.True(row.Bounds.Width > 360, $"the agent's row is {row.Bounds.Width} wide in a 412 phone");
+            // the list scrolls past its last row far enough that the page's ✦ Fettle button can't sit over it: the list's
+            // own height (margin and all, what the scroller scrolls) runs on below the last row by the button's height.
+            // (The scroller's Extent is no use here: with one row it is the whole viewport, room or no room.)
+            var fab = window.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("fab") && b.IsEffectivelyVisible);
+            var items = row.FindAncestorOfType<ItemsControl>()!;
+            var rowBottom = row.TranslatePoint(new Point(0, row.Bounds.Height), items)!.Value.Y;
+            var room = items.DesiredSize.Height - rowBottom;
+            Assert.True(room >= fab.Bounds.Height + fab.Margin.Bottom,
+                $"the list ends {room} below its last row; the Fettle button takes {fab.Bounds.Height + fab.Margin.Bottom}");
 
             list.OpenCommand.Execute(list.Agents[0]);
             var open = Assert.IsType<AgentPageViewModel>(shell.Page);
