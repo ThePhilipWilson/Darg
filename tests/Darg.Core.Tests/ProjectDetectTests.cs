@@ -78,8 +78,8 @@ public sealed class ProjectDetectTests : IDisposable
     }
 
     [Theory]
-    [InlineData("Project C", "PS")]
-    [InlineData("Alpha", "VOT")]
+    [InlineData("Project C", "PC")]
+    [InlineData("Alpha", "ALP")]
     [InlineData("night market", "NIG")]
     public void Prefixes(string name, string prefix) => Assert.Equal(prefix, ProjectDetect.Prefix(name));
 
