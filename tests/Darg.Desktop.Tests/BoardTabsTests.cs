@@ -97,6 +97,28 @@ public class BoardTabsTests
         }
         app.Shot("board-tabs-overflow");
 
+        // the button sits in the tab bar, level with the tabs and right after them, and opens a list of the hidden boards
+        var tabsBox = app.Window.GetVisualDescendants().OfType<OverflowTabsPanel>().Single();
+        var tp = tabsBox.TranslatePoint(default, app.Window)!.Value;
+        var mp = more.TranslatePoint(default, app.Window)!.Value;
+        var tabBox = row[0].TranslatePoint(default, app.Window)!.Value;
+        Assert.InRange(mp.Y + more.Bounds.Height / 2, tabBox.Y + row[0].Bounds.Height / 2 - 1, tabBox.Y + row[0].Bounds.Height / 2 + 1);
+        Assert.InRange(mp.X, tp.X + tabsBox.Bounds.Width, tp.X + tabsBox.Bounds.Width + 40);
+        var centre = more.TranslatePoint(new Avalonia.Point(more.Bounds.Width / 2, more.Bounds.Height / 2), app.Window)!.Value;
+        Assert.Same(more, app.Window.GetVisualAt(centre) is { } hit ? hit.FindAncestorOfType<Button>() : null);
+        Avalonia.Headless.HeadlessWindowExtensions.MouseDown(app.Window, centre, Avalonia.Input.MouseButton.Left);
+        Avalonia.Headless.HeadlessWindowExtensions.MouseUp(app.Window, centre, Avalonia.Input.MouseButton.Left);
+        await DargApp.Settle();
+        Assert.True(more.Flyout!.IsOpen, "the list is open");
+        Assert.Equal(14 - row.Count, ((MenuFlyout)more.Flyout).Items.Count);
+        var popup = ((Avalonia.Controls.Primitives.PopupFlyoutBase)more.Flyout).Popup;
+        var presenter = Assert.IsAssignableFrom<ItemsControl>(popup.Child);
+        Assert.Equal(14 - row.Count, presenter.ItemCount);
+        Assert.All(presenter.GetVisualDescendants().OfType<MenuItem>(), m => Assert.True(m.Bounds.Height > 0));
+        Assert.Equal(14 - row.Count, presenter.GetVisualDescendants().OfType<MenuItem>().Count());
+        app.Shot("board-tabs-overflow-open");
+        more.Flyout.Hide();
+
         // a hidden board is reached from the menu: it shows alone and is then a lit tab in the row
         var hidden = board.Tabs.Where(t => !row.Any(b => b.DataContext == t)).ToList();
         Assert.Equal(14 - row.Count, hidden.Count);

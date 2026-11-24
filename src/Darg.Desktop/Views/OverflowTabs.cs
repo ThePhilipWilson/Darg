@@ -91,7 +91,7 @@ public sealed class OverflowRow : Panel
 
     public ItemsControl? Items { get; set; }
     public OverflowTabsPanel? TabsPanel => Items?.ItemsPanelRoot as OverflowTabsPanel;
-    public Button More { get; } = new() { Classes = { "chip" }, Padding = new Thickness(12, 4), FontSize = 13, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
+    public Button More { get; } = new() { Classes = { "chip" }, Margin = new Thickness(0), Padding = new Thickness(12, 4), FontSize = 13, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
     readonly MenuFlyout _menu = new();
 
     public OverflowRow()
@@ -99,14 +99,20 @@ public sealed class OverflowRow : Panel
         More.Name = "MoreBoards";
         Avalonia.Automation.AutomationProperties.SetName(More, "More boards");
         More.Flyout = _menu;
-        _menu.Opening += (_, _) =>
-        {
-            _menu.Items.Clear();
-            foreach (var tab in TabsPanel?.Hidden ?? [])
-                _menu.Items.Add(new MenuItem { Header = tab.Name, Command = tab.PickCommand });
-        };
+        _menu.Opening += (_, _) => FillMenu();
         ToolTip.SetTip(More, "The boards that don't fit in the row. Pick one to show it.");
         Children.Add(More);
+    }
+
+    /// <summary>The menu's items are the hidden tabs. Filled as the row is measured as well as on opening: the
+    /// flyout builds its list when it is shown, so items put in during Opening came too late and it opened empty.</summary>
+    void FillMenu()
+    {
+        var hidden = TabsPanel?.Hidden ?? [];
+        if (_menu.Items.Count == hidden.Count && _menu.Items.OfType<MenuItem>().Select(m => m.Header as string).SequenceEqual(hidden.Select(t => t.Name))) return;
+        _menu.Items.Clear();
+        foreach (var tab in hidden)
+            _menu.Items.Add(new MenuItem { Header = tab.Name, Command = tab.PickCommand });
     }
 
     protected override Size MeasureOverride(Size available)
@@ -127,6 +133,7 @@ public sealed class OverflowRow : Panel
         hidden = TabsPanel?.Hidden.Count ?? hidden;
         More.Content = $"▾ {hidden} more";
         More.Measure(new Size(double.PositiveInfinity, available.Height));
+        FillMenu();
         return new Size(Items.DesiredSize.Width + Gap + More.DesiredSize.Width, Math.Max(Items.DesiredSize.Height, More.DesiredSize.Height));
     }
 
@@ -137,8 +144,8 @@ public sealed class OverflowRow : Panel
         Items.Arrange(new Rect(0, 0, iw, finalSize.Height));
         if (More.IsVisible)
         {
-            var mh = More.DesiredSize.Height;
-            More.Arrange(new Rect(iw + Gap, (finalSize.Height - mh) / 2, More.DesiredSize.Width, mh));
+            // the whole height, so its own centring puts it level with the tabs (each is centred in the same height)
+            More.Arrange(new Rect(iw + Gap, 0, More.DesiredSize.Width, finalSize.Height));
         }
         else More.Arrange(default);
         return finalSize;
