@@ -151,7 +151,7 @@ public static partial class Planner
             "",
             "Afterwards I'll talk to you from beside the plan's page. When I ask you to change one part (Goals, Not doing, Questions, Design, " + (project ? "Features" : "Cards") +
             "), change only that part's lines in the file and leave every other line as it is, my answers to Questions included. If the change needs another part to change too, " +
-            "say so and ask rather than doing it.",
+            "say so and ask rather than doing it. " + KeepProperties,
         ]);
         return string.Join(Environment.NewLine, lines);
     }
@@ -175,8 +175,12 @@ public static partial class Planner
         "Design, and Cards (### title, a description, **Where:**, **Done when:**, **Blocked by:**) or Features. Calls only I can make go into Questions rather than being settled quietly. " +
         "Write only the plan file and make no cards. " + (commits is null ? "Don't commit it." : commits + " Commit only the plan file."),
         "When I ask you to change one part, change only that part's lines and leave every other line as it is.",
+        KeepProperties,
         "",
     ]);
+
+    /// <summary>The Design page keeps its own state in a plan's properties (WOR-0199): a planner leaves them be.</summary>
+    public const string KeepProperties = "Leave the planner, unticked and unticked-features properties as they are: Darg writes them (this chat, and the rows I unticked on the Design page).";
 
     /// <summary>The body of a <c>##</c> part, as written: every line under its heading up to the next <c>##</c>; "" without one.</summary>
     public static string Part(string text, string part)

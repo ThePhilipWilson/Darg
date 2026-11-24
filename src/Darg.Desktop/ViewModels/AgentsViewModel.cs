@@ -459,6 +459,27 @@ public partial class AgentsViewModel : ObservableObject
         return a;
     }
 
+    /// <summary>List the planner chat a plan names (its <c>planner:</c> session, WOR-0199) when none listed has the plan: a
+    /// fresh instance's agents know nothing of it, but Claude Code still has the conversation, so a message resumes it.
+    /// Given the args a planner starts with (artifacts, the other repos, the plan and board folders). Null once closed.</summary>
+    public AgentViewModel? AdoptPlanner(string file, string sessionId, string name, IReadOnlyList<string> dirs)
+    {
+        if (_closed) return null;
+        var id = NewId();
+        var folder = project.WorkingFolder();
+        var now = DateTime.Now;
+        var record = new AgentRecord
+        {
+            Id = id, Name = name, Cwd = folder, Purpose = AgentPurposes.Plan, Plan = file, SessionId = sessionId, Created = now, Updated = now,
+            Args = [.. ArtifactArgs(id), .. RepoArgs(folder), .. dirs.SelectMany(d => new[] { "--add-dir", d })],
+            Items = [new ItemRecord { Kind = "note", Text = $"The planner chat {Path.GetFileName(file)} names (session {sessionId}). Send a message to carry it on." }],
+        };
+        var agent = new AgentViewModel(record, _store);
+        Add(agent, select: false);
+        agent.Save();
+        return agent;
+    }
+
     /// <summary>Open the flows folder to add or edit one (each is a markdown file), and read them again: the picked
     /// flow's folder (this project's own, or the shared one).</summary>
     [RelayCommand]

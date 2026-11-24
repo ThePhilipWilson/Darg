@@ -118,6 +118,14 @@ public sealed partial record PlanDoc(
     string Design, IReadOnlyList<PlanCard> Cards, IReadOnlyList<PlanFeature> Features)
 {
     public bool IsProject => Kind.Equals("project", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Headings of the proposed cards the person unticked on the Design page (WOR-0199): the <c>unticked</c>
+    /// property, a list, so the choice moves with the plan in git rather than living in one copy of Darg's memory.</summary>
+    public IReadOnlyList<string> Unticked { get; init; } = [];
+    /// <summary>Titles of the features unticked for Draft feature plans: the <c>unticked-features</c> property.</summary>
+    public IReadOnlyList<string> UntickedFeatures { get; init; } = [];
+    /// <summary>The Claude session of the plan's planner chat (WOR-0199): the <c>planner</c> property, so a fresh
+    /// instance finds the chat from the plan alone and resumes it; "" when none is named.</summary>
+    public string PlannerSession { get; init; } = "";
     public IReadOnlyList<PlanQuestion> OpenQuestions => Questions.Where(q => q.Open).ToList();
     /// <summary>The cards not yet made that score under 3, so can't be made yet.</summary>
     public IReadOnlyList<PlanCard> NotReady => Cards.Where(c => !c.Made && !c.Ready).ToList();
@@ -165,7 +173,30 @@ public sealed partial record PlanDoc(
             Subsections(Of("Questions")).Select(s => Question(s.Heading, s.Lines)).ToList(),
             string.Join("\n", Of("Design")).Trim(),
             Subsections(Of("Cards")).Select(s => Card(s.Heading, s.Lines)).ToList(),
-            ReadFeatures(features));
+            ReadFeatures(features))
+        {
+            Unticked = PropList(P(PlanStore.UntickedKey)), UntickedFeatures = PropList(P(PlanStore.UntickedFeaturesKey)),
+            PlannerSession = P(PlanStore.PlannerKey),
+        };
+    }
+
+    /// <summary>A list property as <see cref="PlanStore.SetList"/> writes it, <c>["a", "b"]</c> (a YAML flow list, which
+    /// Obsidian shows as a list), or plainly separated by commas when written by hand.</summary>
+    public static List<string> PropList(string value)
+    {
+        value = value.Trim();
+        if (value.Length == 0) return [];
+        if (value.StartsWith('['))
+        {
+            try
+            {
+                if (System.Text.Json.JsonSerializer.Deserialize<List<string>>(value) is { } list)
+                    return list.Select(v => v.Trim()).Where(v => v.Length > 0).ToList();
+            }
+            catch (System.Text.Json.JsonException) { }
+            value = value.Trim('[', ']');
+        }
+        return value.Split(',').Select(v => v.Trim().Trim('"', '\'').Trim()).Where(v => v.Length > 0).ToList();
     }
 
     public static PlanDoc Load(string file) => Parse(System.IO.File.ReadAllText(file), file);
@@ -391,17 +422,43 @@ public static class PlanStore
             return true;
         });
 
-    /// <summary>Set a property (status, board, parent, kind), adding the properties block if the file has none.</summary>
-    public static bool SetProperty(string file, string key, string value) =>
+    /// <summary>Set a property (status, board, parent, kind, planner), adding the properties block if the file has none;
+    /// a null value takes the property out. False, with nothing written, when the file already says so.</summary>
+    public static bool SetProperty(string file, string key, string? value) =>
         Edit(file, lines =>
         {
             var end = PlanDoc.FrontMatterEnd(lines);
-            if (end == 0) { lines.InsertRange(0, ["---", $"{key}: {value}", "---"]); return true; }
+            if (end == 0)
+            {
+                if (value is null) return false;
+                lines.InsertRange(0, ["---", $"{key}: {value}", "---"]);
+                return true;
+            }
             for (var i = 1; i < end - 1; i++)
-                if (Regex.IsMatch(lines[i], @"^" + Regex.Escape(key) + @"\s*:", RegexOptions.IgnoreCase)) { lines[i] = $"{key}: {value}"; return true; }
+                if (Regex.IsMatch(lines[i], @"^" + Regex.Escape(key) + @"\s*:", RegexOptions.IgnoreCase))
+                {
+                    if (value is null) { lines.RemoveAt(i); return true; }
+                    if (lines[i] == $"{key}: {value}") return false;
+                    lines[i] = $"{key}: {value}";
+                    return true;
+                }
+            if (value is null) return false;
             lines.Insert(end - 1, $"{key}: {value}");
             return true;
         });
+
+    /// <summary>The properties the Design page keeps its own state in (WOR-0199), so it travels with the plan in git.</summary>
+    public const string UntickedKey = "unticked", UntickedFeaturesKey = "unticked-features", PlannerKey = "planner";
+
+    static readonly System.Text.Json.JsonSerializerOptions ListJson = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    /// <summary>Set a list property as <c>key: ["a", "b"]</c> (read back by <see cref="PlanDoc.PropList"/>); an empty list
+    /// takes the property out. False when the file already says so.</summary>
+    public static bool SetList(string file, string key, IEnumerable<string> values)
+    {
+        var list = values.Select(v => v.Trim()).Where(v => v.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return SetProperty(file, key, list.Count == 0 ? null : "[" + string.Join(", ", list.Select(v => System.Text.Json.JsonSerializer.Serialize(v, ListJson))) + "]");
+    }
 
     /// <summary>The parts a plan has, in the order a file holds them: where <see cref="SetSection"/> puts a missing one.</summary>
     public static readonly IReadOnlyList<string> Parts = ["Goals", "Not doing", "Questions", "Design", "Cards", "Features"];

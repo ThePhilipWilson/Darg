@@ -597,6 +597,7 @@ public partial class ProjectViewModel : ObservableObject
             Design.StartPlanner = (idea, kind) => StartPlan(idea, kind).Agent;
             Design.PlannerFor = Agents.PlannerFor;
             Design.StartReviser = StartReviser;
+            Design.AdoptPlanner = AdoptPlanner;
             Design.StartFeaturePlanner = (idea, parent) => StartPlan(idea, PlanKind.Feature, parent, show: false);
         }
         if (config.Uses(Features.Notes) && config.NotesFolder() is { } notes)

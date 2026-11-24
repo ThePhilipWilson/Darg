@@ -224,4 +224,4 @@ WOR-0172 and WOR-0173 stand on their own: they are worth having before any of th
 
 Settled since:
 
-- **Who commits an edit made on the page:** nobody, from the page. An answer tapped or a part edited changes the file in the main checkout and is left uncommitted, for Philip or the next agent in the repo to commit (Philip's pick when WOR-0175 asked, 2026-11-20). The status line says so after each edit.
+- **Who commits an edit made on the page:** the page, at once (Philip, 2026-11-24, WOR-0199), so the plan's state moves with git as it is. Every edit it makes (a part, an answer, Keep, Change, a tick, Make cards' ids, Draft feature plans' links) is a commit of the plan file alone, pushed where the project's rule for the folder says push; the status line says how it went. The page's own state went into the plan too: the unticked rows (`unticked:`, `unticked-features:`) and its planner chat (`planner:`, the session, so a fresh instance finds the chat). Until then it was nobody: edits were left uncommitted for Philip or the next agent (his pick when WOR-0175 asked, 2026-11-20).

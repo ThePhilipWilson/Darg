@@ -38,6 +38,16 @@ public partial class ProjectViewModel
         return Agents.StartPlanner(prompt, file, $"Plan: {title}", message, PlanDirs());
     }
 
+    /// <summary>The planner chat a plan's <c>planner:</c> names, listed when no agent here has the plan (WOR-0199).</summary>
+    AgentViewModel? AdoptPlanner(string file, string session)
+    {
+        if (Agents is null) return null;
+        var title = Path.GetFileNameWithoutExtension(file);
+        try { if (PlanDoc.Load(file) is { Title.Length: > 0 } p) title = p.Title; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        return Agents.AdoptPlanner(file, session, $"Plan: {title}", PlanDirs());
+    }
+
     string? PlanCommits() =>
         Design is not null && Commits.For(Config, Design.Folder) is { } rule ? Commits.Describe(rule, Design.Folder) : null;
 

@@ -11,8 +11,10 @@ namespace Darg.Desktop.ViewModels;
 /// <c>docs/design/</c> as a tree by <c>parent</c>, and the picked one as a page in its parts. The plan file is the
 /// source and the page a view and editor of it, as the Notes wall is of its notes: Goals, Not doing and Design are
 /// edited as text, a question is answered by tapping an option (an <c>**Answer:**</c> line), and a made card's row
-/// shows its column, agent and open blockers read from the board each time, never written into the plan. Edits are
-/// left uncommitted (Philip's call, 2026-11-20): the next agent in the repo, or he, commits them.</summary>
+/// shows its column, agent and open blockers read from the board each time, never written into the plan. Every edit the
+/// page makes is committed at once, the plan file alone, and pushed where the project's rule says push (WOR-0199,
+/// <see cref="PlanCommits"/>; Philip's call, 2026-11-24, reversing 2026-11-20's "the page commits nothing"), and the
+/// page keeps its own state in the plan too: the unticked rows and its planner chat's session.</summary>
 public sealed partial class DesignViewModel : ObservableObject
 {
     readonly ProjectConfig _config;
@@ -70,6 +72,9 @@ public sealed partial class DesignViewModel : ObservableObject
     public Func<string, AgentViewModel?>? PlannerFor { get; set; }
     /// <summary>Start a planner on a plan that has none, with the first message for it.</summary>
     public Func<string, string, AgentViewModel?>? StartReviser { get; set; }
+    /// <summary>List the planner chat a plan's <c>planner:</c> names (its session) when no listed agent has the plan: a
+    /// fresh instance finds the chat from the plan file alone (WOR-0199). Null without agents.</summary>
+    public Func<string, string, AgentViewModel?>? AdoptPlanner { get; set; }
     /// <summary>Start a planner on a project plan's feature (WOR-0179): the feature's line and the project plan's name for
     /// its <c>parent:</c>, leaving the page where it is; returns the agent and the file Darg named for the plan.</summary>
     public Func<string, string, (AgentViewModel Agent, string File)>? StartFeaturePlanner { get; set; }
@@ -179,6 +184,7 @@ public sealed partial class DesignViewModel : ObservableObject
         AfterTurn(agent, () =>
         {
             if (!File.Exists(file)) { Status = $"The planner's turn ended without writing {Path.GetFileName(file)}: ask it why in the chat."; return; }
+            NotePlanner(agent);
             if (IsDrafting && _draft?.File == file) { _selectAfter = file; IsDrafting = false; }
             Status = $"{Path.GetFileName(file)} drafted: a draft to judge. Answer its questions, edit a part, or ask the planner beside it.";
             Reload();
@@ -226,6 +232,7 @@ public sealed partial class DesignViewModel : ObservableObject
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Couldn't check what the planner changed: {e.Message}"; }
             }
             if (Page is null && IsDrafting && File.Exists(file)) { _selectAfter = file; IsDrafting = false; }
+            NotePlanner(agent);
             Reload();
         });
     }
@@ -246,8 +253,49 @@ public sealed partial class DesignViewModel : ObservableObject
             foreach (var p in parts) ChangeParts.Add(p);
             ChangePart = keep is not null && ChangeParts.Contains(keep) ? keep : WholePlan;
         }
-        if (value is not null) Planner = PlannerFor?.Invoke(value.File);
+        if (value is not null)
+        {
+            var listed = PlannerFor?.Invoke(value.File);
+            // none listed (a fresh instance, another machine's plan): the chat the plan names, if it names one
+            Planner = listed ?? (value.Plan.PlannerSession is { Length: > 0 } session ? AdoptPlanner?.Invoke(value.File, session) : null);
+            // a planner from before plans named theirs: written in now, once its turn is over
+            if (listed is { Working: false } && listed.SessionId is { } sid && sid != value.Plan.PlannerSession) NotePlanner(listed);
+        }
         else if (!IsDrafting) Planner = null;
+    }
+
+    /// <summary>Write the planner's session into its plan's <c>planner:</c> property (and commit it), so the plan names its
+    /// chat wherever it goes; nothing when the plan already names it, isn't written yet, or the planner has no session.</summary>
+    void NotePlanner(AgentViewModel agent)
+    {
+        if (agent.Plan is not { } file || agent.SessionId is not { Length: > 0 } session || !File.Exists(file)) return;
+        try
+        {
+            if (!PlanStore.SetProperty(file, PlanStore.PlannerKey, session)) return;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; }
+        Commit(file, "its planner chat", quiet: true);
+    }
+
+    /// <summary>The project's commit rule for the plan's folder (<see cref="Commits"/>); null when none is set.</summary>
+    CommitRule? RuleFor(string file) => Commits.For(_config, Path.GetDirectoryName(file));
+
+    /// <summary>The page's last commit, for the tests to wait on.</summary>
+    public Task<PlanCommits.Result> LastCommit { get; private set; } = Task.FromResult(new PlanCommits.Result(PlanCommits.Outcome.Nothing));
+
+    /// <summary>Commit the plan file alone, in the background (<see cref="PlanCommits"/>), and add how it went to the status
+    /// line if that still says what it did when the commit was asked for.</summary>
+    void Commit(string file, string what, bool quiet = false)
+    {
+        var said = Status;
+        var commit = LastCommit = PlanCommits.Queue(file, what, RuleFor(file));
+        commit.ContinueWith(t => Dispatcher.UIThread.Post(() =>
+        {
+            var text = t.Result.Text;
+            if (text.Length == 0 || Status != said) return;
+            if (quiet && t.Result.Outcome is PlanCommits.Outcome.Committed or PlanCommits.Outcome.Pushed) return;
+            Status = said.Length == 0 ? text : $"{said} {text}";
+        }), TaskScheduler.Default);
     }
 
     /// <summary>Read the plans and the boards again, in the background; calls made while one runs fold into one more.</summary>
@@ -385,7 +433,7 @@ public sealed partial class DesignViewModel : ObservableObject
     }
 
     /// <summary>Write an answer into the plan as its <c>**Answer:**</c> line.</summary>
-    internal void Answer(PlanQuestionRow q, string answer)
+    internal void Answer(PlanQuestionRow q, string answer, string? what = null)
     {
         if (string.IsNullOrWhiteSpace(answer) || Page is not { } page) return;
         try
@@ -394,19 +442,21 @@ public sealed partial class DesignViewModel : ObservableObject
             { Status = $"No question \"{q.Question}\" in {Path.GetFileName(page.File)} any more: it changed on disk."; Reload(); return; }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Couldn't write the answer: {e.Message}"; return; }
-        Status = $"Answered \"{q.Question}\": {answer.Trim()}. Saved to {Path.GetFileName(page.File)}, not committed.";
+        Status = $"Answered \"{q.Question}\": {answer.Trim()}. Saved to {Path.GetFileName(page.File)}.";
         // changing what an agent chose: its card goes back with the new answer as the notes (WOR-0178)
-        if (q.ByAgent && q.DecidedCard is { } card && !answer.Trim().Equals(q.Chosen, StringComparison.OrdinalIgnoreCase))
+        var changed = q.ByAgent && !answer.Trim().Equals(q.Chosen, StringComparison.OrdinalIgnoreCase);
+        if (changed && q.DecidedCard is { } card)
         {
             var failed = SendBack?.Invoke(card, $"I changed a choice made on this card. In {Path.GetFileName(page.File)}, the question \"{q.Question}\" " +
                 $"was answered \"{q.Chosen}\" by its agent; the answer is now \"{answer.Trim()}\". Change the work to match, and leave the plan's answer as it is.");
             Status += failed is null ? $" {card} sent back with the new answer." : $" {card} not sent back: {failed}";
         }
+        Commit(page.File, what ?? (changed ? $"changed the agent's answer to \"{q.Question}\": {answer.Trim()}" : $"answered \"{q.Question}\": {answer.Trim()}"));
         Reload();
     }
 
     /// <summary>Keep what an agent chose: the answer stays, now with the person's name on it instead of the agent's.</summary>
-    internal void Keep(PlanQuestionRow q) => Answer(q, q.Chosen);
+    internal void Keep(PlanQuestionRow q) => Answer(q, q.Chosen, $"kept the agent's answer to \"{q.Question}\": {q.Chosen}");
 
     /// <summary>Write a part edited as text back into the plan.</summary>
     internal bool Save(PlanTextPart part, string text)
@@ -414,15 +464,39 @@ public sealed partial class DesignViewModel : ObservableObject
         if (Page is not { } page) return false;
         try { PlanStore.SetSection(page.File, part.Name, text); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Couldn't save {part.Name}: {e.Message}"; return false; }
-        Status = $"{part.Name} saved to {Path.GetFileName(page.File)}, not committed.";
+        Status = $"{part.Name} saved to {Path.GetFileName(page.File)}.";
+        Commit(page.File, $"edited {part.Label}");
         Reload();
         return true;
     }
 
-    readonly Dictionary<string, HashSet<string>> _unticked = new(StringComparer.OrdinalIgnoreCase);
-    /// <summary>The headings a plan's page has unticked, kept here because a reload builds the page again.</summary>
-    internal HashSet<string> UntickedFor(string file) =>
-        _unticked.TryGetValue(file, out var set) ? set : _unticked[file] = new(StringComparer.OrdinalIgnoreCase);
+    readonly Dictionary<string, HashSet<string>> _wroteUnticked = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The rows a plan's page has unticked: the plan's <c>unticked</c> (or <c>unticked-features</c>) property
+    /// (WOR-0199), unless this page wrote another since and the file as read doesn't have it yet (a read begun before
+    /// the write); once a read agrees, the file alone says.</summary>
+    internal HashSet<string> UntickedFor(string file, bool features, IReadOnlyList<string> inFile)
+    {
+        var key = features ? file + "#features" : file;
+        var read = new HashSet<string>(inFile, StringComparer.OrdinalIgnoreCase);
+        if (!_wroteUnticked.TryGetValue(key, out var wrote)) return read;
+        if (!wrote.SetEquals(read)) return new(wrote, StringComparer.OrdinalIgnoreCase);
+        _wroteUnticked.Remove(key);
+        return read;
+    }
+
+    /// <summary>A row ticked or unticked: the plan's list of unticked rows written and committed.</summary>
+    internal void SetUnticked(string file, bool features, IReadOnlyCollection<string> titles)
+    {
+        _wroteUnticked[features ? file + "#features" : file] = new(titles, StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            if (!PlanStore.SetList(file, features ? PlanStore.UntickedFeaturesKey : PlanStore.UntickedKey, titles)) return;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Couldn't keep the ticks in {Path.GetFileName(file)}: {e.Message}"; return; }
+        var rows = features ? "features" : "cards";
+        Commit(file, titles.Count == 0 ? $"every {(features ? "feature" : "card")} ticked" : $"unticked {rows}: {string.Join(", ", titles)}", quiet: true);
+    }
 
     /// <summary>Make a plan's ticked cards on its story board (WOR-0177, <see cref="PlanStore.MakeCards"/>), then read the plans
     /// and boards again. Open questions need a second press (<paramref name="confirmOpen"/>). Sets <see cref="Status"/> to
@@ -438,6 +512,7 @@ public sealed partial class DesignViewModel : ObservableObject
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
             Status = $"Couldn't make the cards: {e.Message}";
+            Commit(file, "made some cards before it failed");   // the ids written so far, so the plan knows what exists
             Reload();
             BoardsChanged?.Invoke();   // a part may have been made before it failed
             return new PlanStore.MadeCards("", [], e.Message, false, [], false);
@@ -450,7 +525,8 @@ public sealed partial class DesignViewModel : ObservableObject
         if (result.Problem.Length > 0) { Status = result.Problem; return result; }
         {
             Status = $"Made {result.Made.Count} {(result.Made.Count == 1 ? "card" : "cards")} on {result.Board}" + (result.CreatedBoard ? " (a new board)" : "") + ": " +
-                     string.Join(", ", result.Made.Select(m => m.Id)) + $". The ids are in {Path.GetFileName(file)}, not committed.";
+                     string.Join(", ", result.Made.Select(m => m.Id)) + $". The ids are in {Path.GetFileName(file)}.";
+            Commit(file, "made " + string.Join(", ", result.Made.Select(m => m.Id)));
             BoardsChanged?.Invoke();
         }
         Reload();
@@ -506,7 +582,7 @@ public sealed partial class DesignViewModel : ObservableObject
                 var (agent, planFile) = StartFeaturePlanner(f.Idea, plan.Slug);
                 PlanStore.SetFeatureLink(file, f.Title, Path.GetFileName(planFile));
                 started.Add((f.Title, planFile, agent.Id));
-                AfterTurn(agent, Reload);
+                AfterTurn(agent, () => { NotePlanner(agent); Reload(); });
             }
             catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException)
             { problem = $"Couldn't start a planner on \"{f.Title}\": {e.Message}"; break; }
@@ -515,7 +591,8 @@ public sealed partial class DesignViewModel : ObservableObject
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { if (problem.Length == 0) problem = $"Couldn't set the plan agreed: {e.Message}"; }
         Status = (started.Count == 0 ? "" : $"Drafting {started.Count} feature {(started.Count == 1 ? "plan" : "plans")}: " +
                  string.Join(", ", started.Select(s => Path.GetFileName(s.Item2))) + $". Each shows under {(plan.Title.Length > 0 ? plan.Title : plan.Slug)} when its planner's turn ends; " +
-                 $"the links are in {Path.GetFileName(file)}, not committed. ") + problem;
+                 $"the links are in {Path.GetFileName(file)}. ") + problem;
+        if (started.Count > 0) Commit(file, "drafting feature plans for " + string.Join(", ", started.Select(s => s.Item1)));
         Reload();
         return new(started, problem, false, open);
     }
@@ -614,8 +691,8 @@ public sealed partial class PlanPage : ObservableObject
 
     // ---- Make features (WOR-0179): the ticked features without a plan each get a planner, parent set to this plan ----
 
-    /// <summary>Titles of the features the person unticked (all are ticked to start), kept across the page's reloads.</summary>
-    internal HashSet<string> UntickedFeatures => _owner.UntickedFor(File + "#features");
+    /// <summary>Titles of the features the person unticked (all are ticked to start), kept in the plan (WOR-0199).</summary>
+    internal HashSet<string> UntickedFeatures { get; }
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(MakeFeaturesText), nameof(FeaturesOpenText))] public partial bool ConfirmingFeatures { get; set; }
     public int FeatureMakeCount => Features.Count(f => f.Proposed && f.Ticked);
     public bool CanMakeFeatures => FeatureMakeCount > 0;
@@ -628,6 +705,7 @@ public sealed partial class PlanPage : ObservableObject
     internal void FeatureTickChanged(PlanFeatureRow row)
     {
         if (row.Ticked) UntickedFeatures.Remove(row.Title); else UntickedFeatures.Add(row.Title);
+        _owner.SetUnticked(File, features: true, UntickedFeatures.Where(t => Features.Any(f => f.Proposed && f.Title.Equals(t, StringComparison.OrdinalIgnoreCase))).ToList());
         ConfirmingFeatures = false;
         NotifyFeatures();
     }
@@ -652,8 +730,8 @@ public sealed partial class PlanPage : ObservableObject
     public bool HasLog => Log.Count > 0;
     public bool Editing => Goals.Editing || NotDoing.Editing || Design.Editing;
 
-    /// <summary>Headings of the proposed cards the person unticked (all are ticked to start), kept across the page's reloads.</summary>
-    internal HashSet<string> Unticked => _owner.UntickedFor(File);
+    /// <summary>Headings of the proposed cards the person unticked (all are ticked to start), kept in the plan (WOR-0199).</summary>
+    internal HashSet<string> Unticked { get; }
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(MakeText))] public partial bool Confirming { get; set; }
     public int MakeCount => Cards.Count(c => c.Proposed && c.Ticked);
     public bool CanMake => MakeCount > 0;
@@ -666,6 +744,7 @@ public sealed partial class PlanPage : ObservableObject
     internal void TickChanged(PlanCardRow row)
     {
         if (row.Ticked) Unticked.Remove(row.Title); else Unticked.Add(row.Title);
+        _owner.SetUnticked(File, features: false, Unticked.Where(t => Cards.Any(c => c.Proposed && c.Title.Equals(t, StringComparison.OrdinalIgnoreCase))).ToList());
         Confirming = false;   // a different set of cards: the question is asked again
         NotifyMake();
     }
@@ -695,6 +774,8 @@ public sealed partial class PlanPage : ObservableObject
         _owner = owner;
         Plan = plan;
         _plans = plans ?? [];
+        Unticked = owner.UntickedFor(plan.File, features: false, plan.Unticked);
+        UntickedFeatures = owner.UntickedFor(plan.File, features: true, plan.UntickedFeatures);
         string raw;
         try { raw = System.IO.File.ReadAllText(plan.File); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { raw = ""; }
         Goals = new PlanTextPart(owner, "Goals", PlanText.Section(raw, "Goals"), "What is different when it's done, a few lines.");

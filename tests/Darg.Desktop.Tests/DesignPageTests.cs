@@ -143,7 +143,8 @@ public class DesignPageTests
             Assert.Contains($"**Answer:** Tailscale ({Environment.UserName}, {DateTime.Now:yyyy-MM-dd})", File.ReadAllText(phoneFile));
             await app.Until(() => d.Page is { } p && p != page && p.Questions[0].Answered, "the page read again with the answer");
             Assert.False(d.Page!.Questions[0].Asking);
-            Assert.Contains("not committed", d.Status);
+            // WOR-0199: committed at once where the plan is in a repo (PlanCommitTests); this docs folder is in none of its own
+            Assert.Contains("Saved to phone.md.", d.Status);
 
             // a part edited in place: only its lines change
             var before = File.ReadAllText(phoneFile);
