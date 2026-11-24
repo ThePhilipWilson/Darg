@@ -2,7 +2,7 @@
 
 > History: the checklist from the first overnight build, when Darg was called Workbench, kept as written. How the app works now is in [README.md](README.md) and the docs it lists.
 
-Open it from the **Workbench** shortcut on the desktop or in the Start menu. It runs from `D:\Apps\Workbench` on your real projects (Alpha, Beta, Project C).
+Open it from the **Workbench** shortcut on the desktop or in the Start menu. It runs from the install folder on your real projects (Alpha, Beta, Project C).
 
 ## Built overnight
 

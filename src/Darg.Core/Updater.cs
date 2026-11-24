@@ -6,7 +6,7 @@ namespace Darg.Core;
 
 /// <summary>Restart Darg, or rebuild it from its repo and restart into the new build.
 ///
-/// An update builds into a folder beside the install (<c>D:\Apps\Darg.next</c>) while Darg
+/// An update builds into a folder beside the install (<c>&lt;install&gt;.next</c>) while Darg
 /// keeps running, so a build that fails changes nothing and says why. Only once it has built does
 /// Darg start a small helper outside its own job (everything in the job dies with Darg), close,
 /// and leave the helper to wait for it to go, copy the new build over the old and start it again.

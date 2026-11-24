@@ -1,7 +1,7 @@
 ﻿# publish.ps1: build Darg for use (Release) into an install folder and make Start menu and desktop
 # shortcuts. Run again to update; a running copy from that folder is closed first.
-#   pwsh -File tools/publish.ps1 [-To D:\Apps\Darg] [-NoShortcuts]
-param([string]$To = 'D:\Apps\Darg', [switch]$NoShortcuts)
+#   pwsh -File tools/publish.ps1 [-To <folder>] [-NoShortcuts]
+param([string]$To = $(if ($env:DARG_INSTALL) { $env:DARG_INSTALL } else { Join-Path $env:LOCALAPPDATA 'Programs\Darg' }), [switch]$NoShortcuts)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 if (-not $env:NUGET_PACKAGES) { $env:NUGET_PACKAGES = 'D:\nuget\packages' }

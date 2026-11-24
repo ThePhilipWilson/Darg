@@ -16,7 +16,7 @@ Run a stretch of normal use with the extra logging, then read the logs.
 $env:DARG_PERF_SECONDS = 10   # a perf.log line every 10 s instead of 60
 $env:DARG_STACK_MS = 300      # first stack after 300 ms held, instead of 1000
 $env:DARG_STALL_MS = 100      # log stalls over 100 ms
-& D:\Apps\Darg\Darg.Desktop.exe   # or the debug build; use it as usual, then close it
+& <install folder>\Darg.Desktop.exe   # or the debug build; use it as usual, then close it
 pwsh -File tools/perf/analyze.ps1                             # the real instance
 pwsh -File tools/perf/analyze.ps1 -Since '2026-11-20 18:00'   # from a time
 ```

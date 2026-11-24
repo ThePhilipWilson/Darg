@@ -7,7 +7,7 @@ public class CopiesTests
 {
     const string Qa = @"D:\repo\.shots\qa-and0006\src\Darg.Desktop\bin\Debug\net10.0-windows10.0.19041.0\Darg.Desktop.exe";
     const string Card = @"D:\repo\.claude\worktrees\wor-0161\src\Darg.Desktop\bin\Debug\net10.0-windows10.0.19041.0\Darg.Desktop.exe";
-    const string Installed = @"D:\Apps\Darg\Darg.Desktop.exe";
+    const string Installed = @"C:\Installed\Darg\Darg.Desktop.exe";
     const string Live = @"D:\repo\.claude\worktrees\live\src\Darg.Desktop\bin\Debug\net10.0-windows10.0.19041.0\Darg.Desktop.exe";
     static bool Exempt(string exe) => exe == Installed || Copies.Exempt(exe);
 

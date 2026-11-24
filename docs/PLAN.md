@@ -4,14 +4,14 @@
 
 One app for everything Philip does across projects: docs, tickets, notes, code, agents, servers, art tools. AI everywhere. Everything except running Unity happens in here.
 
-Started 2026-11-16 from Philip's freestyle, after trying Tim's Tatty. Tatty is good, but making it fit this would stop it being what Tim wants, so this is a separate build. Mockup: [mockup-v1.html](mockup-v1.html), opened locally in a browser.
+Started 2026-11-16 from Philip's freestyle, as a separate build. Mockup: [mockup-v1.html](mockup-v1.html), opened locally in a browser.
 
 ## What it has to do
 
 Philip's list, sorted. Each line is his ask, not a design decision yet.
 
 ### Projects
-- Several projects open at once, as **tabs across the top** (not separate windows as in Tatty). Alpha, Beta, Project C and work are the first four.
+- Several projects open at once, as **tabs across the top** (not separate windows). Alpha, Beta, Project C and work are the first four.
 - Each project has its own boards, notes, docs, repos, agents, consoles and accounts.
 
 ### Tickets (the "Jira-ish" part)
@@ -52,11 +52,11 @@ Philip's list, sorted. Each line is his ask, not a design decision yet.
 - A mobile version on the local network, portrait and landscape.
 - **Remote by default**: no "turn on remote" step. It tunes into every open project automatically.
 
-## What Tatty taught us (keep)
+## What came before (keep)
 - **Plain files for cards.** A ticket is a markdown file in a folder, so git and search work on it for free. Now in a non-Obsidian folder.
 - **Real Claude Code sessions, not the raw API.** Hooks, skills, rules and plugins come along. The rich view needs the session's structured output, not its terminal (see below).
-- **The backlog importer and the card tool** (`import-tasks.py`, `tasks.py` in the Tatty fork) are proven code to start from.
-- Tatty's multi-window model is what Philip *doesn't* want; tabs instead.
+- **The backlog importer and the card tool** (`import-tasks.py`, `tasks.py`) are proven code to start from.
+- A multi-window model is what Philip *doesn't* want; tabs instead.
 
 ## The big technical calls
 
@@ -99,7 +99,7 @@ Also built: GitHub per project, read-only: open PRs, issues (one click makes a c
 
 Also built: the Tools page (🔧, top right): Forge, ComfyUI, Ollama and Pinokio status; Forge draws from a prompt; Ollama answers with a chat model; ComfyUI's newest images; Start launches a tool through the shell so it outlives Workbench. Learned: Ollama's 14B models don't fit on the GPU while Forge holds SDXL; 7B ones do.
 
-**Overnight 2026-11-16/17:** agents survive restarts (saved per project, resumed with --resume); consoles as tabs with saved commands; the Docs view on the vault; editing and saving in the code view; GitLab beside GitHub; a published copy in `D:\Apps\Workbench` with shortcuts; view crashes logged instead of closing the app. What to try by hand: [MORNING.md](MORNING.md).
+**Overnight 2026-11-16/17:** agents survive restarts (saved per project, resumed with --resume); consoles as tabs with saved commands; the Docs view on the vault; editing and saving in the code view; GitLab beside GitHub; a published copy in the install folder with shortcuts; view crashes logged instead of closing the app. What to try by hand: [MORNING.md](MORNING.md).
 
 ## Next
 The phone and tablet ([PHONE-PLAN.md](PHONE-PLAN.md), three questions first); Jira for the work instance; starting Forge and ComfyUI from Workbench. Philip also sends the work doc-site examples.

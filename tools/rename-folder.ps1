@@ -17,7 +17,7 @@ param(
     [string]$InstanceHome = '',
     [string]$ClaudeHome = (Join-Path $HOME '.claude'),
     [string]$ClaudeJson = (Join-Path $HOME '.claude.json'),
-    [string]$Install = 'D:\Apps\Darg',
+    [string]$Install = $(if ($env:DARG_INSTALL) { $env:DARG_INSTALL } else { Join-Path $env:LOCALAPPDATA 'Programs\Darg' }),
     [string[]]$ShortcutDirs = @([Environment]::GetFolderPath('Desktop'), (Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs')),
     [switch]$Apply,
     [switch]$SkipProcessCheck # for the test, which runs while Darg may be open on other work

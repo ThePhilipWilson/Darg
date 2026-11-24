@@ -78,7 +78,7 @@ pwsh -File tools/test.ps1 -Integration -Filter Send_back
 pwsh -File tools/publish.ps1
 ```
 
-Builds Release into `D:\Apps\Darg`, makes Start menu and desktop shortcuts and writes `source.txt` (the repo) beside the exe. **Never run it from an agent inside Darg**: it closes the installed copy, which kills the agent's own host (it did, twice). The script refuses; run it from a terminal, or use the header's ⟳ menu.
+Builds Release into the install folder (`-To`, else `DARG_INSTALL`, else `%LOCALAPPDATA%\Programs\Darg`), makes Start menu and desktop shortcuts and writes `source.txt` (the repo) beside the exe. **Never run it from an agent inside Darg**: it closes the installed copy, which kills the agent's own host (it did, twice). The script refuses; run it from a terminal, or use the header's ⟳ menu.
 
 ⟳ Update builds the repo into `<install>.next` while the app runs, then a helper (`Updater`, started outside the app's job) waits for the app to close, copies the build in and restarts it. If the repo moved on after a build, the button reads Rebuild, the header shows `⟳ Update ready •` and Use last build restarts into the existing one. A copy without `source.txt` (a debug build) can only restart. Agents started before an update keep the old instructions until they are restarted.
 

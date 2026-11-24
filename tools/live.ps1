@@ -11,7 +11,7 @@
 #
 # It opens a console window of its own showing dotnet watch, and that window goes when Darg is closed.
 # -Shortcut makes "Darg (live)" Start menu and desktop shortcuts that run this script.
-# The installed copy (D:\Apps\Darg) and a live copy on the same instance would fight over its agents and
+# The installed copy (the install folder) and a live copy on the same instance would fight over its agents and
 # files, so this refuses while the installed one runs, unless -Force (or DARG_HOME points elsewhere).
 param([string]$Branch, [string]$Tree, [switch]$Shortcut, [switch]$Force, [switch]$Here)
 $ErrorActionPreference = 'Stop'
