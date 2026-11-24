@@ -120,7 +120,11 @@
                   <DataTemplate x:DataType="vm:HomeCommit">
                     <StackPanel Margin="0,2,0,4" ToolTip.Tip="{Binding Subject}">
                       <TextBlock Text="{Binding Subject}" TextTrimming="CharacterEllipsis"/>
-                      <TextBlock Text="{Binding Meta}" Classes="dim small" TextTrimming="CharacterEllipsis"/>
+                      <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{Binding Repo}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}"
+                                   IsVisible="{Binding Repo, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" AutomationProperties.Name="Commit repo"/>
+                        <TextBlock Text="{Binding Meta}" Classes="dim small" TextTrimming="CharacterEllipsis"/>
+                      </StackPanel>
                     </StackPanel>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>

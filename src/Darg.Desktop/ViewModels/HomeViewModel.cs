@@ -45,6 +45,8 @@ public partial class HomeViewModel : ObservableObject
     public ObservableCollection<HomeArtifact> Artifacts { get; } = [];
     [ObservableProperty] public partial string ArtifactsEmpty { get; set; } = "";
 
+    /// <summary>How many recent commits Home shows for each repo.</summary>
+    public const int CommitsPerRepo = 3;
     public bool ShowsCommits => _project.Config.ExistingRepos().Any(Repo.IsGit);
     public ObservableCollection<HomeCommit> Commits { get; } = [];
     [ObservableProperty] public partial string CommitsEmpty { get; set; } = "";
@@ -81,7 +83,7 @@ public partial class HomeViewModel : ObservableObject
                 body = read ?? $"Couldn't show {Path.GetFileName(path)}: {why}";
             }
             var repos = config.ExistingRepos().Where(Repo.IsGit).ToList();
-            var log = repos.SelectMany(r => Repo.Log(r, repos.Count > 1 ? 3 : 5).Select(c => (Repo: ProjectConfig.RepoName(r), Commit: c)))
+            var log = repos.SelectMany(r => Repo.Log(r, CommitsPerRepo).Select(c => (Repo: ProjectConfig.RepoName(r), Commit: c)))
                 .OrderByDescending(x => x.Commit.When).ToList();
             return (path, body, log);
         });
@@ -94,7 +96,7 @@ public partial class HomeViewModel : ObservableObject
         var several = config.ExistingRepos().Count(Repo.IsGit) > 1;
         Commits.Clear();
         foreach (var (repo, c) in commits)
-            Commits.Add(new HomeCommit(c.Subject, $"{(several ? repo + " · " : "")}{c.Hash} · {ProjectHome.Ago(c.When, now)} · {c.Author}"));
+            Commits.Add(new HomeCommit(c.Subject, $"{c.Hash} · {ProjectHome.Ago(c.When, now)} · {c.Author}", several ? repo : ""));
         CommitsEmpty = commits.Count == 0 ? "No commits yet." : "";
         Status = readme is null ? "" : $"README: {readme}";
     }
@@ -219,4 +221,4 @@ public partial class HomeViewModel : ObservableObject
 
 public sealed record HomeCard(string Id, string Title, string Column);
 public sealed record HomeArtifact(string Path, string Title, string When);
-public sealed record HomeCommit(string Subject, string Meta);
+public sealed record HomeCommit(string Subject, string Meta, string Repo = "");
