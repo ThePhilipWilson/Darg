@@ -79,7 +79,8 @@ public class ProjectPlanTests
         var page = d.Page!;
         Assert.Equal(projFile, page.File);
         Assert.Contains("2 of 4 features planned", page.Summary);
-        Assert.Contains("1 of 4 cards done", page.Summary);
+        Assert.Contains("2 proposed", page.Summary);
+        Assert.Contains("3 of 4 cards made, 1 done", page.Summary);
         Assert.Equal(["Phone", "Themes", "Search", "Voice"], page.Features.Select(f => f.Title));
         Assert.Equal("agreed · 1/2 cards done", page.Features[0].State);
         Assert.Equal("agreed · 0/2 cards done", page.Features[1].State);

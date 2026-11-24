@@ -39,6 +39,17 @@
     </Style>
     <Style Selector="Border.column.done"><Setter Property="Background" Value="{DynamicResource AccentWash}"/></Style>
     <Style Selector="TextBlock.dropped"><Setter Property="TextDecorations" Value="Strikethrough"/></Style>
+    <!-- a question a Needs you row jumped to is lit (WOR-0200) -->
+    <Style Selector="Border.question">
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="Border.question.lit">
+      <Setter Property="BorderBrush" Value="{DynamicResource Warn}"/>
+      <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="TextBlock.planner"><Setter Property="Foreground" Value="{DynamicResource Info}"/></Style>
+    <Style Selector="TextBlock.planner.waiting"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
   </UserControl.Styles>
 
   <UserControl.DataTemplates>
@@ -104,6 +115,9 @@
             <TreeDataTemplate DataType="vm:PlanNode" ItemsSource="{Binding Children}">
               <DockPanel ToolTip.Tip="{Binding Tip}">
                 <TextBlock DockPanel.Dock="Right" Text="{Binding Progress}" Classes="dim small" Margin="8,0,6,0" VerticalAlignment="Center"/>
+                <!-- what waits on Philip here and in the plans under it (WOR-0200) -->
+                <TextBlock DockPanel.Dock="Right" Text="{Binding NeedsText}" Foreground="{DynamicResource Warn}" Classes="small" FontWeight="SemiBold"
+                           Margin="6,0,0,0" VerticalAlignment="Center" IsVisible="{Binding HasNeeds}" ToolTip.Tip="{Binding NeedsTip}"/>
                 <Border DockPanel.Dock="Right" Classes="column" Margin="6,0,0,0" VerticalAlignment="Center" IsVisible="{Binding HasMark}">
                   <TextBlock Text="{Binding Mark}" Classes="small"/>
                 </Border>
@@ -126,9 +140,41 @@
             </StackPanel>
             <StackPanel VerticalAlignment="Center" Spacing="2">
               <SelectableTextBlock Text="{Binding Page.Title, FallbackValue=''}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap"/>
-              <TextBlock Text="{Binding Page.Summary, FallbackValue=''}" Classes="dim small" TextWrapping="Wrap"/>
+              <!-- how far it has got (WOR-0200): its state, features and cards, and what its planner is doing now -->
+              <WrapPanel>
+                <Border Classes="column" Classes.done="{Binding Page.Built, FallbackValue=False}" Margin="0,1,8,1" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Page.State, FallbackValue=''}" Classes="small"/>
+                </Border>
+                <TextBlock Text="{Binding Page.Summary, FallbackValue=''}" Classes="dim small" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <TextBlock Text="{Binding PlannerText}" Classes="small planner" Classes.waiting="{Binding PlannerWaiting}" VerticalAlignment="Center"
+                           IsVisible="{Binding HasPlanner}"/>
+              </WrapPanel>
             </StackPanel>
           </DockPanel>
+        </Border>
+
+        <!-- Needs you (WOR-0200): what waits on Philip in this plan and the plans under it; only there when something does -->
+        <Border x:Name="NeedsStrip" DockPanel.Dock="Top" IsVisible="{Binding Page.HasNeeds, FallbackValue=False}" Margin="18,12,18,0" Padding="12,8"
+                CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource Warn}" Background="{DynamicResource Panel}">
+          <StackPanel Spacing="2">
+            <TextBlock Text="{Binding Page.NeedsHeading, FallbackValue=''}" FontWeight="SemiBold" Foreground="{DynamicResource Warn}"/>
+            <ScrollViewer MaxHeight="190">
+              <ItemsControl ItemsSource="{Binding Page.Needs, FallbackValue={x:Null}}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:PlanNeedRow">
+                    <Button Classes="row" Command="{Binding OpenCommand}" ToolTip.Tip="{Binding Tip}" AutomationProperties.Name="{Binding Text}" Padding="2,5">
+                      <DockPanel>
+                        <Border DockPanel.Dock="Right" Classes="column" Margin="8,0,0,0" VerticalAlignment="Top">
+                          <TextBlock Text="{Binding Kind}" Classes="small"/>
+                        </Border>
+                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                      </DockPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </StackPanel>
         </Border>
 
         <!-- the page fills the width it's given (Philip, 2026-11-22: no empty strip on a wide window) -->
@@ -147,7 +193,7 @@
                   <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="10"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:PlanQuestionRow">
-                      <Border BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="6" Padding="10,8" Background="{DynamicResource Bg}">
+                      <Border Classes="question" Classes.lit="{Binding Highlighted}" CornerRadius="6" Padding="10,8" Background="{DynamicResource Bg}">
                         <StackPanel Spacing="6">
                           <SelectableTextBlock Text="{Binding Question}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                           <TextBlock Text="{Binding Context}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasContext}"/>

@@ -74,7 +74,72 @@ public sealed partial class DesignViewModel : ObservableObject
     /// its <c>parent:</c>, leaving the page where it is; returns the agent and the file Darg named for the plan.</summary>
     public Func<string, string, (AgentViewModel Agent, string File)>? StartFeaturePlanner { get; set; }
     /// <summary>The agent the chat beside the page talks to: the shown plan's planner, or the one drafting a new plan.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowChat), nameof(HasPlanner), nameof(NoPlanner))] public partial AgentViewModel? Planner { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowChat), nameof(HasPlanner), nameof(NoPlanner), nameof(PlannerText), nameof(PlannerWaiting))] public partial AgentViewModel? Planner { get; set; }
+    /// <summary>What the plan's planner is doing now, for the page's progress line whether its chat shows or not (WOR-0200).</summary>
+    public string PlannerText => Planner is { } a ? "planner: " + PlannerState(a, IsDrafting) : "";
+    public bool PlannerWaiting => Planner is { NeedsYou: true };
+
+    /// <summary>"drafting", "working · 3 steps", "waiting on you", "idle", "out of usage…", "stopped".</summary>
+    internal static string PlannerState(AgentViewModel a, bool drafting) => a.State switch
+    {
+        AgentState.NeedsYou => "waiting on you",
+        AgentState.Starting or AgentState.Working => drafting ? "drafting" : a.StateText,
+        AgentState.Exited => "stopped",
+        _ when a.TurnFailed => "stopped with an error",
+        _ when a.StateText.StartsWith("out of usage", StringComparison.Ordinal) => a.StateText,
+        _ => "idle",
+    };
+
+    /// <summary>What a planner waiting on the person asks, for a Needs you row; null when it isn't waiting.</summary>
+    internal static string? PlannerAsk(AgentViewModel? a)
+    {
+        if (a is not { NeedsYou: true }) return null;
+        if (a.Items.OfType<QuestionItem>().LastOrDefault(q => q.Pending) is { } q)
+            return "The planner asks: " + (q.Questions.FirstOrDefault()?.Question is { Length: > 0 } text ? text : "a question");
+        if (a.Items.OfType<PermissionItem>().LastOrDefault(p => p.Pending) is { } p) return $"The planner asks to use {p.Tool}";
+        return "The planner waits on you";
+    }
+
+    AgentViewModel? _watchedPlanner;
+    partial void OnPlannerChanged(AgentViewModel? value)
+    {
+        if (_watchedPlanner is not null) _watchedPlanner.PropertyChanged -= PlannerPropertyChanged;
+        _watchedPlanner = value;
+        if (value is null) return;
+        value.PropertyChanged += PlannerPropertyChanged;
+        // a planner started from the chat after the plans were read is watched for asking too
+        if (_planners.TryAdd(value, value.NeedsYou)) value.PropertyChanged += WatchedPlannerChanged;
+    }
+
+    void PlannerPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (nameof(AgentViewModel.State) or nameof(AgentViewModel.Steps) or nameof(AgentViewModel.TurnFailed))) return;
+        OnPropertyChanged(nameof(PlannerText));
+        OnPropertyChanged(nameof(PlannerWaiting));
+    }
+
+    /// <summary>Every listed planner of a plan in the tree, and whether it waits on the person: one starting or
+    /// stopping waiting reads the plans again, so the page's Needs you and the tree's counts follow it.</summary>
+    readonly Dictionary<AgentViewModel, bool> _planners = [];
+
+    void WatchPlanners(IEnumerable<PlanDoc> plans)
+    {
+        var now = plans.Select(p => PlannerFor?.Invoke(p.File)).Append(Planner).OfType<AgentViewModel>().Distinct().ToList();
+        foreach (var old in _planners.Keys.Except(now).ToList()) { old.PropertyChanged -= WatchedPlannerChanged; _planners.Remove(old); }
+        foreach (var a in now)
+        {
+            if (!_planners.ContainsKey(a)) a.PropertyChanged += WatchedPlannerChanged;
+            _planners[a] = a.NeedsYou;
+        }
+    }
+
+    void WatchedPlannerChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(AgentViewModel.State) || sender is not AgentViewModel a || !_planners.TryGetValue(a, out var was)) return;
+        if (was == a.NeedsYou) return;
+        _planners[a] = a.NeedsYou;
+        Dispatcher.UIThread.Post(Reload);
+    }
     public bool HasPlanner => Planner is not null;
     public bool ShowChat => CanPlan && (Planner is not null || Page is not null);
     /// <summary>A plan shown with no planner: a message from the chat starts one that reads the plan first.</summary>
@@ -88,7 +153,7 @@ public sealed partial class DesignViewModel : ObservableObject
     (AgentViewModel Agent, string File)? _draft;
     string? _selectAfter;
     /// <summary>A new plan is being drafted and nothing else picked since: the page says so and the chat is its planner's.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Empty), nameof(DraftingText))] public partial bool IsDrafting { get; private set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Empty), nameof(DraftingText), nameof(PlannerText))] public partial bool IsDrafting { get; private set; }
     public string DraftingText => _draft is { } d
         ? $"The planner is drafting {Path.GetFileName(d.File)} from your line. It opens here when its turn ends; its chat is on the right." : "";
 
@@ -223,7 +288,8 @@ public sealed partial class DesignViewModel : ObservableObject
         var expanded = Flatten(Tree).Where(n => !n.IsExpanded).Select(n => n.Plan.File).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var index = Blockers.Index(cards);
         PlanNode Node(PlanStore.Node n) =>
-            new(n.Plan, Progress(n, index), n.Children.Select(Node)) { IsExpanded = !expanded.Contains(n.Plan.File) };
+            new(n.Plan, Progress(n, index), n.Children.Select(Node), NeedsCount(n, index)) { IsExpanded = !expanded.Contains(n.Plan.File) };
+        WatchPlanners(plans);
         var roots = PlanStore.Tree(plans).Select(Node).ToList();
         Tree.Clear();
         foreach (var r in roots) Tree.Add(r);
@@ -235,12 +301,12 @@ public sealed partial class DesignViewModel : ObservableObject
         if (Page is { Editing: true } open && pick is not null && string.Equals(open.File, pick.Plan.File, StringComparison.OrdinalIgnoreCase))
         {
             // a part is being edited: keep its text, refresh only what the board says
-            open.RefreshCards(pick.Plan, index);
+            open.RefreshCards(pick.Plan, index, pick.SubPlans);
             _selecting = true; SelectedNode = pick; _selecting = false;
             return;
         }
         _selecting = true; SelectedNode = pick; _selecting = false;
-        Page = pick is null ? null : new PlanPage(this, pick.Plan, index, log, plans);
+        Page = pick is null ? null : new PlanPage(this, pick.Plan, index, log, plans, pick.SubPlans);
     }
 
     bool _selecting;
@@ -250,7 +316,7 @@ public sealed partial class DesignViewModel : ObservableObject
         if (value is not null) IsDrafting = false;
         // picking another plan reads it fresh, with the board as it is now
         Page = value is null ? null : new PlanPage(this, value.Plan, Blockers.Index(CardIndex.Read(_config.Boards)),
-            ReportsFolder is null ? [] : ReportStore.List(ReportsFolder), _plans);
+            ReportsFolder is null ? [] : ReportStore.List(ReportsFolder), _plans, value.SubPlans);
     }
 
     static IEnumerable<PlanNode> Flatten(IEnumerable<PlanNode> nodes) => nodes.SelectMany(n => Flatten(n.Children).Prepend(n));
@@ -272,6 +338,50 @@ public sealed partial class DesignViewModel : ObservableObject
         }
         Add(node);
         return total == 0 ? "" : $"{done}/{total}";
+    }
+
+    /// <summary>What waits on the person in a plan and every plan under it (WOR-0200): its <see cref="PlanNeeds"/>
+    /// and its planner, if one is asking.</summary>
+    int NeedsCount(PlanStore.Node node, IReadOnlyDictionary<string, BoardCard> index) =>
+        PlanNeeds.Of(node.Plan, index).Count + (PlannerAsk(PlannerFor?.Invoke(node.Plan.File)) is null ? 0 : 1)
+        + node.Children.Sum(c => NeedsCount(c, index));
+
+    /// <summary>A plan's Needs you rows: its own items, then each plan's under it with that plan's title in front.</summary>
+    internal List<PlanNeedRow> NeedsOf(PlanDoc plan, IReadOnlyList<PlanDoc> sub, IReadOnlyDictionary<string, BoardCard> index)
+    {
+        var rows = new List<PlanNeedRow>();
+        foreach (var p in sub.Prepend(plan))
+        {
+            var from = p == plan ? "" : (p.Title.Length > 0 ? p.Title : p.Slug);
+            if (PlannerAsk(PlannerFor?.Invoke(p.File)) is { } ask)
+                rows.Add(new PlanNeedRow(this, new PlanNeed(PlanNeedKind.Question, p.File, ask), from, planner: true));
+            rows.AddRange(PlanNeeds.Of(p, index).Select(n => new PlanNeedRow(this, n, from)));
+        }
+        return rows;
+    }
+
+    /// <summary>Raised when a Needs you row lands on a question: the view scrolls it into sight.</summary>
+    public event Action<PlanQuestionRow>? QuestionShown;
+    /// <summary>Raised when a Needs you row is the planner's ask: the view shows the chat's newest line.</summary>
+    public event Action? ChatShown;
+
+    /// <summary>A Needs you row clicked: a question (or an agent's choice) is scrolled to and lit on its plan's page,
+    /// a card opens on the board, a planner's ask shows its plan with the chat beside it.</summary>
+    internal void OpenNeed(PlanNeedRow row)
+    {
+        var need = row.Need;
+        if (need.Card is { } card && need.Kind is PlanNeedKind.Decision or PlanNeedKind.Qa) { ShowCard(card); return; }
+        if (Page is null || !string.Equals(Page.File, need.PlanFile, StringComparison.OrdinalIgnoreCase))
+        {
+            var node = Flatten(Tree).FirstOrDefault(n => string.Equals(n.Plan.File, need.PlanFile, StringComparison.OrdinalIgnoreCase));
+            if (node is null) { Status = $"{Path.GetFileName(need.PlanFile)} isn't in the plans any more."; return; }
+            SelectedNode = node;
+        }
+        if (row.Planner) { ChatShown?.Invoke(); return; }
+        if (Page?.Questions.FirstOrDefault(q => q.Question == need.Question) is not { } question)
+        { Status = $"No question \"{need.Question}\" in {Path.GetFileName(need.PlanFile)} any more."; return; }
+        foreach (var q in Page.Questions) q.Highlighted = q == question;
+        QuestionShown?.Invoke(question);
     }
 
     /// <summary>Write an answer into the plan as its <c>**Answer:**</c> line.</summary>
@@ -450,14 +560,22 @@ public sealed partial class PlanNode : ObservableObject
     public bool Dropped => Plan.Status == "dropped";
     public string Progress { get; }
     public string Tip => $"{(Plan.IsProject ? "Project" : "Feature")} plan · {Plan.Status}" + (Progress.Length > 0 ? $" · {Progress} cards done" + (Plan.IsProject ? ", with its features'" : "") : "") + $"\n{Plan.File}";
+    /// <summary>Things waiting on the person in this plan and the plans under it (WOR-0200).</summary>
+    public int Needs { get; }
+    public bool HasNeeds => Needs > 0;
+    public string NeedsText => $"● {Needs}";
+    public string NeedsTip => $"{Needs} waiting on you" + (Children.Count > 0 ? ", with the plans under it" : "");
     public ObservableCollection<PlanNode> Children { get; }
+    /// <summary>Every plan under this one, for the page's Needs you.</summary>
+    public IReadOnlyList<PlanDoc> SubPlans => Children.SelectMany(c => c.SubPlans.Prepend(c.Plan)).ToList();
     [ObservableProperty] public partial bool IsExpanded { get; set; } = true;
 
-    public PlanNode(PlanDoc plan, string progress, IEnumerable<PlanNode> children)
+    public PlanNode(PlanDoc plan, string progress, IEnumerable<PlanNode> children, int needs = 0)
     {
         Plan = plan;
         Progress = progress;
         Children = new(children);
+        Needs = needs;
     }
 }
 
@@ -470,7 +588,15 @@ public sealed partial class PlanPage : ObservableObject
     public string Title => Plan.Title.Length > 0 ? Plan.Title : Plan.Slug;
     public string Intro => Plan.Intro;
     public bool HasIntro => Intro.Length > 0;
+    /// <summary>The kind, then features planned, drafting and proposed, then cards made and done (WOR-0200).</summary>
     [ObservableProperty] public partial string Summary { get; private set; } = "";
+    /// <summary>draft, agreed, building, built or dropped.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Built))] public partial string State { get; private set; } = "";
+    public bool Built => State == "built";
+    /// <summary>What waits on the person here and in the plans under it (WOR-0200), shown as a strip at the top.</summary>
+    public ObservableCollection<PlanNeedRow> Needs { get; } = [];
+    public bool HasNeeds => Needs.Count > 0;
+    public string NeedsHeading => $"Needs you · {Needs.Count}";
     public bool HasBoard => Plan.Board.Length > 0;
     public string BoardText => $"▦ {Plan.Board}";
     public PlanTextPart Goals { get; }
@@ -564,7 +690,7 @@ public sealed partial class PlanPage : ObservableObject
     readonly IReadOnlyList<PlanDoc> _plans;
 
     public PlanPage(DesignViewModel owner, PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index, IReadOnlyList<AgentReport> reports,
-        IReadOnlyList<PlanDoc>? plans = null)
+        IReadOnlyList<PlanDoc>? plans = null, IReadOnlyList<PlanDoc>? sub = null)
     {
         _owner = owner;
         Plan = plan;
@@ -582,11 +708,11 @@ public sealed partial class PlanPage : ObservableObject
         // what has happened since: the made cards' reports, newest first (built here, never written into the plan)
         Log = reports.Where(r => ids.Contains(r.Card)).OrderByDescending(r => r.Date, StringComparer.Ordinal)
             .Select(r => new PlanLogRow(owner, r)).ToList();
-        RefreshCards(plan, index);
+        RefreshCards(plan, index, sub ?? []);
     }
 
-    /// <summary>Read the cards' rows again from the board, the rest of the page left as it is.</summary>
-    public void RefreshCards(PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index)
+    /// <summary>Read the cards' rows and Needs you again from the board, the rest of the page left as it is.</summary>
+    public void RefreshCards(PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index, IReadOnlyList<PlanDoc> sub)
     {
         Plan = plan;
         // rows that read the same keep their controls (ListSync compares by reference)
@@ -604,14 +730,19 @@ public sealed partial class PlanPage : ObservableObject
             var (d, t) = DesignViewModel.Count(fp, index);
             done += d; total += t; made += fp.Cards.Count(c => c.Made);
         }
-        var state = plan.Status == "agreed" && made > 0 ? (done == total && total > 0 ? "built" : "building") : plan.Status;
+        State = plan.Status == "agreed" && made > 0 ? (done == total && total > 0 ? "built" : "building") : plan.Status;
+        int drafting = Features.Count(f => f.Drafting), proposed = Features.Count(f => f.Proposed);
+        // what waits on the person is in Needs you, not here: this line is only how far the plan has got
         Summary = string.Join(" · ", new[]
         {
-            $"{(plan.IsProject ? "Project" : "Feature")} plan, {state}",
-            plan.IsProject && plan.Features.Count > 0 ? $"{featurePlans.Count} of {plan.Features.Count} features planned" : "",
-            total == 0 ? "" : $"{done} of {total} cards done" + (made < total ? $", {total - made} not made yet" : ""),
-            plan.OpenQuestions.Count is var q and > 0 ? $"{q} {(q == 1 ? "question" : "questions")} open" : "",
+            $"{(plan.IsProject ? "Project" : "Feature")} plan",
+            plan.IsProject && plan.Features.Count > 0 ? $"{featurePlans.Count} of {plan.Features.Count} features planned"
+                + (drafting > 0 ? $", {drafting} drafting" : "") + (proposed > 0 ? $", {proposed} proposed" : "") : "",
+            total == 0 ? (plan.IsProject ? "" : "no cards yet") : $"{made} of {total} cards made, {done} done",
         }.Where(s => s.Length > 0));
+        ListSync.Sync(Needs, _owner.NeedsOf(plan, sub, index));
+        OnPropertyChanged(nameof(HasNeeds));
+        OnPropertyChanged(nameof(NeedsHeading));
     }
 
     [RelayCommand]
@@ -667,6 +798,8 @@ public sealed partial class PlanQuestionRow : ObservableObject
     /// <summary>The options show while it's open, or while an answer is being changed.</summary>
     public bool Asking => !Answered || Changing;
     [ObservableProperty] public partial string OwnAnswer { get; set; } = "";
+    /// <summary>Lit by a Needs you row that jumped here (WOR-0200).</summary>
+    [ObservableProperty] public partial bool Highlighted { get; set; }
 
     public PlanQuestionRow(DesignViewModel owner, PlanQuestion q)
     {
@@ -830,6 +963,28 @@ public sealed partial class PlanFeatureRow : ObservableObject
 
     [RelayCommand]
     void Open() { if (Plan is { } p) _owner.ShowPlan(p.Slug); }
+}
+
+/// <summary>A row of the page's Needs you strip (WOR-0200): what waits, which plan under this one it's in, and a click
+/// that lands on it.</summary>
+public sealed partial class PlanNeedRow(DesignViewModel owner, PlanNeed need, string from, bool planner = false)
+{
+    public PlanNeed Need { get; } = need;
+    public bool Planner { get; } = planner;
+    public string Text => from.Length > 0 ? $"{from}: {Need.Text}" : Need.Text;
+    /// <summary>What kind of wait it is, a word or two for the row's corner.</summary>
+    public string Kind => Planner ? "planner" : Need.Kind switch
+    {
+        PlanNeedKind.Question => "question",
+        PlanNeedKind.Decided => "agent's choice",
+        PlanNeedKind.Decision => "decision",
+        _ => "to check",
+    };
+    public bool OpensCard => !Planner && Need.Card is not null && Need.Kind is PlanNeedKind.Decision or PlanNeedKind.Qa;
+    public string Tip => Planner ? "Show the planner's question in its chat" : OpensCard ? $"Open {Need.Card} on the board" : "Go to the question";
+
+    [RelayCommand]
+    void Open() => owner.OpenNeed(this);
 }
 
 public sealed partial class PlanLogRow(DesignViewModel owner, AgentReport report)

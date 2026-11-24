@@ -111,8 +111,10 @@ public class DesignPageTests
             Assert.Contains("sofa", page.Goals.Markdown);
             Assert.Contains("Tablets", page.NotDoing.Markdown);
             Assert.Contains("thin client", page.Design.Markdown);
-            Assert.Contains("1 question open", page.Summary);
-            Assert.Contains("0 of 2 cards done", page.Summary);
+            Assert.Contains("1 of 2 cards made, 0 done", page.Summary);
+            Assert.Equal("building", page.State);   // agreed, with a card made
+            // the open question waits on the person: it's in Needs you, which the progress line leaves to it (WOR-0200)
+            Assert.Equal(["question"], page.Needs.Select(n => n.Kind));
             var q = Assert.Single(page.Questions);
             Assert.True(q.Asking);
             Assert.Equal("Tailscale (recommended)", q.Options[0].Label);
@@ -383,6 +385,132 @@ public class DesignPageTests
         Assert.Contains("Made 2 cards", d.Status);
         await app.Until(() => d.Page is { } p && p.Cards.Count(c => c.Made) == 2 && !p.Cards.Single(c => c.Title == "Notifications").Made, "the page reading the made cards");
         Assert.Equal(0, d.Page!.MakeCount);   // the row left unticked stays unticked across the reload
+        Assert.Equal("", app.Crashes());
+    }
+
+    /// <summary>WOR-0200: what waits on the person in a plan (an open question, an answer an agent chose, a made card
+    /// waiting on a decision or in QA, the planner asking) shows as a Needs you strip at the top of its page and of its
+    /// project's, each row landing on what it names, and as a count on its row in the tree that the project's adds up;
+    /// the progress line says the plan's state, its cards made and done and what its planner is doing.</summary>
+    [AvaloniaFact]
+    public async Task Needs_you_lists_what_waits_on_the_person_lands_on_each_and_the_tree_counts_it()
+    {
+        using var app = DargApp.Make();
+        var asks = app.Card("Remote access", BoardStore.AttentionName,
+            "TLS on its own port.\n\n## Decision\n\n**Question:** Ship it on port 47818?\n\n" +
+            "- **Yes** (recommended) → done: it's free here.\n- **Pick another** → back: say which.\n\n**Context:** nothing else uses it.\n");
+        var check = app.Card("Pairing", "QA Ready");
+        var quietCard = app.Card("Quiet work", "To Do");
+        var design = Directory.CreateDirectory(Path.Combine(app.Docs, "design")).FullName;
+        File.WriteAllText(Path.Combine(design, "proj.md"), ProjectPlan());
+        var phoneFile = Path.Combine(design, "phone.md");
+        File.WriteAllText(phoneFile, $"""
+            ---
+            kind: feature
+            status: agreed
+            board: Main
+            parent: proj
+            ---
+            # Phone
+
+            ## Questions
+
+            ### How does the phone reach the PC?
+            - **Tailscale** (recommended): nothing goes through anyone else's server.
+            - **Home network only**: simplest.
+
+            ### Which relay?
+            - **Tailscale**: none
+            - **Own server**: more work
+
+            **Answer:** Tailscale (decided by agent, {check.Id}, 2026-11-20)
+
+            ## Cards
+
+            ### {asks.Id}: Remote access
+            TLS on its own port.
+
+            ### {check.Id}: Pairing
+            Scan the code.
+            """);
+        File.WriteAllText(Path.Combine(design, "quiet.md"), $"---\nkind: feature\nstatus: agreed\nboard: Main\n---\n# Quiet\n\n## Cards\n\n### {quietCard.Id}: Quiet work\nNothing waits.\n");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Design" });
+        var d = app.Project.Design!;
+        await app.Until(() => d.Tree.Count == 2 && d.Tree.Any(n => n.Children.Count == 1), "the plan tree");
+        PlanNode Node(string title) => d.Tree.SelectMany(n => n.Children.Prepend(n)).Single(n => n.Title == title);
+
+        // the tree: Phone's four, and the project's count includes them
+        Assert.Equal(4, Node("Phone").Needs);
+        Assert.Equal(4, Node("Proj").Needs);
+        Assert.Equal(0, Node("Quiet").Needs);
+        Assert.False(Node("Quiet").HasNeeds);
+
+        // Phone's page: the strip lists all four in order, and draws them
+        d.SelectedNode = Node("Phone");
+        var page = d.Page!;
+        Assert.Equal(["question", "agent's choice", "decision", "to check"], page.Needs.Select(n => n.Kind));
+        Assert.Equal("How does the phone reach the PC?", page.Needs[0].Text);
+        Assert.Contains("chose \"Tailscale\" for \"Which relay?\"", page.Needs[1].Text);
+        Assert.Equal($"{asks.Id} Remote access asks: Ship it on port 47818?", page.Needs[2].Text);
+        Assert.Contains($"{check.Id} Pairing is in QA Ready", page.Needs[3].Text);
+        Assert.Equal("Needs you · 4", page.NeedsHeading);
+        Assert.Contains("2 of 2 cards made, 0 done", page.Summary);
+        Assert.Equal("building", page.State);
+        await AvaloniaSettle();
+        var strip = app.Window.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "NeedsStrip");
+        Assert.True(strip.IsEffectivelyVisible);
+        Assert.Equal(4, strip.GetVisualDescendants().OfType<Button>().Count());
+        app.Shot("design-needs");
+
+        // the project's page lists Phone's items too, and a question row lands on Phone's page, lit
+        d.SelectedNode = Node("Proj");
+        Assert.Equal(4, d.Page!.Needs.Count);
+        Assert.StartsWith("Phone: ", d.Page.Needs[0].Text);
+        d.Page.Needs[0].OpenCommand.Execute(null);
+        Assert.Equal("Phone", d.Page!.Title);
+        Assert.True(d.Page.Questions.Single(q => q.Question == "How does the phone reach the PC?").Highlighted);
+        // the agent's choice lands on its question, the light moving with it
+        d.Page.Needs[1].OpenCommand.Execute(null);
+        Assert.True(d.Page.Questions.Single(q => q.Question == "Which relay?").Highlighted);
+        Assert.False(d.Page.Questions.Single(q => q.Question == "How does the phone reach the PC?").Highlighted);
+        await AvaloniaSettle();
+        app.Shot("design-needs-lit");
+
+        // the decision row opens the card on the board
+        d.Page.Needs[2].OpenCommand.Execute(null);
+        Assert.Equal(Section.Board, app.Project.Section);
+        Assert.Equal("Remote access", app.Board.Editor?.Title);
+        await app.Api("show", new { project = "proj", section = "Design" });
+
+        // answering the open question drops the counts
+        d.SelectedNode = Node("Phone");
+        d.Page!.Questions.Single(q => q.Question == "How does the phone reach the PC?").Options[0].PickCommand.Execute(null);
+        await app.Until(() => Node("Proj").Needs == 3 && Node("Phone").Needs == 3, "the tree's counts after the answer");
+        Assert.Equal(3, d.Page!.Needs.Count);
+
+        // a plan with nothing waiting has no strip
+        d.SelectedNode = Node("Quiet");
+        Assert.False(d.Page!.HasNeeds);
+        Assert.Contains("1 of 1 cards made, 0 done", d.Page.Summary);
+        Assert.Equal("", d.PlannerText);
+        await AvaloniaSettle();
+        Assert.False(strip.IsEffectivelyVisible);
+        app.Shot("design-no-needs");
+
+        // the planner asking: the progress line says so, Needs you has it, and the tree counts it
+        d.Ask = "FAKE_ASK which board should the cards go on?";
+        d.AskPlannerCommand.Execute(null);
+        await app.Until(() => d.PlannerText == "planner: waiting on you", "the planner waiting on the person");
+        Assert.True(d.PlannerWaiting);
+        await app.Until(() => Node("Quiet").Needs == 1 && d.Page is { HasNeeds: true }, "the planner's ask in Needs you and the tree");
+        var ask = Assert.Single(d.Page!.Needs);
+        Assert.Equal("planner", ask.Kind);
+        Assert.StartsWith("The planner asks: ", ask.Text);
+        ask.OpenCommand.Execute(null);
+        Assert.Equal("Quiet", d.Page!.Title);
+        await AvaloniaSettle();
+        app.Shot("design-planner-waiting");
         Assert.Equal("", app.Crashes());
     }
 
