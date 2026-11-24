@@ -1,0 +1,48 @@
+{
+  "columns": [
+    {
+      "id": "c2",
+      "name": "In Progress"
+    },
+    {
+      "id": "c4",
+      "name": "QA Ready"
+    },
+    {
+      "id": "c5",
+      "name": "For Human Attention"
+    },
+    {
+      "id": "c6",
+      "name": "needs more work"
+    },
+    {
+      "id": "c3",
+      "name": "Done"
+    }
+  ],
+  "prefix": "AND",
+  "version": 1,
+  "nextId": 12,
+  "order": {
+    "backlog": [],
+    "c2": [],
+    "c4": [],
+    "c5": [],
+    "c3": [
+      "AND-0003",
+      "AND-0001",
+      "AND-0006",
+      "AND-0002",
+      "AND-0011",
+      "AND-0008",
+      "AND-0007",
+      "AND-0010",
+      "AND-0004",
+      "AND-0005",
+      "AND-0009"
+    ],
+    "c6": []
+  },
+  "attentionColumn": true
+}
