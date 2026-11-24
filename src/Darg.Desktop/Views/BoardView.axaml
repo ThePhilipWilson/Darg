@@ -237,12 +237,19 @@
                                IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                   </StackPanel>
                 </Border>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                  <ItemsControl ItemsSource="{Binding Cards}" Margin="8">
-                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="7"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <!-- WOR-0195: virtualized, so a big column makes and draws the cards on screen, not all of them -->
+                  <ItemsControl ItemsSource="{Binding Cards}">
+                    <ItemsControl.Template>
+                      <ControlTemplate>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                          <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" Margin="8"/>
+                        </ScrollViewer>
+                      </ControlTemplate>
+                    </ItemsControl.Template>
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:CardViewModel">
-                        <Border Classes="card" Classes.picked="{Binding IsPicked}" Cursor="Hand" ToolTip.Tip="{Binding Description}" Tag="{Binding}">
+                        <Border Classes="card" Classes.picked="{Binding IsPicked}" Cursor="Hand" ToolTip.Tip="{Binding Description}" Tag="{Binding}" Margin="0,0,0,7">
                           <Border.ContextMenu>
                             <ContextMenu ItemsSource="{Binding MoveTargets}">
                               <ContextMenu.Styles>
@@ -327,7 +334,6 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                </ScrollViewer>
               </DockPanel>
             </Border>
             </Panel>
