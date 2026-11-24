@@ -28,7 +28,7 @@ public static class ProjectData
     public static string LegacyRoot(string projectId, string? instanceFolder = null) =>
         Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "projects", Safe(projectId));
 
-    public static string Safe(string id) => string.Concat(id.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+    public static string Safe(string id) => FileNames.Safe(id);
 
     /// <summary>The project's first repo that exists here, or null (also for a project the instance doesn't list).</summary>
     public static string? RepoOf(string projectId, string instanceFolder)

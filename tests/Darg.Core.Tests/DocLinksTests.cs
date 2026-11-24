@@ -55,6 +55,10 @@ public sealed class DocLinksTests : IDisposable
         Assert.Equal(new DocLink.External(link.Trim('<', '>')), Go(link));
 
     [Fact]
+    public void A_path_from_the_folders_root_is_not_taken_for_a_full_path() =>
+        Assert.Equal(new DocLink.External(Path.Combine(_folder, "img", "shot.png")), Go("/img/shot.png"));
+
+    [Fact]
     public void A_file_that_isnt_a_doc_opens_outside()
     {
         var png = Path.Combine(_folder, "img", "shot.png");
