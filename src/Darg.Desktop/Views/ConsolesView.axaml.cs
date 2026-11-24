@@ -54,8 +54,34 @@ public partial class ConsolesView : UserControl
             ProcessArgs = t.Args.ToList(), // its default list is a fixed-size array: replace it, don't add to it
         };
         term.ProcessExited += (_, _) => t.Ended = true;
+        t.Reader = n => ReadLines(term, n);
         _terms[t] = term;
         Hosts.Children.Add(term);
+    }
+
+    /// <summary>The last n lines of the console's text, scrollback included, trailing blank lines dropped.</summary>
+    static string ReadLines(TerminalControl term, int n)
+    {
+        var lines = Avalonia.Threading.Dispatcher.UIThread.CheckAccess() ? Collect(term) : Avalonia.Threading.Dispatcher.UIThread.Invoke(() => Collect(term));
+        var end = lines.Count;
+        while (end > 0 && lines[end - 1].Length == 0) end--;
+        return string.Join('\n', lines.Skip(Math.Max(0, end - n)).Take(n));
+    }
+
+    static dynamic? Buffer(TerminalControl term)
+    {
+        try { return term.Terminal?.Buffer; } catch (NullReferenceException) { return null; }
+    }
+
+    static List<string> Collect(TerminalControl term)
+    {
+        var lines = new List<string>();
+        // the control's terminal exists only once it has been drawn and started: before that there's nothing to read
+        var buf = Buffer(term);
+        if (buf is null) return lines;
+        for (var i = 0; i < buf.Lines.Length; i++)
+            lines.Add(buf.Lines[i]?.TranslateToString(true) ?? "");
+        return lines;
     }
 
     void Show()
