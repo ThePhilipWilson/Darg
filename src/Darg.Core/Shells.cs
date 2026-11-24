@@ -10,7 +10,7 @@ public sealed record ShellInfo(string Name, string Path, IReadOnlyList<string> A
     /// <summary>Arguments that run a command and leave the shell open afterwards, so its output (or error) can be read.</summary>
     public IReadOnlyList<string> RunArgs(string command)
     {
-        var exe = System.IO.Path.GetFileNameWithoutExtension(Path).ToLowerInvariant();
+        var exe = System.IO.Path.GetFileNameWithoutExtension(Path.Replace('\\', '/')).ToLowerInvariant(); // a Windows path read on a Mac too
         return exe switch
         {
             "pwsh" or "powershell" => ["-NoLogo", "-NoExit", "-Command", command],

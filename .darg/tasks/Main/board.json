@@ -1,0 +1,34 @@
+{
+  "columns": [
+    {
+      "id": "c1",
+      "name": "To Do"
+    },
+    {
+      "id": "c2",
+      "name": "In Progress"
+    },
+    {
+      "id": "c4",
+      "name": "For Human Attention"
+    },
+    {
+      "id": "c3",
+      "name": "Done"
+    }
+  ],
+  "prefix": "DAR",
+  "version": 1,
+  "nextId": 4,
+  "order": {
+    "backlog": [],
+    "c2": [
+      "DAR-0003",
+      "DAR-0002"
+    ],
+    "c3": [
+      "DAR-0001"
+    ]
+  },
+  "attentionColumn": true
+}

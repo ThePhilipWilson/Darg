@@ -111,6 +111,8 @@ public partial class MainViewModel
         Add("fettle-chats", "for the phone app, not Fettle: a project's Fettle chats, newest first: {project}. Each: id, name, updated.", FettleChats);
         RegisterPhoneApi(api);
         RegisterNeedsYouApi(api);
+        Add("terminal", "read what a console in a project's Terminal section shows now: {project, lines?: how many of the last lines (default 50, up to 2000), console?: its tab name or number (default the selected one)}. " +
+                        "Use it when Philip asks what's in, or has gone wrong in, his terminal.", ReadTerminal);
     }
 
     static string Json(JsonNode n) => DargApi.Json(n);
@@ -739,5 +741,13 @@ public partial class MainViewModel
         p.OpenCommand.Execute(nameof(Section.Terminal));
         p.Consoles.Run(c);
         return $"Running {c.Name} in {p.Name}'s terminal.";
+    }
+
+    string ReadTerminal(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (p.Consoles is null) throw new ApiError($"{p.Name} has no terminal.");
+        var lines = a.Get("lines") is { } l && int.TryParse(l, out var n) ? n : 50;
+        return p.Consoles.Read(a.Get("console"), lines);
     }
 }

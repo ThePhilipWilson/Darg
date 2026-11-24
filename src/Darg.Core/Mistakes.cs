@@ -170,7 +170,7 @@ public static partial class MistakeLog
         $"Log it in the project's mistake log, {path}: append one entry following the schema at the top of that file " +
         $"(Caught by: user; pick the closest category, or add one if none fits). Then say in a line what you logged, and carry on from the correction.";
 
-    static string Safe(string s) => string.Concat(s.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+    static string Safe(string s) => FileNames.Safe(s);
 
     [GeneratedRegex(@"^(\d{4}-\d{2}-\d{2})\s*(?:[:\-–—]\s*)?(.*)$")]
     private static partial Regex HeadingRx();

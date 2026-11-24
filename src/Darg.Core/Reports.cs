@@ -33,7 +33,7 @@ public static class ReportArchive
     public const string FolderName = "archive";
     public static string Folder(string reportsFolder) => Path.Combine(reportsFolder, FolderName);
 
-    static string Safe(string s) => string.Concat(s.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
+    static string Safe(string s) => FileNames.Safe(s).Trim();
 
     /// <summary>Every archived report, newest first, its story the folder it is in.</summary>
     public static List<AgentReport> List(string reportsFolder)
@@ -302,7 +302,7 @@ public static partial class ReportStore
         return (fields, body.TrimStart('\n'));
     }
 
-    static string Safe(string s) => string.Concat(s.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+    static string Safe(string s) => FileNames.Safe(s);
 
     [GeneratedRegex(@"\b[0-9a-f]{7,40}\b")]
     private static partial Regex CommitRx();

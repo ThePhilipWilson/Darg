@@ -34,7 +34,7 @@ public class ShellsTests
     [InlineData("/bin/zsh", "-l|-c|npm run dev; exec zsh -i")]
     public void RunArgsLeaveTheShellOpen(string path, string expected)
     {
-        IReadOnlyList<string> args = Path.GetFileNameWithoutExtension(path).ToLowerInvariant() switch
+        IReadOnlyList<string> args = Path.GetFileNameWithoutExtension(path.Replace('\\', '/')).ToLowerInvariant() switch
         {
             "bash" => ["--login", "-i"], "wsl" => ["-d", "Ubuntu"], "zsh" => ["-l"], "cmd" => [], _ => ["-NoLogo"],
         };

@@ -57,6 +57,12 @@ public static class DocLinks
 
         if (Path.IsPathRooted(path) && IsDrive(path))
             return Local(path, docs, folder) ?? new DocLink.Missing($"No file at {path}.");
+        // Off Windows "/x" is either a full path or a path from the folder's root, as it is on Windows;
+        // it is the full path when it is under the folder or something is there.
+        if (!OperatingSystem.IsWindows() && path.StartsWith('/') && !path.StartsWith("//", StringComparison.Ordinal)
+            && (path.StartsWith(Path.GetFullPath(folder).TrimEnd('/') + "/", StringComparison.Ordinal)
+                || File.Exists(path) || Directory.Exists(path) || File.Exists(path + ".md")))
+            return Local(path, docs, folder) ?? new DocLink.Missing($"No file at {path}.");
 
         var baseDir = path.StartsWith('/') ? "" : Dir(current);
         if (IsFull(current) && baseDir.Length > 0)

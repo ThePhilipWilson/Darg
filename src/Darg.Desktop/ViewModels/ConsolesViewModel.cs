@@ -121,6 +121,19 @@ public partial class ConsolesViewModel : ObservableObject
         public IRelayCommand OpenCommand => _open ??= new RelayCommand(() => owner.Pick(shell));
     }
 
+    /// <summary>What a console shows now (the Darg API's terminal command): the last <paramref name="lines"/> lines of
+    /// the tab named <paramref name="tab"/> (a name, or its 1-based number), else the selected one.</summary>
+    public string Read(string? tab, int lines)
+    {
+        if (Tabs.Count == 0) throw new ApiError("The terminal has no console open.");
+        ConsoleTab? t = tab is null ? Selected ?? Tabs[0]
+            : Tabs.FirstOrDefault(x => x.Name.Equals(tab, StringComparison.OrdinalIgnoreCase))
+              ?? (int.TryParse(tab, out var n) && n >= 1 && n <= Tabs.Count ? Tabs[n - 1] : null);
+        if (t is null) throw new ApiError($"No console \"{tab}\". Open: {string.Join(", ", Tabs.Select(x => x.Name))}.");
+        var text = t.ReadLast(Math.Clamp(lines, 1, 2000));
+        return $"{t.Name}{(t.Ended ? " (ended)" : "")}:\n{text}";
+    }
+
     [RelayCommand] void RunCommand(CommandButton? b) { if (b is not null) Run(b.Command); }
 }
 
@@ -131,6 +144,9 @@ public sealed partial class ConsoleTab(ConsolesViewModel owner, string name, str
     public string Process { get; } = process;
     public IReadOnlyList<string> Args { get; } = args;
     [ObservableProperty] public partial bool Ended { get; set; }
+    /// <summary>Set by the view that draws this console: the last n non-empty-tailed lines of its screen and scrollback.</summary>
+    public Func<int, string>? Reader { get; set; }
+    public string ReadLast(int lines) => Reader?.Invoke(lines) ?? "";
     IRelayCommand? _close;
     public IRelayCommand CloseCommand => _close ??= new RelayCommand(Close);
     internal ConsolesViewModel Owner { get; } = owner;

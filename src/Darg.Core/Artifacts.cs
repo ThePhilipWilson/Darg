@@ -137,7 +137,7 @@ public static class ArtifactStore
         "The person picks one image per row, or none for another pass, adds a note per row, and sends. The reply is one line per row: " +
         "the id, a colon, then the picked file's name, or original, or NEEDS PASS, then optionally a vertical bar and the note.";
 
-    static string Safe(string s) => string.Concat(s.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+    static string Safe(string s) => FileNames.Safe(s);
 }
 
 /// <summary>Something an artifact page sent back with darg.send().</summary>
