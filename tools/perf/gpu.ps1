@@ -7,7 +7,7 @@
 # Build first: dotnet build.
 #   pwsh -File tools/perf/gpu.ps1 -Minutes 10
 #   pwsh -File tools/perf/gpu.ps1 -Launches 20 -Minutes 0.5
-param([string]$Board = 'D:/GitHub/ThePhilipWilson/Workbench/.darg/tasks',
+param([string]$Board = "$(Split-Path (git -C $PSScriptRoot rev-parse --path-format=absolute --git-common-dir))/.darg/tasks", # the main checkout's, from a worktree too
       [int]$Launches = 1, [double]$Minutes = 5, [int]$EverySeconds = 15, [string]$Csv)
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot

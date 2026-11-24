@@ -1,11 +1,15 @@
 ﻿# Summarise an instance's stalls.log and perf.log (WOR-0161): where the UI thread was held, by what, and how memory
 # and CPU moved. Read-only; it never starts the app.
-#   pwsh -File tools/perf/analyze.ps1                      # the real instance (%APPDATA%/Workbench/home)
-#   pwsh -File tools/perf/analyze.ps1 -Home .shots/perf-home -Since '2026-11-20 05:00'
+#   pwsh -File tools/perf/analyze.ps1                      # the real instance (%APPDATA%/Darg/home, or Workbench/home before it moved)
+#   pwsh -File tools/perf/analyze.ps1 -InstanceHome .shots/perf-home -Since '2026-11-20 05:00'
 # To collect a trace first: run the app (DARG_PERF_SECONDS=10 for a perf.log line every 10 s) through a stretch of
 # normal use, or `pwsh -File tools/perf/load.ps1 -Cards 5 -Touch -StallMs 100` for a loaded one, then run this.
-param([string]$InstanceHome = "$env:APPDATA/Workbench/home", [string]$Since = '', [int]$Top = 12)
+param([string]$InstanceHome = '', [string]$Since = '', [int]$Top = 12)
 $ErrorActionPreference = 'Stop'
+if (-not $InstanceHome) { # the instance that has data: Darg's once it has moved there (WOR-0196), else the old name's
+    $InstanceHome = @("$env:APPDATA/Darg/home", "$env:APPDATA/Workbench/home") | Where-Object { Test-Path -LiteralPath "$_/instance.json" } | Select-Object -First 1
+    if (-not $InstanceHome) { $InstanceHome = "$env:APPDATA/Darg/home" }
+}
 $stalls = Join-Path $InstanceHome 'stalls.log'
 $perf = Join-Path $InstanceHome 'perf.log'
 function Take([string]$p) { if (Test-Path -LiteralPath $p) { @(Get-Content -LiteralPath $p | Where-Object { $_ -match '^\d{4}-' -and (-not $Since -or $_.Substring(0, 19) -ge $Since) }) } else { @() } }

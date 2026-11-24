@@ -22,7 +22,7 @@ If restore fails with `Unable to find fallback package folder ... Microsoft Visu
 
 ## First run and instances
 
-An **instance** is one install's data folder: its projects, settings and saved agents. By default it is `%APPDATA%\Darg\home` (older installs: `%APPDATA%\Workbench\home`, which Darg keeps using until it can move it). Inside, `instance.json` lists the projects. [Setup](guide.md#setup) edits it: add a folder as a project, tick its features, name its repos, boards and docs. What else the folder holds is in [architecture.md](architecture.md#instances-and-projects).
+An **instance** is one install's data folder: its projects, settings and saved agents. By default it is `%APPDATA%\Darg\home` (older installs: `%APPDATA%\Workbench\home`, which Darg moves into the Darg folder the first time it starts with no older copy holding it open, leaving a link at the old path; until then it keeps using it). Inside, `instance.json` lists the projects. [Setup](guide.md#setup) edits it: add a folder as a project, tick its features, name its repos, boards and docs. What else the folder holds is in [architecture.md](architecture.md#instances-and-projects).
 
 Instances cannot see each other, by design: the work PC and home PC each run their own ([decisions-and-gotchas.md](decisions-and-gotchas.md#decisions)).
 

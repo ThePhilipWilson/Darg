@@ -44,7 +44,7 @@ public sealed class InstanceConfig
         return !Directory.Exists(folder) && Directory.Exists(old) ? old : folder;
     }
 
-    /// <summary>A setting by its Darg name, else its old Darg name (the app was renamed, WOR-0055).</summary>
+    /// <summary>A setting by its Darg name, else its old Workbench name (the app was renamed, WOR-0055).</summary>
     static string? Env(string name)
     {
         var v = Environment.GetEnvironmentVariable(name);
@@ -52,22 +52,45 @@ public sealed class InstanceConfig
         return string.IsNullOrWhiteSpace(v) ? null : v;
     }
 
-    /// <summary>The app was called Darg: its data folder moves to Darg the first time, and a junction at
+    /// <summary>The app was called Workbench: its data folder moves to Darg the first time, and a link at
     /// the old name points at the new one so paths saved in agents (artifact folders) still resolve. If the
-    /// move fails (an old copy has files open) nothing changes and the old folder is used until it can.</summary>
+    /// move fails (an old copy has files open) nothing changes and the old folder is used until it can.
+    /// When Darg's folder is there already (the dictation model is downloaded into Darg/models, and was,
+    /// before any instance had moved: WOR-0196), each instance folder moves in on its own, linked the same way.</summary>
     public static void MigrateFromWorkbench(string appData)
     {
         var old = Path.Combine(appData, "Workbench");
         var now = Path.Combine(appData, "Darg");
-        if (!Directory.Exists(old) || Directory.Exists(now)) return;
-        try
+        if (!Directory.Exists(old) || IsLink(old)) return;
+        if (!Directory.Exists(now))
         {
-            if (new DirectoryInfo(old).LinkTarget is not null) return; // already a link
-            Directory.Move(old, now);
+            if (Move(old, now)) Link(old, now);
+            return;
         }
-        catch (Exception) { return; }
-        try { Directory.CreateSymbolicLink(old, now); } // a junction would need cmd; a symlink needs developer mode
-        catch (Exception) { TryJunction(old, now); }
+        string[] inside;
+        try { inside = Directory.GetDirectories(old); } catch (Exception) { return; }
+        foreach (var dir in inside)
+        {
+            var to = Path.Combine(now, Path.GetFileName(dir));
+            if (IsLink(dir) || Directory.Exists(to) || File.Exists(to)) continue; // moved already, or Darg has its own
+            if (Move(dir, to)) Link(dir, to);
+        }
+    }
+
+    static bool IsLink(string dir)
+    {
+        try { return new DirectoryInfo(dir).LinkTarget is not null; } catch (Exception) { return true; } // unreadable: leave it be
+    }
+
+    static bool Move(string from, string to)
+    {
+        try { Directory.Move(from, to); return true; } catch (Exception) { return false; }
+    }
+
+    static void Link(string link, string target)
+    {
+        try { Directory.CreateSymbolicLink(link, target); } // a junction would need cmd; a symlink needs developer mode
+        catch (Exception) { TryJunction(link, target); }
     }
 
     static void TryJunction(string link, string target)
