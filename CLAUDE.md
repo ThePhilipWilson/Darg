@@ -2,6 +2,10 @@
 
 Philip's one app for everything: per-project boards, notes, docs, code, agents, consoles and tools. Native Avalonia (C#, .NET 10), one codebase for Windows, Mac and mobile. The plan and decisions live in `docs/` (PLAN.md, the mockup, MORNING.md, PHONE-PLAN.md), which is the Docs section for this project; they moved there from the Obsidian vault on 2026-11-18 (WOR-0123), and the studio's name stays out of them as it does out of everything else here. A project's docs live in its own repo's `docs/` by default.
 
+## Public repo: no other project names
+
+This repo is public. Never name Philip's other projects, studios, accounts, people or private tools anywhere that gets committed: code, tests, docs, cards under `.darg/tasks`, card file names, commit messages, branch names, reports. Use the neutral stand-ins Alpha, Beta, Gamma, Delta, Project C and example-studio. The specific names to avoid are in `CLAUDE.local.md` (not committed). A name that slips in must be scrubbed from history, which means force-pushing a public repo. Before committing cards or docs, grep the staged files for those names.
+
 ## Layout
 
 - `src/Darg.Core`: no UI. `InstanceConfig` (an instance's projects, in `%APPDATA%/Darg/<instance>/instance.json`; `DARG_INSTANCE`, `DARG_HOME`), `LastProject` (the project tab open last, its id in `last-project` beside instance.json, so the app opens to it again; kept out of instance.json so switching tabs doesn't rewrite a file people edit), `BoardStore` (boards in Tatty's markdown format, so Tatty and Obsidian see the same files), `AgentSession` (a real Claude Code session run headless over stream-json), `ChildProcesses` (everything Darg starts dies with it; `Group` ends what one process started, `Leftovers` the named heavy things an agent session left, see Memory below).
