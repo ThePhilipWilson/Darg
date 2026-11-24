@@ -174,6 +174,17 @@ public sealed class DragLift
             if (_horizontal ? at.X < top.X + b.Bounds.Width / 2 : at.Y < top.Y + b.Bounds.Height / 2) { _before = b.Tag; lineAt = b; break; }
             lineAt = b; above = false;
         }
+        if (_before is null && lineAt is not null)
+        {
+            // past the last card drawn: a virtualized list draws only what's in view, so the next card
+            // down has no control yet; "before" is the next carried-free item after it in list order
+            var items = _itemsOf(list.DataContext);
+            var at0 = -1;
+            for (var i = 0; i < items.Count; i++) if (Equals(items[i], lineAt.Tag)) { at0 = i; break; }
+            if (at0 >= 0)
+                for (var i = at0 + 1; i < items.Count; i++)
+                    if (!_carry.Contains(items[i])) { _before = items[i]; break; }
+        }
         if (lineAt is null)
         {
             _line!.IsVisible = false; // an empty list: it lights up, that's enough
