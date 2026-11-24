@@ -15,11 +15,11 @@ These made 9 of 617 unit tests fail on the Mac, and all 618 (with the new one) p
 
 ## Not tried yet
 
-- Launching the app on the desktop (`dotnet run --project src/Darg.Desktop`) and starting a real agent against the Mac `claude`.
+- Starting a real agent against the Mac `claude`. The app does launch (`src/Darg.Desktop/bin/Debug/net10.0/Darg.Desktop`) and stays up with nothing on stderr; the window has not been looked at yet.
 - Notifications. On a Mac `Notifier` builds without `WINDOWS`, and the build warns that `Notifier.Opened` is never used, so clicking a notification probably can't open the agent yet.
 - Dictation is Windows-only (Whisper and NAudio are only referenced on Windows), so there is no voice input on the Mac.
 - No Mac install path. `tools/publish.ps1` targets `D:\Apps\Darg`, and there is no `.app` bundle. The updater and the live copy also need `pwsh` on PATH (`brew install powershell`).
-- Instance data goes to `~/.config/Darg/<instance>` because that's where .NET puts `ApplicationData` on a Mac. Worth checking that's the place you want.
+- Instance data goes to `~/Library/Application Support/Darg/<instance>` (the default instance is `home`), which is where .NET puts `ApplicationData` on a Mac. CLAUDE.md still says `%APPDATA%`.
 
 ## Build warnings
 
