@@ -1,7 +1,8 @@
 ---
 kind: feature
-status: draft
+status: agreed
 parent: seamless-machine-switching
+board: Auto-sync
 ---
 # Auto-sync
 
@@ -32,11 +33,15 @@ Darg pulls and pushes each project's `darg` branch by itself: on open, on switch
 
 **Context:** the project plan settled that conflicts are listed in a Sync panel and the footer says "1 conflict", not where the panel sits.
 
+**Answer:** A Sync section, on the rail only while the project has a conflict, and always a click on the footer line away (Philip, 2026-11-24)
+
 ### Who builds the both-sides-kept merge: this feature or the `.darg` on its own branch feature?
 - **This feature, as its first card, small enough to land first** (recommended): a Core piece with no UI that keeps both sides and records the conflict. The other feature's first-sync migration calls it for a file in both places, and its Sync now uses it on a pull.
 - **The `.darg` on its own branch feature**: it needs it first, for the migration. This feature then only shows conflicts and resolves them.
 
 **Context:** your line for this feature names "conflicts show with both sides kept", and the project plan's migration says a file in both places "goes through conflict handling". Whichever plan doesn't own it should say so in its Not doing.
+
+**Answer:** This feature, as its first card, small enough to land first (Philip, 2026-11-24)
 
 ### Closing with changes not yet pushed, and the push slow or offline: what happens?
 - **Commit at once, wait up to 10 seconds for the push with "Pushing…" showing, then close anyway** (recommended): closing never hangs, and the footer says "3 changes to push" next time this machine opens.
@@ -45,6 +50,8 @@ Darg pulls and pushes each project's `darg` branch by itself: on open, on switch
 
 **Context:** committing is local and takes a moment. Only the push needs the network. The Leaving check feature will list what didn't go.
 
+**Answer:** Commit at once, wait up to 10 seconds for the push with "Pushing…" showing, then close anyway (Philip, 2026-11-24)
+
 ### Can a project's auto-sync be turned off?
 - **On for every project with a `darg` branch, with a switch per project in Setup** (recommended): one place to stop a project syncing (a repo shared with someone else, a slow remote), and nothing to set up otherwise.
 - **Follows the project's commit rules**: `push` syncs, `commit` commits only, `ask` and `never` don't sync. One set of rules, but they were written for code, and a repo set to `ask` for code would never sync its boards.
@@ -52,11 +59,15 @@ Darg pulls and pushes each project's `darg` branch by itself: on open, on switch
 
 **Context:** commit rules (`Commits` in Core) say how agents may commit code in a folder. The `darg` branch holds no code.
 
+**Answer:** On for every project with a `darg` branch, with a switch per project in Setup (Philip, 2026-11-24)
+
 ### Does a new conflict notify, or only show in the footer?
 - **Footer and rail only** (recommended): a conflict loses nothing and blocks nothing, so it can wait until he next looks. Notifications stay for agents waiting on him, as now.
 - **A desktop toast and a phone notification too**: he hears about it at once, but a conflict is not something to act on from the sofa.
 
 **Context:** today only an agent's question, a permission ask, a card's decision and a long turn notify (`Decisions` in Core).
+
+**Answer:** Footer and rail only (Philip, 2026-11-24)
 
 ## Design
 
@@ -118,49 +129,49 @@ These cards build on the `.darg` on its own branch feature's sync round, which h
 
 ## Cards
 
-### Keep both sides of a sync conflict
+### AUT-0001: Keep both sides of a sync conflict
 Make the Core piece that keeps both sides of a file two machines changed, so nothing is ever lost: the other machine's version goes in the file, this machine's beside it as `<name>.mine<ext>`, a delete against an edit keeps the edit, and each conflict is recorded in `.darg/sync/conflicts.json` (path, when, which machine wrote each side, kind). It also settles one: keep theirs, keep mine, or done after a hand edit, each deleting the `.mine` file and the record's row. Two machines' `conflicts.json` merge by path. No UI and no git calls of its own: it is given the two sides, so a pull and the first-sync migration can both use it.
 **Where:** `src/Darg.Core/SyncConflicts.cs` (new), `tests/Darg.Core.Tests/SyncConflictsTests.cs` (new)
 **Done when:** unit tests show a card, a note and board.json each kept with both sides, a delete against an edit keeping the edit, keep theirs and keep mine settling and leaving one file, and two `conflicts.json` files merging by path; `pwsh -File tools/test.ps1` passes.
 **Blocked by:** none
 
-### Darg's readers skip .mine files
+### AUT-0002: Darg's readers skip .mine files
 A `.mine` copy left beside a file by a sync conflict must never show as a second thing: a `WOR-0201 - Title.mine.md` in a board's items would read as a second card with the same id, and one in notes as a second note. Every reader of `.darg` leaves out `*.mine.*` files: boards (`BoardStore`, `CardIndex`), the notes wall (`NoteStore`), reports, mistakes, artifacts, flows and saved agents. Next ids ignore them too.
 **Where:** `src/Darg.Core/Board.cs`, `src/Darg.Core/CardIndex.cs`, `src/Darg.Core/Notes.cs`, `src/Darg.Core/Reports.cs`, `src/Darg.Core/Mistakes.cs`, `src/Darg.Core/Artifacts.cs`, `src/Darg.Core/Flow.cs`, `src/Darg.Core/AgentStore.cs`
 **Done when:** a unit test puts a `.mine` copy beside a card, a note, a report and a flow and each store lists only the original; an integration test shows the board with one tile for that card; the suite passes.
 **Blocked by:** none
 
-### A sync round that runs unattended
+### AUT-0003: A sync round that runs unattended
 Make the `.darg` branch feature's Sync now round safe to run with nobody watching: take a lock in the worktree's git folder so two Darg copies on one machine never run git in the same `.darg` at once (taken over after 2 minutes with no live holder); commit with a message made from counts only and a `Machine:` trailer; fetch and merge, retrying once when Darg wrote a file meanwhile; keep both sides of every conflicted file through the conflict keeper; push; raise `Pulled` with the changed files; and end in a state (synced, syncing, to push, offline, can't push with git's reason, conflict count, no remote, off). Add a test helper with a bare remote and a second clone that plays the other machine, for this card and the ones after it.
 **Where:** `src/Darg.Core/` (the sync round the `.darg` branch feature adds; `SyncState` new), `tests/Darg.Core.Tests/`, `tests/Darg.Desktop.Tests/` (the other-machine helper)
 **Done when:** tests against a bare remote show a commit message with counts and no titles, a second Darg process waiting on the lock, an offline remote giving the offline state with the changes kept, a conflicting card ending with both sides kept and the conflict state, and `Pulled` naming the files the merge changed; the suite passes.
 **Blocked by:** Keep both sides of a sync conflict
 
-### Sync on open, on switching, on focus, on a timer and after changes
+### AUT-0004: Sync on open, on switching, on focus, on a timer and after changes
 Run the round without being asked: `AutoSync` in Desktop starts one for every project with a `darg` branch at open (staggered), for a project switched to, for the project on screen when the window gets focus (neither within a minute of the last), every 5 minutes for all, and 30 seconds after the last change a watcher sees in `.darg` (ignoring `.mine` files and the lock). One round at a time per project; a trigger during a round queues one more. Unsaved text in the open card or note is saved first. `DARG_SYNC_SECONDS` and `DARG_SYNC_QUIET_MS` shorten the timings for tests. A project switched off in Setup never syncs, as the Question settles. The scheduler takes any folder and branch so the per-user settings repo can join it later.
 **Where:** `src/Darg.Desktop/ViewModels/AutoSync.cs` (new), `src/Darg.Desktop/ViewModels/MainViewModel.cs`, `src/Darg.Desktop/MainWindow.axaml.cs`, `src/Darg.Desktop/ViewModels/SetupViewModel.cs`, `tests/Darg.Desktop.Tests/`
 **Done when:** integration tests with the other-machine helper show a card moved on the other clone appearing on the board after a focus, after a switch and after the timer, a burst of three card moves pushed as one commit after the quiet time, and a project switched off pushing nothing; each test fails with its trigger taken out; the suite passes.
 **Blocked by:** A sync round that runs unattended
 
-### Sync around making a card, and on close
+### AUT-0005: Sync around making a card, and on close
 Two triggers with deadlines. Before a card is made (a note's ticket, + Card, the API's `new-card`, Make cards on a plan, an issue to a card), pull first, given at most 3 seconds and skipped when offline, then run a round straight after rather than waiting the quiet time, as the project plan's answer on id clashes asks. On close, and before ⟳ Restart and Update, commit at once and push as the close Question settles, with "Pushing…" showing while it waits. Everything that makes a card goes through one helper so a new path can't miss it.
 **Where:** `src/Darg.Desktop/ViewModels/AutoSync.cs`, `src/Darg.Desktop/ViewModels/MainViewModel.Cards.cs`, `src/Darg.Desktop/ViewModels/NotesViewModel.cs`, `src/Darg.Desktop/ViewModels/DesignViewModel.cs`, `src/Darg.Desktop/ViewModels/RestartViewModel.cs`, `src/Darg.Desktop/MainWindow.axaml.cs`
 **Done when:** integration tests show a card made with the remote ahead pulling first and the new card on the remote right after, a card made offline made within 3 seconds, and closing with a change pushing it before the window goes (or leaving it counted to push, per the answer); the suite passes.
 **Blocked by:** Sync on open, on switching, on focus, on a timer and after changes
 
-### Sync line in the footer
+### AUT-0006: Sync line in the footer
 Show the project on screen's sync state on the right of the footer: "synced 2 min ago" (ticking), "syncing…", "3 changes to push", "offline · 3 changes to push", "can't push: <reason>", and "1 conflict" in the `Warn` colour, with today's `FooterLine` kept on the left. A click opens the Sync panel. A project tab whose sync has a conflict gets a small `Warn` dot. A new conflict notifies too only if the notify Question says so. Colours come from theme keys, never hex.
 **Where:** `src/Darg.Desktop/MainWindow.axaml`, `src/Darg.Desktop/ViewModels/MainViewModel.cs`, `src/Darg.Desktop/ViewModels/SyncLineViewModel.cs` (new), `tests/Darg.Desktop.Tests/`
 **Done when:** integration tests with screenshots in `.shots/integration` show each state's text after the matching round (synced, to push, offline, conflict), the tab dot on a project not on screen, and a click opening the Sync panel; the suite passes.
 **Blocked by:** Sync on open, on switching, on focus, on a timer and after changes
 
-### The Sync panel: conflicts side by side, and the last syncs
+### AUT-0007: The Sync panel: conflicts side by side, and the last syncs
 Build the panel where the Question puts it. Conflicts are listed as the things they are (card id and title, note name, report), with when and which machines; opening one shows both versions side by side with the differing lines marked and Keep the PC's, Keep the Mac's (named from each side's machine), and Edit, which opens the file to merge by hand with the other version beside it and a Done that settles it. Settling starts a round. Below: the last 50 syncs on this machine (when, counts in and out, or the failure), kept in the instance folder, and Sync now with the project's on/off state.
 **Where:** `src/Darg.Desktop/Views/SyncView.axaml` (new), `src/Darg.Desktop/ViewModels/SyncViewModel.cs` (new), `src/Darg.Desktop/ViewModels/MainViewModel.cs` (`Section`), `src/Darg.Core/SyncConflicts.cs`, `tests/Darg.Desktop.Tests/`
 **Done when:** an integration test makes a card conflict with the other-machine helper, the panel lists it by id and title with both versions showing, Keep the Mac's leaves one card file with that text and no `.mine` file on both clones after the next round, and the footer goes back to synced; a screenshot of the panel is in `.shots/integration`; the suite passes.
 **Blocked by:** Sync line in the footer, Darg's readers skip .mine files
 
-### Sync in the Darg API
+### AUT-0008: Sync in the Darg API
 Add `sync {project}` (state, conflicts, last syncs), `sync-now {project}` (runs a round, answers its state) and `sync-keep {project, path, keep: theirs|mine}` (settles a conflict) to the Darg API with usage lines saying what each takes, and put all three in `RemoteAccess.Commands`. Fettle can then explain why something from the other machine isn't showing, and the Leaving check feature reads `sync` instead of working the state out again.
 **Where:** `src/Darg.Desktop/ViewModels/MainViewModel.Api.cs`, `src/Darg.Core/Remote.cs`, `tests/Darg.Desktop.Tests/`
 **Done when:** integration tests call each command through `app.Api`: `sync` lists a conflict made with the other-machine helper, `sync-keep` settles it, `sync-now` pushes a change; a bad path or project answers a 400 with a message; the suite passes.
