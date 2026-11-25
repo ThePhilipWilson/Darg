@@ -1,11 +1,12 @@
 # WOR-0209: Close an idle agent's claude process and resume it on its next message
 
-- **Status:** Backlog
+- **Status:** Done
 - **Priority:**
 - **Type:** Story
 - **Labels:** memory
 - **Created:** 2026-11-25
-- **Done:**
+- **Done:** 2026-11-25
+- **Moved:** 2026-11-25 04:22:47
 
 ## Description
 
