@@ -2,6 +2,7 @@
 kind: feature
 status: draft
 parent: seamless-machine-switching
+planner: dcc9a89e-8bcd-426d-866d-b14b82c86a2a
 ---
 # Agents and Fettle chats travel
 
@@ -33,12 +34,16 @@ A project's saved agents and Fettle chats live in its `.darg` with their picture
 
 **Context:** the mark is set when a turn starts and cleared when it ends, and it reaches the other machine only when that machine syncs. A crash or sleep mid-turn leaves it set.
 
+**Answer:** Take over, after an inline confirm (Philip, 2026-11-24)
+
 ### Darg is public. Where does a card agent's branch go when its turn ends, so the Mac can carry on with its work?
 - **The private `<repo>-darg` repo, as a second remote** (recommended): work in progress stays private, the same repo that already holds the public repo's `darg` branch. Private repos push card branches to their own remote as decided.
 - **The public repo, after the never-commit check**: one remote, but every half-done branch is published, and your rule says public pushes need your OK each time.
 - **Not pushed for public repos**: the agent stays on its machine, shown on the other as "on the PC, work not pushed", with no Carry on.
 
 **Context:** the project plan settled that card branches are pushed at turn end and checked out on Carry on, before WOR-0197 made Darg public.
+
+**Answer:** The private `<repo>-darg` repo, as a second remote (Philip, 2026-11-24)
 
 ### Pictures a transcript points at outside the project's repos (a Forge output on D:, a screenshot in Pictures): what goes with the agent?
 - **A thumbnail copy** (recommended): a 260 px copy, the size the transcript shows, about 30 KB each, kept in the agent's folder. Clicking it opens the full picture only where the original is.
@@ -47,11 +52,15 @@ A project's saved agents and Fettle chats live in its `.darg` with their picture
 
 **Context:** pictures a tool sent back as bytes are Darg's own files and go with the agent whatever you pick. Pictures inside a repo are found there by their repo-relative path.
 
+**Answer:** thumbnail copy and an explanation with the pc name that holds the original. option for it to be in git if the project is using LFS for example (Philip, 2026-11-24)
+
 ### What happens to the 89 MB of preview images in the instance folder?
 - **Delete them when agents move into `.darg`** (recommended): no saved agent points at any of them (checked 2026-11-24). Pictures a saved agent does point at move with it first.
 - **Leave them where they are**: nothing lost, nothing gained; the folder stops growing because new previews go to the agent's folder.
 
 **Context:** they are thumbnails of tool results for agents already forgotten. Forgetting an agent never deleted its previews.
+
+**Answer:** Delete them when agents move into `.darg` (Philip, 2026-11-24)
 
 ### When a resume fails, what does the fresh session get?
 - **The transcript as a file, named in its first message with the last few exchanges quoted** (recommended): it reads as much of the history as it needs, and the opening message stays small.
@@ -59,6 +68,8 @@ A project's saved agents and Fettle chats live in its `.darg` with their picture
 - **A Haiku summary of the transcript**: short, but Haiku decides what was important and the agent can't check.
 
 **Context:** the transcript Darg saves is what the Agents view shows: your messages, the agent's replies and a line per tool step, not the tool output itself.
+
+**Answer:** The transcript as a file, named in its first message with the last few exchanges quoted (Philip, 2026-11-24)
 
 ## Design
 
