@@ -674,10 +674,11 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         {
             BulkStart.Kind.Work => BulkStart.WorkLists(_board.Columns),
             BulkStart.Kind.Qa when BulkStart.QaList(_board.Columns) is { } qa => [qa],
+            BulkStart.Kind.Improve => [Core.Board.Backlog],
             _ => [],
         };
         return Lists.Where(l => lists.Contains(l.Id)).SelectMany(l => l.Cards)
-            .Where(c => kind == BulkStart.Kind.Qa ? c.ShowRunQa : c.CanStart).DistinctBy(c => c.Id).ToList();
+            .Where(c => kind == BulkStart.Kind.Qa ? c.ShowRunQa : kind == BulkStart.Kind.Improve ? c.ShowImprove : c.CanStart).DistinctBy(c => c.Id).ToList();
     }
 
     public BulkStart.Kind BulkKindOf(string listId) => _board is null ? BulkStart.Kind.None : BulkStart.For(listId, _board.Columns);
@@ -697,6 +698,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (cards.Count == 0)
         {
             _notice = kind == BulkStart.Kind.Qa ? "Nothing to QA: every card in QA has a QA agent on it"
+                : kind == BulkStart.Kind.Improve ? "Nothing to improve: every thin card here has an agent on it, or none is thin"
                 : blocked.Count > 0 ? "Nothing to start: " + BlockedStart.LeftOut(blocked) + " (Work on one to start it anyway)"
                 : "Nothing to start: every card here has an agent on it";
             Apply();
@@ -704,15 +706,15 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         }
         Root.Editor = null; // its panel, left open, could save over what an agent writes into the card
         if (kind == BulkStart.Kind.Work) { WorkOnAll(cards, bulk: true, blocked: blocked); return _notice ?? ""; }
-        using var timing = StallWatch.Shared.Section("QA run all");
+        using var timing = StallWatch.Shared.Section(kind == BulkStart.Kind.Improve ? "Improve all" : "QA run all");
         var started = new List<string>();
         var failed = new List<(string Id, string Why)>();
         foreach (var card in cards)
         {
-            try { StartQa(card); }
+            try { if (kind == BulkStart.Kind.Improve) StartImprove(card); else StartQa(card); }
             catch (Exception e) { failed.Add((card.Id, e.Message)); continue; }
-            if (QaRunning?.Invoke(card.Id) == true) started.Add(card.Id);
-            else failed.Add((card.Id, "no QA agent started"));
+            if (kind == BulkStart.Kind.Improve ? AgentFor?.Invoke(card.Id) is not null : QaRunning?.Invoke(card.Id) == true) started.Add(card.Id);
+            else failed.Add((card.Id, kind == BulkStart.Kind.Improve ? "no agent started" : "no QA agent started"));
         }
         _notice = BulkStart.Summary(kind, started, failed);
         ReloadAll();
@@ -1435,10 +1437,12 @@ public sealed partial class ListViewModel(BoardViewModel board, string id, strin
     int BulkCount => Board.BulkCount(BulkKind);
     public bool HasBulk => BulkKind != BulkStart.Kind.None;
     public string BulkText => BulkStart.Label(BulkKind, BulkCount, Board.BulkBlockedCount(BulkKind));
-    public string BulkTip => BulkKind == BulkStart.Kind.Qa
+    public string BulkTip => BulkKind == BulkStart.Kind.Improve
+        ? "Start an improve agent on every thin card (under 3 stars) showing in the backlog with no agent on it: each fills its description out (what's wanted, where, done when). The work itself isn't done. More than " + BulkStart.AskAbove + " asks first."
+        : BulkKind == BulkStart.Kind.Qa
         ? "Run QA on every card showing in this column with no QA agent on it, an agent each. More than " + BulkStart.AskAbove + " asks first."
-        : "Start an agent on every card showing in the backlog and In Progress with none on it, all at once; each is told which others run beside it, " +
-          "and backlog cards move to In Progress. A card blocked by one not yet in QA or done is left out (Work on it to start it anyway). " +
+        : "Start an agent on every card showing in In Progress (and a To Do) with none on it, all at once; each is told which others run beside it, " +
+          "and cards move to In Progress. A card blocked by one not yet in QA or done is left out (Work on it to start it anyway). " +
           "More than " + BulkStart.AskAbove + " asks first.";
     bool CanBulk() => BulkCount > 0;
     /// <summary>More than a few: the column asks "Start 7 agents?" before any start.</summary>

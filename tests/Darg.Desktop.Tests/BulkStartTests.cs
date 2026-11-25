@@ -14,7 +14,7 @@ public class BulkStartTests
     static ListViewModel Column(DargApp app, string id) => app.Board.Lists.Single(l => l.Id == id);
 
     [AvaloniaFact]
-    public async Task Work_All_asks_above_three_then_starts_every_free_card_once_and_moves_waiting_ones_to_In_Progress()
+    public async Task Work_All_starts_every_free_card_once_and_moves_waiting_ones_to_In_Progress()
     {
         Environment.SetEnvironmentVariable("FAKE_SECONDS", "30");
         try
@@ -32,20 +32,18 @@ public class BulkStartTests
             await DargApp.Settle(300);
 
             var inProgress = Column(app, app.ColumnId("In Progress"));
-            Assert.Equal("▶ Work All (4)", inProgress.BulkText);
-            Assert.Equal("▶ Work All (4)", Column(app, Board.Backlog).BulkText);
-            Assert.Equal("▶ Work All (4)", Column(app, app.ColumnId("To Do")).BulkText);
+            Assert.Equal("▶ Work All (2)", inProgress.BulkText);
+            Assert.Equal("▶ Work All (2)", Column(app, app.ColumnId("To Do")).BulkText);
+            Assert.Equal("✦ Improve All (2)", Column(app, Board.Backlog).BulkText); // WOR-0215: the backlog improves, it doesn't work
             Assert.False(Column(app, app.ColumnId("Done")).HasBulk);
             Assert.False(Column(app, app.ColumnId("For Human Attention")).HasBulk);
             Assert.Equal("🧪 QA Run All (0)", Column(app, app.ColumnId("QA Ready")).BulkText);
 
             inProgress.BulkCommand.Execute(null);
-            Assert.True(inProgress.ConfirmingBulk); // 4 is more than a few: it asks first
-            Assert.Single(app.Agents.Agents);
+            Assert.False(inProgress.ConfirmingBulk); // 2 is not more than a few: no asking
 
-            inProgress.ConfirmBulkCommand.Execute(null);
             await DargApp.Settle(300);
-            foreach (var c in new[] { backlog1, backlog2, todo, busy, idle })
+            foreach (var c in new[] { todo, busy, idle })
             {
                 Assert.Single(app.Agents.Agents, a => a.CardId == c.Id);
                 Assert.Equal("In Progress", app.Read(c.Id).Status);
@@ -55,7 +53,38 @@ public class BulkStartTests
             Assert.False(Column(app, app.ColumnId("In Progress")).BulkCommand.CanExecute(null));
 
             Assert.Contains("Nothing to start", await app.Api("work-all", new { project = "proj" }));
-            Assert.Equal(5, app.Agents.Agents.Count);
+            Assert.Equal(3, app.Agents.Agents.Count); // busy, todo, idle
+            Assert.DoesNotContain(app.Agents.Agents, a => a.CardId == backlog1.Id || a.CardId == backlog2.Id);
+            Assert.Equal("", app.Crashes());
+        }
+        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
+    }
+
+    [AvaloniaFact]
+    public async Task Improve_All_on_the_backlog_starts_an_improve_agent_on_each_thin_card_and_moves_nothing()
+    {
+        Environment.SetEnvironmentVariable("FAKE_SECONDS", "30");
+        try
+        {
+            using var app = DargApp.Make();
+            var a = app.Card("thin one");
+            var b = app.Card("thin two");
+            var c = app.Card("thin three");
+            var d = app.Card("thin four");
+            await app.Start();
+            await app.Api("show", new { project = "proj", section = "Board" });
+
+            var backlog = Column(app, Board.Backlog);
+            Assert.Equal("✦ Improve All (4)", backlog.BulkText);
+            backlog.BulkCommand.Execute(null);
+            Assert.True(backlog.ConfirmingBulk); // 4 is more than a few: it asks first
+            Assert.Empty(app.Agents.Agents);
+
+            backlog.ConfirmBulkCommand.Execute(null);
+            await DargApp.Settle(300);
+            foreach (var x in new[] { a, b, c, d })
+                Assert.Single(app.Agents.Agents, g => g.CardId == x.Id);
+            Assert.Equal("✦ Improve All (0)", Column(app, Board.Backlog).BulkText);
             Assert.Equal("", app.Crashes());
         }
         finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }

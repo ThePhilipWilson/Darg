@@ -48,9 +48,9 @@ public class BlockedStartTests
         {
             using var app = DargApp.Make();
             var scaffold = app.Card("the scaffold", "In Progress");
-            var free = app.Card("free to start");
-            var blocked = app.Card("needs the scaffold");
-            var cleared = app.Card("needs a card already in QA");
+            var free = app.Card("free to start", "To Do");
+            var blocked = app.Card("needs the scaffold", "To Do");
+            var cleared = app.Card("needs a card already in QA", "To Do");
             var inQa = app.Card("already checked in", "QA Ready");
             BlockedBy(app, blocked, scaffold.Id);
             BlockedBy(app, cleared, inQa.Id);
@@ -58,7 +58,7 @@ public class BlockedStartTests
             await app.Api("show", new { project = "proj", section = "Board" });
             await DargApp.Settle(300);
 
-            var backlog = Column(app, Board.Backlog);
+            var backlog = Column(app, app.ColumnId("In Progress"));
             Assert.Equal("▶ Work All (3, 1 blocked)", backlog.BulkText);
             backlog.BulkCommand.Execute(null); // three: no asking
             await DargApp.Settle(300);
@@ -67,9 +67,9 @@ public class BlockedStartTests
             Assert.Single(app.Agents.Agents, a => a.CardId == scaffold.Id);
             Assert.Single(app.Agents.Agents, a => a.CardId == cleared.Id); // its blocker is in QA: cleared
             Assert.DoesNotContain(app.Agents.Agents, a => a.CardId == blocked.Id);
-            Assert.Equal("Backlog", app.Read(blocked.Id).Status);
+            Assert.Equal("To Do", app.Read(blocked.Id).Status);
             Assert.Contains($"left out 1 blocked: {blocked.Id} (waits on {scaffold.Id})", app.Board.Status);
-            Assert.Equal("▶ Work All (0, 1 blocked)", Column(app, Board.Backlog).BulkText);
+            Assert.Equal("▶ Work All (0, 1 blocked)", Column(app, app.ColumnId("In Progress")).BulkText);
             // and the screen shows it whole, the cards left out and what they wait on, not cut off in the header
             Assert.True(DrawnWhole(app, $"left out 1 blocked: {blocked.Id} (waits on {scaffold.Id})"), $"drawn whole: {app.Board.Status}");
             app.Shot("work-all-notice");

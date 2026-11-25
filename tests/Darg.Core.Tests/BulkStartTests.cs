@@ -9,10 +9,10 @@ public sealed class BulkStartTests
     static readonly Column[] Default = [new("c1", "To Do"), new("c2", "In Progress"), new("c3", "For Human Attention"), new("c4", "Done")];
 
     [Fact]
-    public void WorkAllSitsOnTheBacklogAndInProgress()
+    public void WorkAllSitsOnInProgressAndImproveAllOnTheBacklog()
     {
-        Assert.Equal([Board.Backlog, "c2"], BulkStart.WorkLists(Philips));
-        Assert.Equal(BulkStart.Kind.Work, BulkStart.For(Board.Backlog, Philips));
+        Assert.Equal(["c2"], BulkStart.WorkLists(Philips));
+        Assert.Equal(BulkStart.Kind.Improve, BulkStart.For(Board.Backlog, Philips));
         Assert.Equal(BulkStart.Kind.Work, BulkStart.For("c2", Philips));
         Assert.Equal(BulkStart.Kind.None, BulkStart.For("c5", Philips));
         Assert.Equal(BulkStart.Kind.None, BulkStart.For("c6", Philips));
@@ -24,7 +24,7 @@ public sealed class BulkStartTests
     public void ToDoCountsAsWaitingToo()
     {
         // Work on moves a card out of the first column as it does out of the backlog
-        Assert.Equal([Board.Backlog, "c1", "c2"], BulkStart.WorkLists(Default));
+        Assert.Equal(["c1", "c2"], BulkStart.WorkLists(Default));
         Assert.Equal(BulkStart.Kind.Work, BulkStart.For("c1", Default));
     }
 
@@ -39,8 +39,8 @@ public sealed class BulkStartTests
     [Fact]
     public void NeverTheDoneColumn()
     {
-        Assert.Equal([Board.Backlog], BulkStart.WorkLists([new("c1", "Done")]));
-        Assert.Equal([Board.Backlog], BulkStart.WorkLists([]));
+        Assert.Empty(BulkStart.WorkLists([new("c1", "Done")]));
+        Assert.Empty(BulkStart.WorkLists([]));
     }
 
     [Fact]
@@ -50,6 +50,8 @@ public sealed class BulkStartTests
         Assert.True(BulkStart.NeedsAsking(4));
         Assert.Equal("▶ Work All (5)", BulkStart.Label(BulkStart.Kind.Work, 5));
         Assert.Equal("🧪 QA Run All (0)", BulkStart.Label(BulkStart.Kind.Qa, 0));
+        Assert.Equal("✦ Improve All (3)", BulkStart.Label(BulkStart.Kind.Improve, 3));
+        Assert.Equal("Started improve on A-1", BulkStart.Summary(BulkStart.Kind.Improve, ["A-1"], []));
     }
 
     [Fact]
