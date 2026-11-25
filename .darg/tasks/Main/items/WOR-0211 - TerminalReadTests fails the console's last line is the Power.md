@@ -1,11 +1,12 @@
 # WOR-0211: TerminalReadTests fails: the console's last line is the PowerShell prompt, not the output
 
-- **Status:** Backlog
+- **Status:** Done
 - **Priority:**
 - **Type:** Bug
 - **Labels:** tests
 - **Created:** 2026-11-25
-- **Done:**
+- **Done:** 2026-11-25
+- **Moved:** 2026-11-25 04:12:03
 
 ## Description
 
