@@ -65,7 +65,7 @@
         <Button Classes="header" DockPanel.Dock="Right" Content="🔧 Tools" Command="{Binding OpenToolsCommand}" Background="Transparent"
                 VerticalAlignment="Center" Margin="0,0,4,0" ToolTip.Tip="Forge, ComfyUI, Ollama, Pinokio and claude-draw on this machine"/>
         <!-- Optimise tokens (WOR-0159): agents one model down and at medium effort while it's on -->
-        <ToggleButton DockPanel.Dock="Right" Classes="chip" Content="🍃 Optimise tokens" IsChecked="{Binding Usage.OptimiseTokens}"
+        <ToggleButton DockPanel.Dock="Right" Classes="chip lit" Content="{Binding Usage.OptimiseLabel}" IsChecked="{Binding Usage.OptimiseTokens}"
                       VerticalAlignment="Center" Margin="0,0,6,0" ToolTip.Tip="{Binding Usage.OptimiseTip}"
                       AutomationProperties.Name="Optimise tokens"/>
         <!-- Claude usage (WOR-0069): the 5-hour window as a bar, the time until it resets, and the week; today's Claude time sits to its left -->

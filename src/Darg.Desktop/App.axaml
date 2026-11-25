@@ -293,6 +293,20 @@
       <Setter Property="Margin" Value="0,0,5,5"/>
       <Setter Property="MinHeight" Value="0"/>
     </Style>
+    <!-- a toggle that reads as lit when on: filled with the accent (Optimise tokens, WOR-0203) -->
+    <Style Selector="ToggleButton.lit:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Accent}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource OnAccent}"/>
+    </Style>
+    <Style Selector="ToggleButton.lit:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentHover}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentHover}"/>
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource OnAccent}"/>
+    </Style>
+    <Style Selector="ToggleButton.lit:checked">
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
     <!-- filter chips: plain = off, outlined = any of these (OR), filled with + = must have (AND) -->
     <Style Selector="Button.chip">
       <Setter Property="Padding" Value="8,2"/>

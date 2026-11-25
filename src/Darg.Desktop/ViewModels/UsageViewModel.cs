@@ -32,10 +32,12 @@ public partial class UsageViewModel : ObservableObject
     }
 
     /// <summary>The Optimise tokens toggle beside the bar (WOR-0159, <see cref="TokenSaver"/>).</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OptimiseTip))] public partial bool OptimiseTokens { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OptimiseTip))] [NotifyPropertyChangedFor(nameof(OptimiseLabel))] public partial bool OptimiseTokens { get; set; }
     /// <summary>Told when the toggle is flipped (the app switches agents and saves it).</summary>
     public Action<bool>? OptimiseChanged { get; set; }
     partial void OnOptimiseTokensChanged(bool value) => OptimiseChanged?.Invoke(value);
+    /// <summary>The toggle's text says its state (WOR-0203), as well as the filled look when on.</summary>
+    public string OptimiseLabel => OptimiseTokens ? "🍃 Optimise tokens: ON" : "🍃 Optimise tokens: off";
     public string OptimiseTip => (OptimiseTokens ? "On. " : "Off. ") + TokenSaver.Tip;
 
     /// <summary>"today 3h 12m": Claude time today; empty without claude-code-timer.</summary>

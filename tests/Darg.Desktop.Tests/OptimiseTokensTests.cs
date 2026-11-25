@@ -56,6 +56,9 @@ public class OptimiseTokensTests
             await DargApp.Settle();
             Assert.True(app.Main.Usage.OptimiseTokens);
             app.Shot("on");
+            Assert.Contains("ON", Toggle(app).Content?.ToString());
+            var fill = (Toggle(app).GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().First() as Avalonia.Controls.Presenters.ContentPresenter)?.Background as Avalonia.Media.ISolidColorBrush;
+            Assert.Equal(((Avalonia.Media.ISolidColorBrush)ThemeManager.Brush("Accent")).Color, fill?.Color);
             Assert.True(TokenSaver.On);
             Assert.Contains("\"optimiseTokens\": true", File.ReadAllText(Path.Combine(app.Home, "settings.json")));
 
