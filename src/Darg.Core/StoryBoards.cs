@@ -136,6 +136,66 @@ public static class ShownBoards
     }
 }
 
+/// <summary>The order of a project's board tabs (WOR-0213): dragged into place, or sorted once by name or by age, and
+/// kept in the instance beside <see cref="ShownBoards"/> (projects/&lt;project&gt;/board-order, a board name a line), not
+/// in the boards folder. A board not in the file (new, or none set) goes after those that are, A to Z; a name in the
+/// file with no board is left out. A sort writes the whole order, so dragging afterwards carries on from it.</summary>
+public static class BoardOrder
+{
+    public static string FileFor(string projectId, string? instanceFolder = null) =>
+        Path.Combine(Path.GetDirectoryName(ShownBoards.FileFor(projectId, instanceFolder))!, "board-order");
+
+    public static List<string> Load(string projectId, string? instanceFolder = null)
+    {
+        try
+        {
+            var file = FileFor(projectId, instanceFolder);
+            return File.Exists(file)
+                ? File.ReadAllLines(file).Select(l => l.Trim()).Where(l => l.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                : [];
+        }
+        catch (Exception) { return []; }
+    }
+
+    public static void Save(string projectId, IEnumerable<string> boards, string? instanceFolder = null)
+    {
+        try
+        {
+            var file = FileFor(projectId, instanceFolder);
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllLines(file, boards);
+        }
+        catch (Exception) { }
+    }
+
+    /// <summary>The boards in the kept order: those named in <paramref name="saved"/> first, as there, then the rest
+    /// A to Z.</summary>
+    public static List<string> Arrange(IEnumerable<string> boards, IReadOnlyList<string> saved)
+    {
+        var all = boards.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var known = new HashSet<string>(all, StringComparer.OrdinalIgnoreCase);
+        var first = saved.Where(known.Contains).Select(s => all.First(b => b.Equals(s, StringComparison.OrdinalIgnoreCase))).ToList();
+        var placed = new HashSet<string>(first, StringComparer.OrdinalIgnoreCase);
+        return [.. first, .. all.Where(b => !placed.Contains(b)).Order(StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <summary>A to Z by name.</summary>
+    public static List<string> ByName(IEnumerable<string> boards) => boards.Order(StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>Oldest first, by when each board's folder was made (A to Z between boards made at the same instant).
+    /// A board whose folder can't be read goes last. A fresh clone or copy makes every folder at once, so there the
+    /// order is the order they were copied in.</summary>
+    public static List<string> ByAge(string boardsFolder, IEnumerable<string> boards) =>
+        boards.Select(b => (Name: b, Made: Made(Path.Combine(boardsFolder, b))))
+            .OrderBy(x => x.Made).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).Select(x => x.Name).ToList();
+
+    static DateTime Made(string folder)
+    {
+        try { return Directory.Exists(folder) ? Directory.GetCreationTimeUtc(folder) : DateTime.MaxValue; }
+        catch (Exception) { return DateTime.MaxValue; }
+    }
+}
+
 /// <summary>How tall each board's row is when several show at once (WOR-0160). A row dragged to a height by its
 /// divider keeps it (a file per project in the instance, projects/&lt;project&gt;/board-heights, a board and its
 /// height a line, tab between); the rows not set share what is left, none smaller than <see cref="FitMin"/>, and

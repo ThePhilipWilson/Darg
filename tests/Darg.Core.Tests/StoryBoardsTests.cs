@@ -18,6 +18,37 @@ public sealed class StoryBoardsTests : IDisposable
     [Fact]
     public void No_boards_no_inbox() => Assert.Null(StoryBoards.Inbox([]));
 
+    // WOR-0213: the board tabs' kept order
+    [Fact]
+    public void Board_order_puts_kept_ones_first_then_new_ones_A_to_Z_and_drops_gone_ones() =>
+        Assert.Equal(["Site", "main", "Art", "Zed"], BoardOrder.Arrange(["Zed", "Art", "main", "Site"], ["Gone", "Site", "Main"]));
+
+    [Fact]
+    public void Board_order_with_none_kept_is_A_to_Z() =>
+        Assert.Equal(["art", "Main", "Site"], BoardOrder.Arrange(["Site", "Main", "art"], []));
+
+    [Fact]
+    public void Board_order_is_saved_and_read_back_per_project()
+    {
+        BoardOrder.Save("p", ["Site", "Main"], _root);
+        Assert.Equal(["Site", "Main"], BoardOrder.Load("p", _root));
+        Assert.Empty(BoardOrder.Load("other", _root));
+        Assert.Equal(Path.GetDirectoryName(ShownBoards.FileFor("p", _root)), Path.GetDirectoryName(BoardOrder.FileFor("p", _root)));
+    }
+
+    [Fact]
+    public void Boards_by_age_are_oldest_folder_first_ties_A_to_Z()
+    {
+        var folder = Path.Combine(_root, "boards");
+        var t = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        foreach (var (name, days) in new[] { ("New", 9), ("Old", 1), ("Beta", 5), ("Alpha", 5) })
+        {
+            Directory.CreateDirectory(Path.Combine(folder, name));
+            Directory.SetCreationTimeUtc(Path.Combine(folder, name), t.AddDays(days));
+        }
+        Assert.Equal(["Old", "Alpha", "Beta", "New", "Missing"], BoardOrder.ByAge(folder, ["New", "Missing", "Beta", "Old", "Alpha"]));
+    }
+
     [Theory] // replies a model gives, and the board kept
     [InlineData("Art pipeline", "Art pipeline")]
     [InlineData("art pipeline", "Art pipeline")]

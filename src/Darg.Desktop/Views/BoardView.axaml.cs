@@ -34,6 +34,8 @@ public partial class BoardView : UserControl
         RowsScroll.SizeChanged += (_, _) => Fit();
         DataContextChanged += (_, _) => Fit();
         RowDividers(this);
+        // a board tab dragged along the row moves there, and the order is kept (WOR-0213)
+        TabDrag.Attach(BoardTabs, (from, to) => (DataContext as BoardViewModel)?.MoveBoard(from, to), tabIsButton: true);
         ChipDoubleClicks(this);
         // a board tab pressed with Ctrl adds or removes it (WOR-0149); the button's click reads the flag
         AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (_, e) =>

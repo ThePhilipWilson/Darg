@@ -78,7 +78,7 @@ public class BoardTabsTests
         foreach (var n in names) BoardStore.CreateBoard(app.Boards, n, DargApp.Columns, "B" + n.Substring(20, 2));
         await app.Start();
         await app.Api("show", new { project = "proj", section = "Board" });
-        app.Window.Width = 1280;
+        app.Window.Width = 1400; // WOR-0213: room for two tabs beside the sort buttons
         await DargApp.Settle();
         var board = app.Board;
         Assert.Equal(14, board.Tabs.Count);
@@ -157,5 +157,79 @@ public class BoardTabsTests
         await app.Api("show", new { project = "proj", section = "Board" });
         Assert.Null(More(app));
         Assert.Equal(2, RowTabs(app).Count);
+    }
+
+    /// <summary>WOR-0213: a tab dragged along the row moves there, without clicking it; the order is kept, the rows
+    /// follow it, a new board goes at the end, and A-Z and Old-new sort the tabs once.</summary>
+    [AvaloniaFact]
+    public async Task Tabs_drag_into_an_order_that_is_kept_and_sort_once()
+    {
+        using var app = DargApp.Make();
+        var android = BoardStore.CreateBoard(app.Boards, "Android", DargApp.Columns, "A");
+        var site = BoardStore.CreateBoard(app.Boards, "Site", DargApp.Columns, "S");
+        // made Site, then Main, then Android
+        Directory.SetCreationTimeUtc(site, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        Directory.SetCreationTimeUtc(app.BoardFolder, new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc));
+        Directory.SetCreationTimeUtc(android, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc));
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await DargApp.Settle();
+        var board = app.Board;
+        string Names() => string.Join(",", board.Tabs.Select(t => t.Name));
+        Assert.Equal("Android,Main,Site", Names());
+        Assert.Equal("Android", Rows(board));
+
+        // drag Android's tab past Site with the mouse: it moves to the end, and isn't clicked on the way
+        Button Tab(string name) => RowTabs(app).Single(b => ((BoardTab)b.DataContext!).Name == name);
+        var top = app.Window;
+        Point Mid(Button b) => b.TranslatePoint(new Point(b.Bounds.Width / 2, b.Bounds.Height / 2), top)!.Value;
+        var from = Mid(Tab("Android"));
+        var to = Mid(Tab("Site")) + new Point(Tab("Site").Bounds.Width / 2 - 2, 0);
+        Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, from);
+        Avalonia.Headless.HeadlessWindowExtensions.MouseDown(top, from, Avalonia.Input.MouseButton.Left);
+        // the button held down as it moves, as a real drag is
+        for (var x = 1; x <= 4; x++)
+            Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, from + (to - from) * (x / 4.0), Avalonia.Input.RawInputModifiers.LeftMouseButton);
+        app.Shot("board-tab-dragging");
+        Avalonia.Headless.HeadlessWindowExtensions.MouseUp(top, to, Avalonia.Input.MouseButton.Left);
+        await DargApp.Settle();
+        Assert.Equal("Main,Site,Android", Names());
+        Assert.Equal("Main,Site,Android", string.Join(",", board.Boards));
+        Assert.Equal("Android", Rows(board)); // a drag, not a click: what shows is as it was
+        Assert.Equal(["Main", "Site", "Android"], BoardOrder.Load("proj"));
+        app.Shot("board-tab-dragged");
+
+        // a plain click on a tab still picks it
+        var main = Mid(Tab("Main"));
+        Avalonia.Headless.HeadlessWindowExtensions.MouseDown(top, main, Avalonia.Input.MouseButton.Left);
+        Avalonia.Headless.HeadlessWindowExtensions.MouseUp(top, main, Avalonia.Input.MouseButton.Left);
+        await DargApp.Settle();
+        Assert.Equal("Main", Rows(board));
+
+        // the rows below the picked one follow the tabs' order
+        board.ShowAllBoardsCommand.Execute(null);
+        Assert.Equal("Main,Site,Android", Rows(board));
+
+        // a new board goes at the end, and a reopened board section has the same order
+        BoardStore.CreateBoard(app.Boards, "Docs", DargApp.Columns, "D");
+        await app.Until(() => board.Tabs.Count == 4, "the new board's tab");
+        Assert.Equal("Main,Site,Android,Docs", Names());
+        using (var again = new BoardViewModel(app.Project.Config))
+            Assert.Equal("Main,Site,Android,Docs", string.Join(",", again.Tabs.Select(t => t.Name)));
+
+        // the buttons sort once, and the sort is what's kept
+        var docs = Path.Combine(app.Boards, "Docs");
+        Directory.SetCreationTimeUtc(docs, new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc));
+        var byAge = top.GetVisualDescendants().OfType<Button>().Single(b => b.Command == board.SortBoardsByAgeCommand);
+        Assert.True(byAge.IsEffectivelyVisible);
+        byAge.Command!.Execute(null);
+        Assert.Equal("Site,Main,Android,Docs", Names());
+        Assert.Equal(["Site", "Main", "Android", "Docs"], BoardOrder.Load("proj"));
+        board.SortBoardsByNameCommand.Execute(null);
+        Assert.Equal("Android,Docs,Main,Site", Names());
+        Assert.Equal(["Android", "Docs", "Main", "Site"], BoardOrder.Load("proj"));
+        board.MoveBoard(3, 0);
+        Assert.Equal("Site,Android,Docs,Main", Names());
+        app.Shot("board-tabs-sorted");
     }
 }

@@ -90,6 +90,13 @@
         </DockPanel>
         <Button DockPanel.Dock="Left" Content="+ Board" Command="{Binding NewBoardCommand}" Margin="0,0,12,0"
                 ToolTip.Tip="Make a new board, or have an agent sort the cards into a board per story"/>
+        <!-- the tabs' order (WOR-0213): drag a tab to move it; these sort them once, and dragging carries on from there -->
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="4" Margin="0,0,12,0" IsVisible="{Binding ShowsBoardSort}">
+          <Button Content="A–Z" Command="{Binding SortBoardsByNameCommand}" Padding="8,4" FontSize="12" AutomationProperties.Name="Sort boards A to Z"
+                  ToolTip.Tip="Sort the board tabs A to Z. It sorts them once: drag a tab afterwards to move it, and new boards go at the end."/>
+          <Button Content="Old–new" Command="{Binding SortBoardsByAgeCommand}" Padding="8,4" FontSize="12" AutomationProperties.Name="Sort boards oldest first"
+                  ToolTip.Tip="Sort the board tabs oldest board first, by when each was made. It sorts them once: drag a tab afterwards to move it, and new boards go at the end."/>
+        </StackPanel>
         <Button DockPanel.Dock="Right" Classes="primary" Content="+ Card" Command="{Binding NewCardCommand}" Margin="12,0,0,0"/>
         <CheckBox DockPanel.Dock="Right" Content="Show completed" IsChecked="{Binding ShowCompleted}" Margin="12,0,0,0"/>
         <TextBlock DockPanel.Dock="Right" Classes="dim" Text="{Binding CountText}" VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
@@ -110,7 +117,7 @@
             <DataTemplate x:DataType="vm:BoardTab">
               <Button Classes="chip boardtab" Classes.all="{Binding IsShown}" Content="{Binding Name}" Command="{Binding PickCommand}"
                       Margin="0" Padding="12,4" FontSize="13" AutomationProperties.Name="{Binding Name}"
-                      ToolTip.Tip="Click: show only this board. Ctrl+click: add it to the boards showing, or take it off."/>
+                      ToolTip.Tip="Click: show only this board. Ctrl+click: add it to the boards showing, or take it off. Drag: move the tab."/>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>

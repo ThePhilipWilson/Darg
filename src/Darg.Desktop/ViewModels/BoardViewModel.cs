@@ -214,21 +214,62 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>The boards in the folder, re-read (an agent or Tatty may have made one); the shown one stays.</summary>
     void RefreshBoards()
     {
-        var now = BoardStore.List(_project.Boards);
-        var keep = SelectedBoard;
-        if (!now.SequenceEqual(Boards))
-        {
-            foreach (var b in Boards.Except(now).Where(b => b != keep).ToList()) Boards.Remove(b);
-            foreach (var b in now.Except(Boards).ToList())
-            {
-                var at = 0;
-                while (at < Boards.Count && StringComparer.OrdinalIgnoreCase.Compare(Boards[at], b) < 0) at++;
-                Boards.Insert(at, b);
-            }
-        }
+        var now = BoardOrder.Arrange(BoardStore.List(_project.Boards), _order ??= BoardOrder.Load(_project.Id));
+        // the picked board stays listed even once gone from disk, where it was, so the pick isn't lost under it
+        if (SelectedBoard is { } keep && !now.Contains(keep) && Boards.IndexOf(keep) is var was and >= 0) now.Insert(Math.Min(was, now.Count), keep);
+        ArrangeBoards(now);
         if (SelectedBoard is null && Boards.Count > 0) SelectedBoard = Boards[0];
         OnPropertyChanged(nameof(OtherBoards));
         SyncRows();
+    }
+
+    /// <summary>The tabs' order as kept (WOR-0213, <see cref="BoardOrder"/>): dragged, or sorted once.</summary>
+    List<string>? _order;
+
+    /// <summary><see cref="Boards"/> (and the tabs) put in this order, moving rather than rebuilding.</summary>
+    void ArrangeBoards(IReadOnlyList<string> want)
+    {
+        if (want.SequenceEqual(Boards)) return;
+        foreach (var b in Boards.Except(want).ToList()) Boards.Remove(b);
+        for (var i = 0; i < want.Count; i++)
+        {
+            var at = Boards.IndexOf(want[i]);
+            if (at == i) continue;
+            if (at < 0) Boards.Insert(i, want[i]); else Boards.Move(at, i);
+        }
+    }
+
+    /// <summary>A tab dragged from one place in the row to another (WOR-0213): that order is kept.</summary>
+    public void MoveBoard(int from, int to)
+    {
+        if (from == to || from < 0 || to < 0 || from >= Boards.Count || to >= Boards.Count) return;
+        Boards.Move(from, to);
+        if (Tabs.Count == Boards.Count) Tabs.Move(from, to);
+        KeepOrder();
+    }
+
+    /// <summary>The tabs A to Z, once: that becomes the kept order, which dragging then carries on from.</summary>
+    [RelayCommand] void SortBoardsByName() => SortBoards(BoardOrder.ByName(Boards), "A to Z");
+
+    /// <summary>The tabs oldest board first, once (by when each board's folder was made).</summary>
+    [RelayCommand] void SortBoardsByAge() { if (_project.Boards is { } f) SortBoards(BoardOrder.ByAge(f, Boards), "oldest first"); }
+
+    void SortBoards(IReadOnlyList<string> order, string how)
+    {
+        ArrangeBoards(order);
+        KeepOrder();
+        _notice = $"Boards sorted {how}. Drag a tab to move it.";
+        Apply();
+    }
+
+    /// <summary>The sort buttons show once there are two boards to sort.</summary>
+    public bool ShowsBoardSort => Boards.Count > 1;
+
+    void KeepOrder()
+    {
+        _order = [.. Boards];
+        BoardOrder.Save(_project.Id, _order);
+        SyncRows(); // the rows below the picked one follow the tabs' order
     }
 
     /// <summary>The project's other boards, for "Move to board".</summary>
@@ -241,8 +282,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         var others = Boards.Where(b => b != SelectedBoard).ToList();
         if (!Boards.SequenceEqual(Tabs.Select(t => t.Name)))
         {
-            Tabs.Clear();
-            foreach (var b in Boards) Tabs.Add(new BoardTab(this, b));
+            // the same tabs moved, not new ones, so a sort or a drag doesn't redraw the row
+            var had = Tabs.ToDictionary(t => t.Name);
+            ListSync.Sync(Tabs, Boards.Select(b => had.GetValueOrDefault(b) ?? new BoardTab(this, b)).ToList());
         }
         foreach (var t in Tabs) t.IsShown = t.Name == SelectedBoard || _also.Contains(t.Name);
         var want = others.Where(_also.Contains).ToList();
@@ -318,7 +360,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         }
         if (board == SelectedBoard)
         {
-            var next = _also.Order(StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+            var next = Boards.FirstOrDefault(_also.Contains);
             if (next is null) return;
             _also.Remove(next);
             ShownBoards.Save(_project.Id, _also.Order(StringComparer.OrdinalIgnoreCase));
@@ -352,13 +394,13 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     /// <summary>The board new cards land on (a note's ticket, + Card on it), from where Haiku moves each to its story's
     /// board (<see cref="StoryBoards"/>). The picked board while there's only one.</summary>
-    public string? InboxFolder => _project.Boards is null || StoryBoards.Inbox(Root.Boards) is not { } inbox ? Folder : Path.Combine(_project.Boards, inbox);
+    public string? InboxFolder => _project.Boards is null || StoryBoards.Inbox(BoardOrder.ByName(Root.Boards)) is not { } inbox ? Folder : Path.Combine(_project.Boards, inbox);
 
     /// <summary>A card was just made on <paramref name="boardFolder"/>: if that's the inbox and the project has other
     /// boards, Haiku moves it to the story it fits once <paramref name="after"/> (its retitling) is done.</summary>
     public void PlaceLater(string boardFolder, string cardId, Task? after = null)
     {
-        if (_project.Boards is not { } boards || Root.Boards.Count < 2 || StoryBoards.Inbox(Root.Boards) is not { } inbox) return;
+        if (_project.Boards is not { } boards || Root.Boards.Count < 2 || StoryBoards.Inbox(BoardOrder.ByName(Root.Boards)) is not { } inbox) return;
         if (!string.Equals(Path.GetFullPath(boardFolder).TrimEnd('\\', '/'), Path.GetFullPath(Path.Combine(boards, inbox)).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)) return;
         var root = Root;
         _ = Run();
@@ -434,7 +476,8 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _project = project;
         Rows.Add(this);
         foreach (var b in ShownBoards.Load(project.Id)) _also.Add(b);
-        foreach (var b in BoardStore.List(project.Boards)) Boards.Add(b);
+        foreach (var b in BoardOrder.Arrange(BoardStore.List(project.Boards), _order = BoardOrder.Load(project.Id))) Boards.Add(b);
+        Boards.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ShowsBoardSort));
         SelectedBoard = Boards.FirstOrDefault();
         if (Boards.Count == 0) Status = project.Boards is null ? "This project has no boards folder set." : $"No boards in {project.Boards}. + Board makes one.";
         WatchBoards();
