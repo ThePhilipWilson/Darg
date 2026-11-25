@@ -84,4 +84,21 @@ public class NewCardTests
         await app.Until(() => app.ClaudeCalls().Any(c => (string?)c["kind"] == "ask" && ((string?)c["text"] ?? "").Contains("Paint the splash screen")),
             "Haiku asked which story board the new card fits");
     }
+
+    /// <summary>WOR-0207: a Haiku question starts no MCP servers. Without --strict-mcp-config every one started the
+    /// person's whole set (npx, uvx and node), about 1 GB and eight node processes for one word back.</summary>
+    [AvaloniaFact]
+    public async Task A_Haiku_question_starts_no_MCP_servers()
+    {
+        using var app = DargApp.Make();
+        BoardStore.CreateBoard(app.Boards, "Art", DargApp.Columns, "T");
+        await app.Start();
+
+        await app.Api("new-card", new { project = "proj", title = "Paint the title screen" });
+
+        await app.Until(() => app.ClaudeCalls().Any(c => (string?)c["kind"] == "ask"), "a Haiku question");
+        var args = app.ClaudeCalls().First(c => (string?)c["kind"] == "ask")["args"]!.AsArray().Select(a => (string)a!).ToList();
+        Assert.Contains("--strict-mcp-config", args);
+        Assert.DoesNotContain("--mcp-config", args);
+    }
 }

@@ -7,6 +7,11 @@ namespace Darg.Core;
 /// model-profile picks use.</summary>
 public static class Haiku
 {
+    /// <summary>What claude is started with. <c>--strict-mcp-config</c> with no <c>--mcp-config</c> starts no MCP servers:
+    /// without it every question started each of the person's user-scope and plugin servers (npx, uvx, node), about
+    /// 1 GB and eight node processes for a one-word answer with no tools to use them (WOR-0207).</summary>
+    public static readonly IReadOnlyList<string> Args = ["-p", "--model", "haiku", "--tools", "", "--output-format", "text", "--strict-mcp-config"];
+
     /// <summary>Haiku's reply, or null when Claude isn't found, fails, or takes longer than the timeout. Never throws.</summary>
     public static async Task<string?> Ask(string prompt, TimeSpan timeout)
     {
@@ -20,7 +25,7 @@ public static class Haiku
                 RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
                 UseShellExecute = false, CreateNoWindow = true, StandardOutputEncoding = Encoding.UTF8,
             };
-            foreach (var a in new[] { "-p", "--model", "haiku", "--tools", "", "--output-format", "text" }) psi.ArgumentList.Add(a);
+            foreach (var a in Args) psi.ArgumentList.Add(a);
             p = Process.Start(psi)!;
             await p.StandardInput.WriteAsync(prompt);
             p.StandardInput.Close();
