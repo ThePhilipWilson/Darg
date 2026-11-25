@@ -160,6 +160,52 @@ public class AllBoardTests
         Assert.Equal("", app.Crashes());
     }
 
+    /// <summary>QA round 2: with All showing, the API's work-on started the agent on the board picked underneath (Main),
+    /// so a card on another board stayed in its backlog and its agent was given a card file that doesn't exist.</summary>
+    [AvaloniaFact]
+    public async Task With_All_showing_the_APIs_card_commands_act_on_each_cards_own_board()
+    {
+        using var app = DargApp.Make();
+        var android = BoardStore.CreateBoard(app.Boards, "Android", DargApp.Columns, "A");
+        string Column(string name) => BoardStore.Load(android).Columns.Single(c => c.Name == name).Id;
+        var one = BoardStore.Create(android, "android card worked on alone", "");
+        var two = BoardStore.Create(android, "android card worked on in a list", "");
+        var mainCard = app.Card("main card worked on in a list");
+        var checking = BoardStore.Create(android, "android card in QA", "The logo's edges are jagged.\n\n## How to check\n\nLook at the logo.\n");
+        BoardStore.Move(android, checking.Id, Column("QA Ready"));
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        var board = app.Board;
+        board.Tabs.Single(t => t.Name == "Main").PickCommand.Execute(null);
+        board.PickAllBoardCommand.Execute(null);
+        await DargApp.Settle(200);
+        Assert.True(board.ShowingAll);
+        Assert.Equal("Main", board.SelectedBoard); // the board picked underneath isn't the cards' board
+        string Status(string id) => BoardStore.ReadCards(android).Single(c => c.Id == id).Status;
+        var androidItems = Path.Combine(android, "items");
+
+        await app.Api("work-on", new { project = "proj", card = one.Id, force = true });
+        Assert.Equal("In Progress", Status(one.Id));
+        await app.Until(() => app.Prompts().Any(p => p.Contains(one.Id)), $"{one.Id}'s agent to be sent its prompt");
+        Assert.Contains(Path.Combine(androidItems, one.File), app.Prompts().First(p => p.Contains(one.Id)));
+        Assert.DoesNotContain("Couldn't move", board.Status);
+
+        // the list form finds each card on its own board too
+        await app.Api("work-on", new { project = "proj", cards = new[] { two.Id, mainCard.Id } });
+        Assert.Equal("In Progress", Status(two.Id));
+        Assert.Equal("In Progress", app.Read(mainCard.Id).Status);
+        Assert.NotNull(app.Agents.ForCard(two.Id));
+        Assert.NotNull(app.Agents.ForCard(mainCard.Id));
+        await app.Until(() => app.Prompts().Any(p => p.Contains(Path.Combine(androidItems, two.File))), $"{two.Id}'s agent to be given its own card file");
+
+        // send-back checks the card's own board's QA column, and moves it there
+        await app.Api("send-back", new { project = "proj", card = checking.Id, notes = "still jagged at 150% zoom" });
+        Assert.Equal("In Progress", Status(checking.Id));
+        Assert.Contains("still jagged at 150% zoom", File.ReadAllText(Path.Combine(androidItems, checking.File)));
+        Assert.Equal(AgentPurposes.Rework, app.Agents.ForCard(checking.Id)?.Purpose);
+        Assert.Equal("", app.Crashes());
+    }
+
     [AvaloniaFact]
     public async Task By_state_splits_each_column_into_a_sub_column_per_state_kept_per_board()
     {

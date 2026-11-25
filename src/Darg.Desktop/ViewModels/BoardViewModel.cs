@@ -667,34 +667,47 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         static string Ids(List<string> ids) => ids.Count == 0 ? "none" : string.Join(", ", ids);
     }
 
-    /// <summary>Start agents on cards of the shown board by id, together, as ▶ Work on N does (the API's work-on
-    /// with several cards). Cards that already have an agent are left out. Says what was started.</summary>
+    /// <summary>The cards with these ids on the boards showing, by the row that shows each (WOR-0214: with All showing that
+    /// is every board, so a card off the board picked underneath is found and started on its own board), leaving out
+    /// those with an agent and those done.</summary>
+    List<(BoardViewModel Row, List<Card> Cards)> CardsByRow(IReadOnlyList<string> ids) =>
+        Root.Rows.Select(r => (Row: r, Cards: r._board is not { } board ? [] : ids
+                .Select(id => board.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase))).OfType<Card>()
+                .Where(c => AgentFor?.Invoke(c.Id) is null && !r.IsDone(c.Id)).DistinctBy(c => c.Id).ToList()))
+            .Where(p => p.Cards.Count > 0).ToList();
+
+    /// <summary>Start agents on cards of the boards showing by id, together, as ▶ Work on N does (the API's work-on
+    /// with several cards), each on its own board. Cards that already have an agent are left out. Says what was started.</summary>
     public string WorkOnCards(IReadOnlyList<string> ids, bool force = false)
     {
-        if (_board is null) return "No board is showing.";
-        var cards = ids.Select(id => _board.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
-            .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null && !IsDone(c.Id)).DistinctBy(c => c.Id).ToList();
-        if (cards.Count == 0) return "None of those cards is on the board without an agent and outside Done (a card in Done must be moved out first).";
+        if (Root._board is null) return "No board is showing.";
+        var byRow = Root.CardsByRow(ids);
+        if (byRow.Count == 0) return "None of those cards is on the board without an agent and outside Done (a card in Done must be moved out first).";
         BlockersStale(); // as things are now, not as of the last reload
-        var (free, blocked) = SplitBlocked(cards, force);
-        if (free.Count == 0)
-            throw new ApiError("Started nothing: " + string.Join(" ", blocked.Select(b => BlockedStart.Refusal(b.Id, b.Open))));
-        WorkOnAll(free, blocked: blocked);
-        return _notice ?? "";
+        var split = byRow.Select(p => { var (free, blocked) = p.Row.SplitBlocked(p.Cards, force); return (p.Row, Free: free, Blocked: blocked); }).ToList();
+        if (split.All(p => p.Free.Count == 0))
+            throw new ApiError("Started nothing: " + string.Join(" ", split.SelectMany(p => p.Blocked).Select(b => BlockedStart.Refusal(b.Id, b.Open))));
+        var all = split.SelectMany(p => p.Free).Select(c => c.Id).ToList();
+        var said = new List<string>();
+        foreach (var (row, free, blocked) in split)
+            if (free.Count > 0) { row.WorkOnAll(free, all, blocked: blocked); said.Add(row._notice ?? ""); }
+            else said.Add("Started nothing on " + row.SelectedBoard + "; " + BlockedStart.LeftOut(blocked));
+        return string.Join(" ", said.Where(x => x.Length > 0));
     }
 
-    /// <summary>Improve agents on cards of the shown board by id, one each, as ✦ Improve N does (the API's
-    /// improve-card with several cards). Cards with an agent at work are left out. Says what was started.</summary>
+    /// <summary>Improve agents on cards of the boards showing by id, one each, as ✦ Improve N does (the API's
+    /// improve-card with several cards), each on its own board. Cards with an agent at work are left out. Says what was started.</summary>
     public string ImproveCards(IReadOnlyList<string> ids)
     {
-        if (_board is null) return "No board is showing.";
-        var cards = ids.Select(id => _board.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)))
-            .OfType<Card>().Where(c => AgentFor?.Invoke(c.Id) is null && !IsDone(c.Id)).DistinctBy(c => c.Id).ToList();
-        if (cards.Count == 0) return "None of those cards is on the board without an agent and outside Done (a card in Done must be moved out first).";
-        foreach (var card in cards) StartImprove(card);
-        _notice = cards.Count == 1 ? $"Improving {cards[0].Id}: its agent is in Agents" : $"Improving {cards.Count} cards, an agent each in Agents: {string.Join(", ", cards.Select(c => c.Id))}";
-        Apply();
-        return _notice;
+        if (Root._board is null) return "No board is showing.";
+        var byRow = Root.CardsByRow(ids);
+        if (byRow.Count == 0) return "None of those cards is on the board without an agent and outside Done (a card in Done must be moved out first).";
+        foreach (var (row, cards) in byRow)
+            foreach (var card in cards) row.StartImprove(card);
+        var started = byRow.SelectMany(p => p.Cards).Select(c => c.Id).ToList();
+        Root._notice = started.Count == 1 ? $"Improving {started[0]}: its agent is in Agents" : $"Improving {started.Count} cards, an agent each in Agents: {string.Join(", ", started)}";
+        Root.ApplyAll();
+        return Root._notice;
     }
 
     /// <summary>Start an agent on each card, all together; a card that fails to start is named in the status line and the

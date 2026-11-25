@@ -371,9 +371,10 @@ public partial class MainViewModel
         if (p.Board.Show(id) is not { } card) throw new ApiError($"No card {id} on {p.Name}'s boards.");
         if (p.Agents.ForCard(id) is { } busy) throw new ApiError($"{id} already has an agent: \"{busy.Name}\" (id {busy.Id}, {busy.StateText}).");
         // WOR-0173: a card waiting on another not yet in QA or done isn't started unless told to
-        if (!force && !p.Board.InQa(card.Card) && p.Board.OpenBlockers(card.Card, fresh: true) is { Count: > 0 } open)
+        // the card's own row (WOR-0214): with All showing, the board picked underneath may be another
+        if (!force && !card.Board.InQa(card.Card) && card.Board.OpenBlockers(card.Card, fresh: true) is { Count: > 0 } open)
             throw new ApiError(BlockedStart.Refusal(card.Id, open));
-        p.Board.StartWork(card, force: true);
+        card.Board.StartWork(card, force: true);
         return p.Agents.ForCard(id) is { } started ? $"Started \"{started.Name}\" (id {started.Id}) on {id}." : $"Couldn't start an agent on {id}.";
     }
 
@@ -393,7 +394,7 @@ public partial class MainViewModel
         if (a.Get("cards") is not null) return p.Board.ImproveCards(a.List("cards"));
         var id = a.Need("card");
         if (p.Board.Show(id) is not { } card) throw new ApiError($"No card {id} on {p.Name}'s boards.");
-        p.Board.StartImprove(card);
+        card.Board.StartImprove(card);
         return $"Started an agent improving {id}.";
     }
 
@@ -403,8 +404,8 @@ public partial class MainViewModel
         if (p.Board is null || p.Agents is null) throw new ApiError($"{p.Name} needs a board and agents for that.");
         var id = a.Need("card");
         if (p.Board.Show(id) is not { } card) throw new ApiError($"No card {id} on {p.Name}'s boards.");
-        if (!p.Board.InQa(card.Card) && !p.Board.InAttention(card.Card)) throw new ApiError($"{id} isn't in the QA or needs-attention column ({card.Card.Status}); only a card there is sent back.");
-        if (p.Board.SendBack(card, a.Need("notes")) is { } error) throw new ApiError(error);
+        if (!card.Board.InQa(card.Card) && !card.Board.InAttention(card.Card)) throw new ApiError($"{id} isn't in the QA or needs-attention column ({card.Card.Status}); only a card there is sent back.");
+        if (card.Board.SendBack(card, a.Need("notes")) is { } error) throw new ApiError(error);
         return p.Agents.ForCard(id) is { } started ? $"Sent {id} back; \"{started.Name}\" (id {started.Id}) is on it." : $"Sent {id} back.";
     }
 
@@ -755,7 +756,7 @@ public partial class MainViewModel
         if (a.Get("card") is { } id)
         {
             if (p.Board?.Show(id) is not { } card) throw new ApiError($"No card {id} on {p.Name}'s boards.");
-            p.Board.StartFlow(card, flow);
+            card.Board.StartFlow(card, flow);
             return $"Running {flow.Name} on {id}.";
         }
         var task = a.Get("task") ?? throw new ApiError("Give a card or a task.");
