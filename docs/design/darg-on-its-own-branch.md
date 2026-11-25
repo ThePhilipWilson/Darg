@@ -1,8 +1,9 @@
 ---
 kind: feature
-status: draft
+status: agreed
 parent: seamless-machine-switching
 planner: 1c9fff9a-cfb0-4023-88e1-c6324ca85dd4
+board: darg on its own branch
 ---
 # .darg on its own branch
 
@@ -146,61 +147,61 @@ Two cards here need a card from Auto-sync: "Put .darg on a darg branch and bring
 
 ## Cards
 
-### Take the force-added .darg off Darg's branches
+### DAR-0001: Take the force-added .darg off Darg's branches
 DAR-0003 force-added `.darg/tasks` to Darg's own code branches, and a checkout of any branch that tracks it can delete card files, which happened tonight. On each branch the Question about branches names, commit `git rm -r --cached .darg` from a temporary worktree of that branch, never a checkout in the main checkout, leaving the files on disk. Remove the CLAUDE.md sentence saying this repo commits `.darg/tasks` and the matching line in docs/architecture.md. Check that the Main board's board.json still has prefix WOR, the real columns and a nextId above the highest WOR card. The repo is public, so commit each branch but ask Philip before every push.
 **Where:** `CLAUDE.md`, `docs/architecture.md`, `.darg/tasks/Main/board.json` (checked, not committed), branches main, android and mac-path-fixes.
 **Done when:** `git ls-tree -r --name-only <branch> .darg` is empty for each branch named, every card file is still on disk (the same count before and after), and the CLAUDE.md line is gone.
 **Blocked by:** none
 
-### Put .darg on a darg branch and bring today's files in
+### DAR-0002: Put .darg on a darg branch and bring today's files in
 Make `DargBranch` in Core. It attaches a repo's `.darg` to an orphan `darg` branch as a linked worktree, as the Design's "The branch" describes. It refuses when the checked-out branch tracks `.darg/`. It makes the orphan with plumbing, or bases it on the remote's `darg` when there is one. It moves the plain folder aside to `.darg.before-sync`, adds the worktree, writes `.gitattributes`, then brings every file in: missing ones move, identical ones drop, and differing ones go through Auto-sync's `SyncConflicts` so both sides are kept. Fold `Repo.Git` and `LiveCopy.Git` into one git runner with a timeout for this to use.
 **Where:** `src/Darg.Core/DargBranch.cs` (new), `src/Darg.Core/Repo.cs`, `src/Darg.Core/LiveCopy.cs`, `src/Darg.Core/ProjectData.cs`, `tests/Darg.Core.Tests/DargBranchTests.cs` (new)
 **Done when:** unit tests on throwaway repos show: a plain `.darg` becomes a worktree on `darg` with every file still there; a branch from a remote plus a local folder ends with the union, differing files kept on both sides; a repo whose branch tracks `.darg/` is refused with the command named; a held file leaves everything untouched; and `git status` in the main checkout stays clean. `pwsh -File tools/test.ps1` passes.
 **Blocked by:** none
 
-### Pick where a repo's darg branch pushes
+### DAR-0003: Pick where a repo's darg branch pushes
 Make `DargRemote` in Core. It decides where a repo's `darg` branch goes: no remote means commit only; a private GitHub repo means origin; a public one means a private `<owner>/<repo>-darg`, made with `gh repo create --private` as the project's account and added as remote `darg` in origin's URL form, so SSH aliases keep working; a host whose visibility can't be read follows the visibility Question. Visibility is read again when the last read is over 10 minutes old, and a repo that has gone public stops pushing to origin and says so. gh calls use the project's account token without switching the active account.
 **Where:** `src/Darg.Core/DargRemote.cs` (new), `src/Darg.Core/GitHub.cs`, `tools/perf/fake_gh.py`, `tests/Darg.Core.Tests/DargRemoteTests.cs` (new)
 **Done when:** tests with fake gh show a private repo pushing to origin, a public one making `<repo>-darg` once (with an SSH alias URL and with an HTTPS URL) and pushing there, an unreadable visibility pushing nowhere, and a repo turned public refusing to push to origin. The suite passes.
 **Blocked by:** none
 
-### One sync round for the darg branch
+### DAR-0004: One sync round for the darg branch
 Make `DargSync.Round` in Core, which Sync now and later Auto-sync call. Off the UI thread, and one at a time per project within the process, it commits everything changed in `.darg`, fetches, and merges the remote `darg` with `--allow-unrelated-histories`. On a conflict it aborts the merge, keeps the local commit and reports the files, until Auto-sync wires in keeping both sides. It pushes through `DargRemote` and returns a result (pulled n, pushed n, or why not). Every git call runs with `-C .darg`, never in the main checkout.
 **Where:** `src/Darg.Core/DargSync.cs` (new), `tests/Darg.Core.Tests/DargSyncTests.cs` (new), with a helper that makes a bare remote and a second clone to play the other machine.
 **Done when:** tests against a bare remote show a card made in one clone arriving in the other after a round in each, two orphan branches made offline merging, a conflicting card leaving both clones unchanged with the conflict reported, no remote committing only, and the main checkout's HEAD and status untouched. The suite passes.
 **Blocked by:** Put .darg on a darg branch and bring today's files in, Pick where a repo's darg branch pushes
 
-### A sync never commits a mass delete
+### DAR-0005: A sync never commits a mass delete
 Before a round stages anything, compare the `.darg` worktree with its last commit. Deletions Darg didn't make itself, over 10 files or a whole board folder, are handled as the mass-deletion Question settles (recommended: put back from the last commit, and the result line says how many). Deletions Darg makes itself must still commit: a forgotten agent's files, archived reports, a card deleted from the board. Darg marks those through a small `DargSync.Deleting(paths)` record that its delete paths call, so the guard can tell them apart. This is what stops a loss like tonight's 210 cards from reaching the other machine.
 **Where:** `src/Darg.Core/DargSync.cs`, the delete paths in `src/Darg.Core/Board.cs`, `src/Darg.Core/Reports.cs` and `src/Darg.Core/AgentStore.cs`, `tests/Darg.Core.Tests/DargSyncTests.cs`
 **Done when:** a test deletes 50 card files behind Darg's back and a round puts them back and commits nothing deleted, while a test that deletes a card through the board, and one that archives reports, commits those deletions. The suite passes.
 **Blocked by:** One sync round for the darg branch
 
-### Sync now in the footer and the API
+### DAR-0006: Sync now in the footer and the API
 Add a Sync now button on the right of the footer that runs a round for the project on screen and puts its result in the status line, disabled while one runs. On a project without the `darg` branch, it first shows the first-sync confirm inline (what it will make, move and push, as the Question about the first sync settles). Yes runs `DargBranch.Attach`, with the project's views letting go of their `.darg` watchers during the move. Register `sync-now {project, confirm?}` in the Darg API and in `RemoteAccess.Commands`, answering the result line.
 **Where:** `src/Darg.Desktop/MainWindow.axaml`, `src/Darg.Desktop/ViewModels/MainViewModel.cs`, `src/Darg.Desktop/ViewModels/MainViewModel.Api.cs`, `src/Darg.Core/Remote.cs`, `tests/Darg.Desktop.Tests/SyncNowTests.cs` (new)
 **Done when:** an integration test presses Sync now on the throwaway project with a bare remote, sees the confirm, confirms, and finds `.darg` a worktree with the board still showing its cards. A second press pushes a card moved meanwhile, and `app.Api("sync-now", …)` does the same. The test fails with the button's command removed, and the suite passes.
 **Blocked by:** Put .darg on a darg branch and bring today's files in, One sync round for the darg branch
 
-### Two machines' first syncs keep every file
+### DAR-0007: Two machines' first syncs keep every file
 An integration test of the switch itself, as the PC and the Mac will do it. Two clones of one repo each have their own plain `.darg`: different cards, one card edited differently on each, a board.json that differs, reports and artifacts. The first presses Sync now and pushes. The second presses it, attaches from the remote and brings its own files in. Afterwards both clones hold the union of every file, the differing ones are kept on both sides, and a further round on each leaves the two identical. Anything it shows missing is fixed in the cards it came from.
 **Where:** `tests/Darg.Desktop.Tests/TwoMachineSyncTests.cs` (new), `tests/Darg.Desktop.Tests/` (the other-machine helper)
 **Done when:** the test passes and names every file it checked; deleting the bring-in step's conflict handling makes it fail.
 **Blocked by:** Sync now in the footer and the API, A sync never commits a mass delete
 
-### A checkout in the main checkout can't lose .darg
+### DAR-0008: A checkout in the main checkout can't lose .darg
 Replay tonight's loss against the new layout: in a throwaway repo whose `.darg` is a worktree on `darg`, check out (and pull with rebase and autostash, then abort) a commit that tracks `.darg/tasks`, and record what git does to the worktree's files. If git leaves them alone, the test pins that. If it doesn't, the test shows the next round putting them back. Add the two briefing lines from the Design to Darg's agent briefings: `.darg` is Darg's, never add, commit or remove it; and never pull, rebase, stash or switch branches in the main checkout, and stop if a push is refused.
 **Where:** `tests/Darg.Core.Tests/DargCheckoutTests.cs` (new), `src/Darg.Core/Planner.cs`, `src/Darg.Core/CardBranch.cs`, `src/Darg.Core/FettleRules.cs`
 **Done when:** the test passes and its name says which way git behaved. A planner's and a card agent's prompt (read through `app.Prompts()` in an integration test) carry both lines. The suite passes.
 **Blocked by:** Put .darg on a darg branch and bring today's files in, A sync never commits a mass delete
 
-### Move vault boards and notes into the repo's .darg
+### DAR-0009: Move vault boards and notes into the repo's .darg
 For a project whose boards or notes are set outside `.darg` (the vault), its first sync copies them into `.darg/tasks/<board>` and `.darg/notes`. It checks that every file arrived with the same bytes, repoints the config's boards and notes, and renames the vault's folder to `<folder>.moved-to-repo` rather than deleting it, so nothing is lost if the copy is wrong. A card id already used in `.darg` keeps both through `SyncConflicts`. This only runs if the Question about vault boards gives it to this feature.
 **Where:** `src/Darg.Core/DargBranch.cs`, `src/Darg.Core/ProjectData.cs` (`Repoint`), `src/Darg.Core/Instance.cs`, `tests/Darg.Core.Tests/DargBranchTests.cs`
 **Done when:** a test with a board and notes in a fake vault folder ends with them in `.darg`, the config pointing there, the board reading the same cards, and the vault folder renamed, not gone. The suite passes.
 **Blocked by:** Put .darg on a darg branch and bring today's files in
 
-### Docs and CLAUDE.md for .darg on its own branch
+### DAR-0010: Docs and CLAUDE.md for .darg on its own branch
 Bring the docs up to what was built: in CLAUDE.md's working-files paragraph, `.darg` is a worktree on an orphan `darg` branch that Darg commits and pushes (to origin for a private repo, to a private `<repo>-darg` for a public one), Sync now runs a round, and agents never touch it. Say the same in docs/architecture.md and docs/guide.md, with the rollout steps for a second machine. Add tonight's loss and its cause to docs/decisions-and-gotchas.md as a gotcha: checkout overwrites ignored files.
 **Where:** `CLAUDE.md`, `docs/architecture.md`, `docs/guide.md`, `docs/decisions-and-gotchas.md`
 **Done when:** each file describes the branch, the remote rule and Sync now, nothing in them says `.darg` is committed to code branches, and `git grep -n "DAR-0003"` finds only tests and history.
