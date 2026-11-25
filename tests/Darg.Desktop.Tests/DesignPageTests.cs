@@ -283,6 +283,32 @@ public class DesignPageTests
         Assert.Equal("", app.Crashes());
     }
 
+    /// <summary>WOR-0204: the mouse's back button returns from a feature's plan to the project plan it was opened from
+    /// (the Design pages are steps in the history), and forward goes to the feature again.</summary>
+    [AvaloniaFact]
+    public async Task Back_from_a_feature_plan_returns_to_the_plan_viewed_before_it()
+    {
+        using var app = DargApp.Make();
+        var design = Directory.CreateDirectory(Path.Combine(app.Docs, "design")).FullName;
+        File.WriteAllText(Path.Combine(design, "proj.md"), ProjectPlan());
+        File.WriteAllText(Path.Combine(design, "phone.md"), FeaturePlan("WOR-9999"));
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Design" });
+        var d = app.Project.Design!;
+        await app.Until(() => d.Page?.Title == "Proj", "the project plan on the page");
+        await AvaloniaSettle();
+        d.SelectedNode = d.Tree[0].Children[0];   // a click on the feature in the tree
+        await app.Until(() => d.Page?.Title == "Phone", "the feature plan on the page");
+        await AvaloniaSettle();
+
+        app.Main.GoBack();
+        await app.Until(() => d.Page?.Title == "Proj", "back on the project plan");
+        Assert.Equal(Section.Design, app.Project.Section);
+        app.Main.GoForward();
+        await app.Until(() => d.Page?.Title == "Phone", "forward on the feature plan");
+        Assert.Equal("", app.Crashes());
+    }
+
     static string AndroidPlan(string extra = "", string notifyDone = "**Done when:** a decision shows on the phone within a minute.") => $"""
         ---
         kind: feature

@@ -632,6 +632,12 @@ public sealed partial class DesignViewModel : ObservableObject
         SelectedNode = node;
     }
 
+    /// <summary>Show the plan in this file again (back and forward); one that's gone leaves the page as it is.</summary>
+    internal void ShowFile(string file)
+    {
+        if (Flatten(Tree).FirstOrDefault(n => string.Equals(n.Plan.File, file, StringComparison.OrdinalIgnoreCase)) is { } node) SelectedNode = node;
+    }
+
     internal void ShowBoard(string board) => OpenBoard?.Invoke(board);
     internal void ShowReport(string file) => OpenReport?.Invoke(file);
 

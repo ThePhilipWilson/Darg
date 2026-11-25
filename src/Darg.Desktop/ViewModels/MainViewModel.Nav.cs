@@ -5,7 +5,7 @@ using Darg.Core;
 namespace Darg.Desktop.ViewModels;
 
 /// <summary>The mouse's back and forward buttons (WOR-0052): a history of where the person has been, as
-/// project tab, section and what's open in it (the doc, the agent, the artifact, the code file), walked
+/// project tab, section and what's open in it (the doc, the agent, the artifact, the code file, the plan), walked
 /// as a browser walks its pages. A step is recorded once whatever moved has settled, so opening an agent
 /// from a notification (tab, section, agent: three changes) is one step, not three.</summary>
 public partial class MainViewModel
@@ -25,6 +25,7 @@ public partial class MainViewModel
         On(p.Agents, nameof(AgentsViewModel.Selected));
         On(p.Artifacts, nameof(ArtifactsViewModel.Selected));
         On(p.Code, nameof(CodeViewModel.Current));
+        On(p.Design, nameof(DesignViewModel.Page)); // WOR-0204: a plan opened (a feature from its project's page) is a step
     }
 
     /// <summary>Something that may be a move changed: look once it has settled.</summary>
@@ -49,6 +50,7 @@ public partial class MainViewModel
             Section.Agents => p.Agents?.Selected?.Id,
             Section.Artifacts => p.Artifacts?.Selected?.Artifact.Path,
             Section.Code => p.Code?.Current?.FullPath,
+            Section.Design => p.Design?.Page?.File,
             _ => null,
         };
         return new NavPlace(p.Config.Id, p.Section.ToString(), item);
@@ -83,6 +85,7 @@ public partial class MainViewModel
                 case Section.Artifacts: p.Artifacts!.Show(item); break;
                 case Section.Code when p.Code!.Tabs.FirstOrDefault(f => string.Equals(f.FullPath, item, StringComparison.OrdinalIgnoreCase)) is { } f:
                     p.Code.Current = f; break;
+                case Section.Design: p.Design!.ShowFile(item); break;
             }
         // the step is where it landed, so the moves just made don't count as a new one
         if (Here() is { } landed) _nav.Landed(landed);
