@@ -242,6 +242,10 @@
       <CheckBox DockPanel.Dock="Right" Content="By state" IsChecked="{Binding ActiveSplit}" IsVisible="{Binding ShowsSectionSplit}" Margin="12,-4,0,0"
                 VerticalAlignment="Top" AutomationProperties.Name="Split by state"
                 ToolTip.Tip="Split each column into narrow columns by state: blocked, ready, agent working, running QA, needs you, agent failed. Kept for this board."/>
+      <!-- WOR-0212: here rather than in the header, which is short of room for board tabs -->
+      <Button DockPanel.Dock="Right" Classes="bulk" Content="+ Queue" Command="{Binding NewQueueCommand}" VerticalAlignment="Top" Margin="12,0,0,5"
+              IsVisible="{Binding Queues, Converter={x:Static ObjectConverters.IsNotNull}}" AutomationProperties.Name="New queue"
+              ToolTip.Tip="A named queue of cards worked one at a time: the next starts once the one before is done, or in QA with nothing waiting on that QA. Filled from this board's open cards, each after what it waits on"/>
       <ItemsControl ItemsSource="{Binding Labels}">
         <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
