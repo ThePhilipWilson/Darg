@@ -579,7 +579,7 @@ public partial class MainViewModel
         var boards = new JsonArray();
         var all = CardIndex.Read(p.Config.Boards);
         var index = Blockers.Index(all);
-        foreach (var b in BoardLayouts.Read(p.Config.Boards))
+        foreach (var b in BoardLayouts.Read(p.Config.Boards, DefaultBoard.Load(p.Config.Id)))
             boards.Add(new JsonObject
             {
                 ["name"] = b.Name, ["inbox"] = b.Inbox,

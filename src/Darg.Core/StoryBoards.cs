@@ -2,40 +2,54 @@ using System.Text.RegularExpressions;
 
 namespace Darg.Core;
 
-/// <summary>A board per story (WOR-0087). A project's boards are its stories, with one inbox board (Inbox, Main or
-/// Backlog by name, else the first) where new cards land: a card made from a note goes there, and so does + Card on
-/// it. Claude Haiku then reads the card and the other boards (their names and some of their cards' titles) and
-/// moves the card to the story it fits, in the background; a card that fits none stays in the inbox. The Board
-/// section can show several boards at once, one row each (<see cref="ShownBoards"/>).</summary>
+/// <summary>A board per story (WOR-0087). A project's boards are its stories, with one inbox board where new cards
+/// land: the default board set from a tab's menu (<see cref="DefaultBoard"/>, WOR-0219), else one named Inbox, Main or
+/// Backlog, else the first. A card made from a note goes there, and so do Fettle's and + Card on it. Claude Haiku then
+/// reads the card and the other boards (their names and some of their cards' titles) and moves the card to a story it
+/// is plainly part of, in the background; anything less (a near fit, a shared word, unsure) stays on the inbox. The
+/// Board section can show several boards at once, one row each (<see cref="ShownBoards"/>).</summary>
 public static class StoryBoards
 {
-    /// <summary>The names an inbox board goes by, in the order they win.</summary>
+    /// <summary>The names an inbox board goes by, in the order they win, when no default is set.</summary>
     public static readonly IReadOnlyList<string> InboxNames = ["Inbox", "Main", "Backlog"];
 
-    /// <summary>The board new cards land on: one named Inbox, Main or Backlog, else the first; null for none.</summary>
-    public static string? Inbox(IReadOnlyList<string> boards) =>
-        InboxNames.Select(n => boards.FirstOrDefault(b => b.Equals(n, StringComparison.OrdinalIgnoreCase))).FirstOrDefault(b => b is not null)
+    /// <summary>The board new cards land on: <paramref name="preferred"/> (the default set for the project) while it is
+    /// one of the boards, else one named Inbox, Main or Backlog, else the first; null for none.</summary>
+    public static string? Inbox(IReadOnlyList<string> boards, string? preferred = null) =>
+        (preferred is { Length: > 0 } ? boards.FirstOrDefault(b => b.Equals(preferred.Trim(), StringComparison.OrdinalIgnoreCase)) : null)
+        ?? InboxNames.Select(n => boards.FirstOrDefault(b => b.Equals(n, StringComparison.OrdinalIgnoreCase))).FirstOrDefault(b => b is not null)
         ?? boards.FirstOrDefault();
 
     /// <summary>The most card titles a board is described by in the prompt (its newest).</summary>
     public const int TitlesPerBoard = 15;
 
-    /// <summary>What Haiku is asked: which of these boards the card belongs on, or none.</summary>
+    /// <summary>What Haiku is asked: which story board the card is plainly part of, or none. Strict (WOR-0219): a card
+    /// stays on the default board unless it is one more piece of a single story's work, so a near fit, a shared word or
+    /// a guess is none. Each board's name is on a line of its own after "Board:", apart from its cards' titles: with
+    /// name and titles on one line Haiku sometimes answered with a card's title, or the new card's own.</summary>
     public static string Prompt(Card card, IReadOnlyList<(string Name, IReadOnlyList<string> Titles)> stories)
     {
         var description = card.Description.Trim();
         if (description.Length > 1500) description = description[..1500];
         var lines = new List<string>
         {
-            "A project keeps a board per story (a feature or area of work). Say which board this new card belongs on.",
-            "Reply with the board's name exactly as written below and nothing else, or with none if no board clearly fits.",
+            "A project keeps a board per story: one feature or piece of work, planned as a set of cards. New cards land on the " +
+            "project's default board and stay there unless they are plainly part of one story.",
+            "Move the new card to a story board only when it is clearly one more piece of that story's own work: the same " +
+            "feature, something its cards build or need. Reply none when the card is about another part of the app, when it only " +
+            "shares a word or a topic with a story (both mention boards, sync, agents or the phone), when it fits only partly, " +
+            "when more than one story could take it, or when you aren't sure. Most new cards are none.",
+            "Reply with one board's name exactly as written after \"Board:\" below, or with none. Never a card's title. Nothing else.",
             "",
-            "Boards:",
+            "Story boards:",
         };
         foreach (var (name, titles) in stories)
-            lines.Add($"- {name}" + (titles.Count > 0 ? ": " + string.Join("; ", titles) : " (no cards yet)"));
-        lines.AddRange(["", "Card:", card.Title]);
-        if (description.Length > 0) lines.Add(description);
+        {
+            lines.Add($"Board: {name}");
+            lines.Add("  Its cards: " + (titles.Count > 0 ? string.Join("; ", titles) : "none yet"));
+        }
+        lines.AddRange(["", "New card:", "Title: " + card.Title]);
+        if (description.Length > 0) lines.Add("Description: " + description);
         return string.Join("\n", lines);
     }
 
@@ -101,6 +115,41 @@ public static class StoryBoards
         card = found;
         var place = BoardStore.PlaceOf(found.Status, board.Columns);
         return place == Board.Backlog || place == Board.Unsorted || (board.Columns.Count > 0 && place == board.Columns[0].Id);
+    }
+}
+
+/// <summary>The project's default board (WOR-0219), set from a board tab's menu: where new cards land (a note's
+/// ticket, Fettle's new-card, + Card on the All board) and where a card Haiku isn't sure of stays. A file per project
+/// beside <see cref="ShownBoards"/> (default-board, the board's name), not in the boards folder. With none set, or
+/// once the board it names is gone or renamed, <see cref="StoryBoards.Inbox"/> goes back to the name guess.</summary>
+public static class DefaultBoard
+{
+    public static string FileFor(string projectId, string? instanceFolder = null) =>
+        Path.Combine(Path.GetDirectoryName(ShownBoards.FileFor(projectId, instanceFolder))!, "default-board");
+
+    /// <summary>The board set as default, or null for none.</summary>
+    public static string? Load(string projectId, string? instanceFolder = null)
+    {
+        try
+        {
+            var file = FileFor(projectId, instanceFolder);
+            return File.Exists(file) && File.ReadAllLines(file).Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) is { } name ? name : null;
+        }
+        catch (Exception) { return null; }
+    }
+
+    /// <summary>Set the default board; null or blank clears it. False when the file couldn't be written.</summary>
+    public static bool Save(string projectId, string? board, string? instanceFolder = null)
+    {
+        try
+        {
+            var file = FileFor(projectId, instanceFolder);
+            if (string.IsNullOrWhiteSpace(board)) { File.Delete(file); return true; }
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, board.Trim() + Environment.NewLine);
+            return true;
+        }
+        catch (Exception) { return false; }
     }
 }
 

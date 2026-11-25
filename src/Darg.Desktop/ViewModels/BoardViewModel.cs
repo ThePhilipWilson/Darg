@@ -156,7 +156,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         var busy = BoardStore.List(_project.Boards)
             .SelectMany(b => BoardStore.ReadCards(Path.Combine(_project.Boards, b)))
             .Where(c => AgentFor?.Invoke(c.Id) is not null).Select(c => c.Id).ToList();
-        StartAgent(SortPrompt(_project.Name, _project.Boards, BoardStore.List(_project.Boards), busy, hint, Core.Commits.For(_project, _project.Boards)),
+        StartAgent(SortPrompt(_project.Name, _project.Boards, BoardStore.List(_project.Boards), busy, hint, Core.Commits.For(_project, _project.Boards), Root._defaultBoard),
             _project.Boards, $"Sort {_project.Name}'s cards into boards", []);
         Maker = null;
     }
@@ -182,7 +182,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     /// <summary>What the sorting agent is asked: read the cards, propose boards, ask, then make them in
     /// Tatty's format and move the cards (IDs kept, cards with a live agent left alone).</summary>
-    public static string SortPrompt(string projectName, string boardsFolder, IReadOnlyList<string> boards, IReadOnlyList<string> busy, string? hint, CommitRule? commits = null)
+    public static string SortPrompt(string projectName, string boardsFolder, IReadOnlyList<string> boards, IReadOnlyList<string> busy, string? hint, CommitRule? commits = null, string? defaultBoard = null)
     {
         var lines = new List<string>
         {
@@ -193,7 +193,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             "2. Work out how best to organise them: a board per story, a handful (usually 2 to 6) that each hold one piece of work " +
             "someone would name in a line and sit down to do together (a feature, an area of the app). Every card goes on exactly one board. " +
             "Keep a board that already fits rather than renaming it. " +
-            (StoryBoards.Inbox(boards) is { } inbox
+            (StoryBoards.Inbox(boards, defaultBoard) is { } inbox
                 ? $"Keep the {inbox} board: it is the inbox, where new cards land before Darg moves each to its story, and it keeps the cards that fit no story."
                 : ""),
             "3. Ask me with AskUserQuestion before changing anything. Put the proposal in the question itself, since I may only see " +
@@ -294,6 +294,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             ListSync.Sync(Tabs, Boards.Select(b => had.GetValueOrDefault(b) ?? new BoardTab(this, b)).ToList());
         }
         foreach (var t in Tabs) t.IsShown = !ShowingAll && (t.Name == SelectedBoard || _also.Contains(t.Name));
+        MarkDefault();
         // the All board (WOR-0214) is every board as a row, drawn as one
         var want = ShowingAll ? others : others.Where(_also.Contains).ToList();
         foreach (var row in Rows.Skip(1).Where(r => !want.Contains(r.SelectedBoard!)).ToList()) { Rows.Remove(row); row.Dispose(); }
@@ -405,15 +406,43 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>A row's ✕: stop showing its board.</summary>
     [RelayCommand] void HideRow() { if (_parent is not null && SelectedBoard is { } b) _parent.SetShown(b, false); }
 
-    /// <summary>The board new cards land on (a note's ticket, + Card on it), from where Haiku moves each to its story's
-    /// board (<see cref="StoryBoards"/>). The picked board while there's only one.</summary>
-    public string? InboxFolder => _project.Boards is null || StoryBoards.Inbox(BoardOrder.ByName(Root.Boards)) is not { } inbox ? Folder : Path.Combine(_project.Boards, inbox);
+    /// <summary>The project's default board as set from a tab's menu (WOR-0219, <see cref="DefaultBoard"/>), or null;
+    /// kept on the root, read once as the section opens.</summary>
+    string? _defaultBoard;
+
+    /// <summary>The name of the board new cards land on: the default board while it exists, else the name guess
+    /// (<see cref="StoryBoards.Inbox"/>).</summary>
+    public string? InboxName => StoryBoards.Inbox(BoardOrder.ByName(Root.Boards), Root._defaultBoard);
+
+    /// <summary>The board new cards land on (a note's ticket, Fettle's new-card, + Card on the All board), from where
+    /// Haiku moves each to a story it is plainly part of (<see cref="StoryBoards"/>). The picked board while there's
+    /// only one.</summary>
+    public string? InboxFolder => _project.Boards is null || InboxName is not { } inbox ? Folder : Path.Combine(_project.Boards, inbox);
+
+    /// <summary>A tab's Set as default (WOR-0219): new cards land on that board from now on, and it's kept for the
+    /// project (<see cref="DefaultBoard"/>), so it holds across a restart.</summary>
+    public void SetDefaultBoard(string board)
+    {
+        var root = Root;
+        if (!DefaultBoard.Save(_project.Id, board)) { root._notice = $"Couldn't keep {board} as the default board."; root.Apply(); return; }
+        root._defaultBoard = board;
+        root.MarkDefault();
+        root._notice = $"{board} is the default board: new cards land there, and stay unless Haiku is sure of their story.";
+        root.Apply();
+    }
+
+    /// <summary>The tabs' menus mark the board new cards land on.</summary>
+    void MarkDefault()
+    {
+        var inbox = InboxName;
+        foreach (var t in Tabs) t.IsDefault = t.Name.Equals(inbox, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>A card was just made on <paramref name="boardFolder"/>: if that's the inbox and the project has other
     /// boards, Haiku moves it to the story it fits once <paramref name="after"/> (its retitling) is done.</summary>
     public void PlaceLater(string boardFolder, string cardId, Task? after = null)
     {
-        if (_project.Boards is not { } boards || Root.Boards.Count < 2 || StoryBoards.Inbox(BoardOrder.ByName(Root.Boards)) is not { } inbox) return;
+        if (_project.Boards is not { } boards || Root.Boards.Count < 2 || InboxName is not { } inbox) return;
         if (!string.Equals(Path.GetFullPath(boardFolder).TrimEnd('\\', '/'), Path.GetFullPath(Path.Combine(boards, inbox)).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)) return;
         var root = Root;
         _ = Run();
@@ -489,6 +518,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _project = project;
         Rows.Add(this);
         foreach (var b in ShownBoards.Load(project.Id)) _also.Add(b);
+        _defaultBoard = DefaultBoard.Load(project.Id);
         foreach (var b in BoardOrder.Arrange(BoardStore.List(project.Boards), _order = BoardOrder.Load(project.Id))) Boards.Add(b);
         Boards.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ShowsBoardSort));
         if (Views.All && Boards.Count > 1) { _allRow = new BoardViewModel(this, all: true); _allRows.Add(_allRow); ShowingAll = true; }
@@ -1743,8 +1773,13 @@ public sealed partial class BoardTab(BoardViewModel board, string name) : Observ
 {
     public string Name { get; } = name;
     [ObservableProperty] public partial bool IsShown { get; set; }
+    /// <summary>New cards land on this board (WOR-0219): its menu's Set as default is ticked.</summary>
+    [ObservableProperty] public partial bool IsDefault { get; set; }
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     void Pick() { var ctrl = board.TabCtrl; board.TabCtrl = false; board.PickBoard(Name, ctrl); }
+    /// <summary>The tab's right-click menu: new cards land on this board from now on.</summary>
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    void SetDefault() => board.SetDefaultBoard(Name);
 }
 
 /// <summary>The side panel for making boards: a new one by hand, or an agent sorting the cards into several.</summary>

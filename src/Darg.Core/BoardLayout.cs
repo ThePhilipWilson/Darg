@@ -18,12 +18,12 @@ public static class BoardLayouts
     public static readonly IReadOnlyList<string> Kinds = ["backlog", "qa", "attention", "rework", "done", "completed"];
 
     /// <summary>Every board in the boards folder, in name order, each with all its lists. Unsorted shows only when it has cards.</summary>
-    public static List<BoardLayout> Read(string? boardsFolder)
+    public static List<BoardLayout> Read(string? boardsFolder, string? defaultBoard = null)
     {
         var all = new List<BoardLayout>();
         if (boardsFolder is null) return all;
         var names = BoardStore.List(boardsFolder);
-        var inbox = StoryBoards.Inbox(names);
+        var inbox = StoryBoards.Inbox(names, defaultBoard);
         foreach (var name in names)
         {
             Board board;

@@ -1,6 +1,8 @@
 using Avalonia;
 using Darg.Desktop.Views;
 using Avalonia.VisualTree;
+using Avalonia.LogicalTree;
+using System.Text.Json.Nodes;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Darg.Core;
@@ -233,5 +235,83 @@ public class BoardTabsTests
         board.MoveBoard(3, 0);
         Assert.Equal("Site,Android,Docs,Main", Names());
         app.Shot("board-tabs-sorted");
+    }
+
+    /// <summary>WOR-0219: right-clicking a board tab offers Set as default; picked, Fettle's next card and the next
+    /// note's ticket land on that board (and Haiku is asked from there, Main now one of the stories), and it's kept.</summary>
+    [AvaloniaFact]
+    public async Task Set_as_default_on_a_tab_makes_new_cards_land_there()
+    {
+        using var app = DargApp.Make();
+        var art = BoardStore.CreateBoard(app.Boards, "Art", DargApp.Columns, "T");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await DargApp.Settle();
+        var board = app.Board;
+        BoardTab Tab(string name) => board.Tabs.Single(t => t.Name == name);
+
+        // none set: Main, by its name, as before
+        Assert.True(Tab("Main").IsDefault);
+        Assert.False(Tab("Art").IsDefault);
+        Assert.Equal(app.BoardFolder, board.InboxFolder);
+
+        // right-click Art's tab: its menu has Set as default, unticked
+        var artTab = RowTabs(app).Single(b => b.DataContext == Tab("Art"));
+        var at = artTab.TranslatePoint(new Point(artTab.Bounds.Width / 2, artTab.Bounds.Height / 2), app.Window)!.Value;
+        Avalonia.Headless.HeadlessWindowExtensions.MouseDown(app.Window, at, Avalonia.Input.MouseButton.Right);
+        Avalonia.Headless.HeadlessWindowExtensions.MouseUp(app.Window, at, Avalonia.Input.MouseButton.Right);
+        await DargApp.Settle();
+        var menu = artTab.ContextMenu!;
+        Assert.True(menu.IsOpen, "the tab's menu is open");
+        var item = menu.GetLogicalDescendants().OfType<MenuItem>().Single(m => (string?)m.Header == "Set as default");
+        Assert.False(((TextBlock)item.Icon!).IsVisible);
+        app.Shot("board-tab-menu");
+        item.Command!.Execute(null);
+        menu.Close();
+        await DargApp.Settle();
+        Assert.True(Tab("Art").IsDefault);
+        Assert.False(Tab("Main").IsDefault);
+        Assert.Equal("Art", DefaultBoard.Load("proj"));
+        Assert.Equal(art, board.InboxFolder);
+        // opened again, the menu marks it
+        Avalonia.Headless.HeadlessWindowExtensions.MouseDown(app.Window, at, Avalonia.Input.MouseButton.Right);
+        Avalonia.Headless.HeadlessWindowExtensions.MouseUp(app.Window, at, Avalonia.Input.MouseButton.Right);
+        await DargApp.Settle();
+        Assert.True(menu.IsOpen);
+        Assert.True(((TextBlock)item.Icon!).IsVisible);
+        app.Shot("board-tab-menu-default");
+        menu.Close();
+        await DargApp.Settle();
+
+        // Fettle's next card lands on Art, and Haiku is asked whether it belongs on Main, the other board
+        var reply = JsonNode.Parse(await app.Api("new-card", new { project = "proj", title = "Paint the splash screen" }))!.AsObject();
+        Assert.Equal("Art", (string?)reply["board"]);
+        Assert.Contains(BoardStore.ReadCards(art), c => c.Title == "Paint the splash screen");
+        await app.Until(() => app.ClaudeCalls().Any(c => (string?)c["kind"] == "ask" && ((string?)c["text"] ?? "").Contains("Board: Main")
+            && ((string?)c["text"] ?? "").Contains("Paint the splash screen")), "Haiku asked from the default board, offering Main");
+
+        // and so does the next note's ticket
+        var notes = app.Project.Notes!;
+        notes.NewNoteCommand.Execute(null);
+        notes.Editor!.Text = "the logo is blurry on the start screen";
+        notes.Editor.MakeTicketCommand.Execute(null);
+        await DargApp.Settle();
+        Assert.Contains(BoardStore.ReadCards(art), c => c.Title.Contains("the logo is blurry"));
+        Assert.DoesNotContain(BoardStore.ReadCards(app.BoardFolder), c => c.Title.Contains("the logo is blurry"));
+
+        // kept for the project: a board section opened again (a restart) has Art as the default
+        using (var again = new BoardViewModel(app.Project.Config))
+        {
+            Assert.True(again.Tabs.Single(t => t.Name == "Art").IsDefault);
+            Assert.Equal(art, again.InboxFolder);
+        }
+
+        // a default whose board has since gone or been renamed: back to Main by name
+        DefaultBoard.Save("proj", "Artwork");
+        using (var renamed = new BoardViewModel(app.Project.Config))
+        {
+            Assert.Equal(app.BoardFolder, renamed.InboxFolder);
+            Assert.True(renamed.Tabs.Single(t => t.Name == "Main").IsDefault);
+        }
     }
 }

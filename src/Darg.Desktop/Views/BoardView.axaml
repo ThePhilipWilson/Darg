@@ -233,7 +233,19 @@
             <DataTemplate x:DataType="vm:BoardTab">
               <Button Classes="chip boardtab" Classes.all="{Binding IsShown}" Content="{Binding Name}" Command="{Binding PickCommand}"
                       Margin="0" Padding="12,4" FontSize="13" AutomationProperties.Name="{Binding Name}"
-                      ToolTip.Tip="Click: show only this board. Ctrl+click: add it to the boards showing, or take it off. Drag: move the tab."/>
+                      ToolTip.Tip="Click: show only this board. Ctrl+click: add it to the boards showing, or take it off. Drag: move the tab. Right-click: set it as the default board, where new cards land.">
+                <!-- WOR-0219: the default board is where new cards land and where a card Haiku isn't sure of stays -->
+                <Button.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Set as default" Command="{Binding SetDefaultCommand}" AutomationProperties.Name="Set as default"
+                              ToolTip.Tip="New cards (from Fettle, a note or + Card on All) land on this board, and stay unless Haiku is sure which story they belong to">
+                      <MenuItem.Icon>
+                        <TextBlock Text="✓" IsVisible="{Binding IsDefault}" Foreground="{DynamicResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                      </MenuItem.Icon>
+                    </MenuItem>
+                  </ContextMenu>
+                </Button.ContextMenu>
+              </Button>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
