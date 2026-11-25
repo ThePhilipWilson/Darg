@@ -2,7 +2,6 @@
 kind: feature
 status: draft
 parent: seamless-machine-switching
-planner: 1c9fff9a-cfb0-4023-88e1-c6324ca85dd4
 ---
 # .darg on its own branch
 

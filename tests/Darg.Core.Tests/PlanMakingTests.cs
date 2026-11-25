@@ -206,6 +206,15 @@ public class PlanMakingTests : IDisposable
     }
 
     [Fact]
+    public void A_feature_planner_is_told_to_name_a_card_in_another_plan_in_blocked_by_not_in_prose()
+    {
+        var prompt = Planner.Prompt("Darg", "Auto-sync", PlanKind.Feature, Path.Combine(Design, "auto-sync.md"), null, null, [], null, "seamless-machine-switching");
+        Assert.Contains("in another feature plan of the same project, by its heading copied exactly", prompt);
+        Assert.Contains("never in prose", prompt);
+        Assert.Contains("Plan title: heading", prompt);
+    }
+
+    [Fact]
     public void A_loop_across_plans_makes_nothing_and_names_it()
     {
         var project = Copy();

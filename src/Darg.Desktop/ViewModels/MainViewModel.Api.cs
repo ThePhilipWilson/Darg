@@ -64,11 +64,18 @@ public partial class MainViewModel
                         "type?: " + string.Join("|", CardTypes.All) + " (else guessed from the words), labels? (a list, or separated by commas), priority?}. " +
                         "Returns its id, board, file and link (markdown that opens the card when clicked: put it in your reply); Haiku then moves it to the story board it fits, if the project has others. Use this rather than writing card files. " +
                         "board? and column? (a name, or backlog, qa, attention, rework, done) put it straight there instead, with no placing (the phone's quick-add).", NewCard);
-        Add("plan-cards", "make a plan's cards on its story board, as the Design page's Make button does: {project, plan, only?, confirm?}. plan is a plan's file name, " +
+        Add("plan-cards", "make a plan's cards on its story board, as the Design page's Make button does: {project, plan, only?, confirm?, ready?}. plan is a plan's file name, " +
                           "or its title; only is a list of card headings (or headings separated by new lines) to make, else every card with no id. The board is the plan's board:, " +
                           "made with the project's columns if there is none; cards are made in Blocked by order with the new ids in their Blocked by lines, each id is written into " +
-                          "the plan's heading and the plan set to agreed. A card under 3/3 stops it (nothing made, the missing parts named). Questions still open stop it too " +
-                          "until confirm: true. Run again it makes only the cards with no id and never deletes one. Only when Philip asks.", PlanCards);
+                          "the plan's heading and the plan set to agreed. A Blocked by may name a card in another plan of the same project by its heading. " +
+                          "A card that can't be made (under 3/3, a blocker that is no card or is in two plans, a wait on an unmade card in another plan or not being made, a loop) " +
+                          "stops it: nothing made, each such card named with why; ready: true makes the rest, and the reply's cantMake lists what was left. " +
+                          "Questions still open stop it until confirm: true. Run again it makes only the cards with no id and never deletes one. Only when Philip asks.", PlanCards);
+        Add("plan-make-all", "make every ticked card with no id in a project plan's features' plans, each on its feature's own board, as the project plan's Make all button does " +
+                             "(WOR-0201): {project, plan, confirm?, ready?}. plan is the project plan's file name or title. Cards are made in Blocked by order across the plans, " +
+                             "so one waiting on a card in another feature comes after it, with real ids in every Blocked by line. As plan-cards: a card that can't be made " +
+                             "(a loop across plans, say) stops it with each named, ready: true makes the rest, and open questions in the plans getting cards need confirm: true. " +
+                             "Returns the cards made with their boards and plans. Only when Philip asks.", PlanMakeAll);
         Add("plan-features", "draft a plan for each feature of a project plan that has none, as the Design page's Draft feature plans button does (WOR-0179): " +
                              "{project, plan, only?, confirm?}. plan is the project plan's file name or title; only is a list of feature titles (or titles separated by new lines), " +
                              "else every feature without a plan. A planner starts on each with parent: set to the project plan, and each feature's title is linked to the file " +
@@ -426,14 +433,38 @@ public partial class MainViewModel
             try { isList = JsonNode.Parse(raw) is JsonArray; } catch (System.Text.Json.JsonException) { isList = false; }
             only = isList ? a.List("only") : raw.Split(['\n'],StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         }
-        var r = p.Design.Make(plan.File, only, a.Get("confirm") == "true");
-        if (r.NeedsConfirm)
-            throw new ApiError($"{r.OpenQuestions.Count} question(s) in the plan are still open: {string.Join("; ", r.OpenQuestions)}. Nothing made; send confirm: true to make the cards anyway.");
-        if (r.Problem.Length > 0) throw new ApiError(r.Problem);
+        return MadeReply(p.Design.Make(plan.File, only, a.Get("confirm") == "true", a.Get("ready") == "true"), "the plan");
+    }
+
+    string PlanMakeAll(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (p.Design is null) throw new ApiError($"{p.Name} has no docs folder, so no plans.");
+        var want = a.Need("plan").Trim();
+        var plan = PlanStore.List(p.Design.Folder).FirstOrDefault(x =>
+                       x.Slug.Equals(Path.GetFileNameWithoutExtension(want), StringComparison.OrdinalIgnoreCase) || x.Title.Equals(want, StringComparison.OrdinalIgnoreCase))
+                   ?? throw new ApiError($"No plan \"{want}\" in {p.Design.Folder}.");
+        if (!plan.IsProject) throw new ApiError($"{Path.GetFileName(plan.File)} is a feature plan: plan-make-all is for a project plan; use plan-cards.");
+        return MadeReply(p.Design.MakeAll(plan.File, a.Get("confirm") == "true", a.Get("ready") == "true"), "the plans");
+    }
+
+    /// <summary>What plan-cards and plan-make-all answer (WOR-0201): the cards made, each with its board and plan, and the rows
+    /// that can't be made with why; an error, naming those rows, when nothing was made.</summary>
+    static string MadeReply(PlanStore.MadeCards r, string where)
+    {
+        var cant = r.Cant.Select(c => (JsonNode?)new JsonObject { ["plan"] = Path.GetFileName(c.PlanFile), ["card"] = c.Card, ["reason"] = c.Reason }).ToArray();
+        if (r.NeedsConfirm && r.Problem.Length == 0)
+            throw new ApiError($"{r.OpenQuestions.Count} question(s) in {where} are still open: {string.Join("; ", r.OpenQuestions)}. Nothing made; send confirm: true to make the cards anyway." +
+                               (r.Cant.Count > 0 ? $" Even then {r.Cant.Count} can't be made: " + string.Join("; ", r.Cant.Select(c => c.Text)) + "." : ""));
+        if (r.Problem.Length > 0)
+            throw new ApiError(r.Problem + (r.Cant.Count > 0 && r.CanMake > 0 ? $" Send ready: true to make the {r.CanMake} that can be made." : ""));
         return Json(new JsonObject
         {
             ["board"] = r.Board, ["createdBoard"] = r.CreatedBoard,
-            ["made"] = new JsonArray(r.Made.Select(m => (JsonNode?)new JsonObject { ["id"] = m.Id, ["title"] = m.Title, ["link"] = CardLinks.For(m.Id) }).ToArray()),
+            ["boards"] = new JsonArray(r.Detail.Select(m => m.Board).Distinct().Select(b => (JsonNode?)b).ToArray()),
+            ["made"] = new JsonArray(r.Detail.Select(m => (JsonNode?)new JsonObject
+                { ["id"] = m.Id, ["title"] = m.Title, ["board"] = m.Board, ["plan"] = Path.GetFileName(m.PlanFile), ["link"] = CardLinks.For(m.Id) }).ToArray()),
+            ["cantMake"] = new JsonArray(cant),
         });
     }
 

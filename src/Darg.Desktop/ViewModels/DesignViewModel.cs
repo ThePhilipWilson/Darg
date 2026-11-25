@@ -349,7 +349,7 @@ public sealed partial class DesignViewModel : ObservableObject
         if (Page is { Editing: true } open && pick is not null && string.Equals(open.File, pick.Plan.File, StringComparison.OrdinalIgnoreCase))
         {
             // a part is being edited: keep its text, refresh only what the board says
-            open.RefreshCards(pick.Plan, index, pick.SubPlans);
+            open.RefreshCards(pick.Plan, index, pick.SubPlans, plans);
             _selecting = true; SelectedNode = pick; _selecting = false;
             return;
         }
@@ -501,34 +501,56 @@ public sealed partial class DesignViewModel : ObservableObject
     /// <summary>Make a plan's ticked cards on its story board (WOR-0177, <see cref="PlanStore.MakeCards"/>), then read the plans
     /// and boards again. Open questions need a second press (<paramref name="confirmOpen"/>). Sets <see cref="Status"/> to
     /// what happened, or why nothing did.</summary>
-    public PlanStore.MadeCards Make(string file, IEnumerable<string>? only, bool confirmOpen)
+    public PlanStore.MadeCards Make(string file, IEnumerable<string>? only, bool confirmOpen, bool skipBlocked = false) =>
+        Making([file], boards => PlanStore.MakeCards(file, boards, only, confirmOpen, skipBlocked));
+
+    /// <summary>Make all (WOR-0201, <see cref="PlanStore.MakeAll"/>): every ticked card of a project plan's features' plans,
+    /// each on its feature's board, in Blocked by order across them; then the plans that changed are committed.</summary>
+    public PlanStore.MadeCards MakeAll(string file, bool confirmOpen, bool skipBlocked = false)
+    {
+        IReadOnlyList<string> files;
+        try
+        {
+            var plans = PlanStore.List(Folder);
+            var project = plans.FirstOrDefault(p => PlanScope.SameFile(p, PlanDoc.Load(file)));
+            files = project is null ? [file] : PlanStore.FeaturePlans(project, plans).Prepend(project).Select(p => p.File).ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { files = [file]; }
+        return Making(files, boards => PlanStore.MakeAll(file, boards, confirmOpen, skipBlocked));
+    }
+
+    /// <summary>Run a make, then say what happened (or why nothing did) in <see cref="Status"/>, commit each plan that got
+    /// ids, and read the plans and boards again.</summary>
+    PlanStore.MadeCards Making(IReadOnlyList<string> files, Func<string, PlanStore.MadeCards> make)
     {
         PlanStore.MadeCards result;
         try
         {
             if (_config.Boards is not { Length: > 0 } boards) throw new InvalidOperationException($"{_config.Name} has no boards folder.");
-            result = PlanStore.MakeCards(file, boards, only, confirmOpen);
+            result = make(boards);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
             Status = $"Couldn't make the cards: {e.Message}";
-            Commit(file, "made some cards before it failed");   // the ids written so far, so the plan knows what exists
+            foreach (var f in files) Commit(f, "made some cards before it failed");   // the ids written so far, so the plan knows what exists
             Reload();
             BoardsChanged?.Invoke();   // a part may have been made before it failed
             return new PlanStore.MadeCards("", [], e.Message, false, [], false);
         }
-        if (result.NeedsConfirm)
+        if (result.NeedsConfirm && result.Problem.Length == 0)
         {
             Status = $"{result.OpenQuestions.Count} {(result.OpenQuestions.Count == 1 ? "question is" : "questions are")} still open. Press again to make the cards anyway.";
             return result;   // nothing changed: no reload, so the page keeps its second press
         }
         if (result.Problem.Length > 0) { Status = result.Problem; return result; }
-        {
-            Status = $"Made {result.Made.Count} {(result.Made.Count == 1 ? "card" : "cards")} on {result.Board}" + (result.CreatedBoard ? " (a new board)" : "") + ": " +
-                     string.Join(", ", result.Made.Select(m => m.Id)) + $". The ids are in {Path.GetFileName(file)}.";
-            Commit(file, "made " + string.Join(", ", result.Made.Select(m => m.Id)));
-            BoardsChanged?.Invoke();
-        }
+        var boardsMade = result.Detail.Select(m => m.Board).Distinct().ToList();
+        Status = $"Made {result.Made.Count} {(result.Made.Count == 1 ? "card" : "cards")} on {string.Join(", ", boardsMade)}" +
+                 (result.CreatedBoards.Count > 0 ? $" ({(result.CreatedBoards.Count == 1 ? "a new board" : $"{result.CreatedBoards.Count} new boards")})" : "") + ": " +
+                 string.Join(", ", result.Made.Select(m => m.Id)) + (boardsMade.Count > 1 ? ". The ids are in the plans." : $". The ids are in {Path.GetFileName(result.Detail[0].PlanFile)}.") +
+                 (result.Cant.Count > 0 ? $" {result.Cant.Count} left unmade: the marked rows say why." : "");
+        foreach (var g in result.Detail.GroupBy(m => m.PlanFile, StringComparer.OrdinalIgnoreCase))
+            Commit(g.Key, "made " + string.Join(", ", g.Select(m => m.Id)));
+        BoardsChanged?.Invoke();
         Reload();
         return result;
     }
@@ -735,9 +757,19 @@ public sealed partial class PlanPage : ObservableObject
     internal HashSet<string> Unticked { get; }
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(MakeText))] public partial bool Confirming { get; set; }
     public int MakeCount => Cards.Count(c => c.Proposed && c.Ticked);
-    public bool CanMake => MakeCount > 0;
+    /// <summary>What Make cards would do with the ticks as they are (WOR-0201): the rows it can make, and why the rest can't.</summary>
+    PlanMaking.Check _check = new([], []);
+    public int CantCount => _check.Cant.Count;
+    public int CanCount => _check.Ordered.Count;
+    public bool CanMake => CanCount > 0;
     public bool HasProposed => Cards.Any(c => c.Proposed);
-    public string MakeText => Confirming ? $"Make {MakeCount} anyway" : $"Make {MakeCount} {(MakeCount == 1 ? "card" : "cards")}";
+    public bool HasCant => CantCount > 0 && HasProposed;
+    public string CantText => CanCount == 0
+        ? $"None of the {MakeCount} ticked can be made yet: each marked row says why."
+        : $"{CantCount} of the {MakeCount} ticked can't be made yet: each marked row says why. The button makes the other {CanCount}.";
+    public string MakeText => CantCount == 0
+        ? (Confirming ? $"Make {MakeCount} anyway" : $"Make {MakeCount} {(MakeCount == 1 ? "card" : "cards")}")
+        : CanCount == 0 ? "None can be made yet" : $"Make the {CanCount} that can be made" + (Confirming ? " anyway" : "");
     public IReadOnlyList<string> OpenQuestionList => Plan.OpenQuestions.Select(q => q.Question).ToList();
     public bool HasOpenQuestions => Plan.OpenQuestions.Count > 0 && HasProposed;
     public string OpenQuestionsText => "Still open: " + string.Join("; ", OpenQuestionList) + (Confirming ? ". Press again to make the cards anyway." : ".");
@@ -750,24 +782,83 @@ public sealed partial class PlanPage : ObservableObject
         NotifyMake();
     }
 
-    void NotifyMake()
+    /// <summary>Check the ticked rows again and mark each that can't be made with why.</summary>
+    void Recheck()
     {
-        OnPropertyChanged(nameof(MakeCount)); OnPropertyChanged(nameof(CanMake)); OnPropertyChanged(nameof(MakeText));
-        OnPropertyChanged(nameof(HasProposed)); OnPropertyChanged(nameof(HasOpenQuestions)); OnPropertyChanged(nameof(OpenQuestionsText));
+        var rows = Cards.Where(c => c.Proposed && c.Ticked)
+            .Select(c => Plan.Cards.FirstOrDefault(p => !p.Made && p.Title == c.Title)).OfType<PlanCard>()
+            .Select(c => new PlanMaking.Row(Plan, c)).ToList();
+        _check = PlanMaking.Plan(Scope, rows);
+        foreach (var c in Cards)
+            c.CantMake = c.Proposed && c.Ticked && Plan.Cards.FirstOrDefault(p => !p.Made && p.Title == c.Title) is { } pc ? _check.ReasonFor(Plan, pc) ?? "" : "";
     }
 
-    /// <summary>One press makes the ticked cards. With questions still open the first press only says so and the second makes them.</summary>
+    void NotifyMake()
+    {
+        Recheck();
+        OnPropertyChanged(nameof(MakeCount)); OnPropertyChanged(nameof(CanMake)); OnPropertyChanged(nameof(MakeText));
+        OnPropertyChanged(nameof(HasProposed)); OnPropertyChanged(nameof(HasOpenQuestions)); OnPropertyChanged(nameof(OpenQuestionsText));
+        OnPropertyChanged(nameof(CantCount)); OnPropertyChanged(nameof(CanCount)); OnPropertyChanged(nameof(HasCant)); OnPropertyChanged(nameof(CantText));
+    }
+
+    /// <summary>One press makes the ticked cards, or with some that can't be made, the rest of them. With questions still
+    /// open the first press only says so and the second makes them.</summary>
     [RelayCommand]
     void MakeCards()
     {
         var only = Cards.Where(c => c.Proposed && c.Ticked).Select(c => c.Title).ToList();
         if (only.Count == 0) return;
-        var result = _owner.Make(File, only, Confirming);
+        var result = _owner.Make(File, only, Confirming, skipBlocked: CantCount > 0);
         Confirming = result.NeedsConfirm;
         NotifyMake();
     }
 
-    readonly IReadOnlyList<PlanDoc> _plans;
+    // ---- Make all (WOR-0201): every ticked card of the features' plans, each on its feature's board, in one go ----
+
+    PlanMaking.Check _all = new([], []);
+    int _allRows;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(MakeAllText))] public partial bool ConfirmingAll { get; set; }
+    /// <summary>Features with a plan of their own, whose cards Make all makes.</summary>
+    public int FeaturePlanCount => Plan.IsProject ? PlanStore.FeaturePlans(Plan, _plans).Count : 0;
+    public bool ShowMakeAll => Plan.IsProject && FeaturePlanCount > 0;
+    public bool CanMakeAll => _all.Ordered.Count > 0;
+    public string MakeAllText => _allRows == 0 ? "Every card made"
+        : (_all.Cant.Count == 0 ? $"Make all {_allRows} cards" : _all.Ordered.Count == 0 ? "None can be made yet" : $"Make the {_all.Ordered.Count} of {_allRows} that can be made")
+          + (ConfirmingAll && _all.Ordered.Count > 0 ? " anyway" : "");
+    public string MakeAllHint => _allRows == 0 ? "Every ticked card in the features' plans has an id."
+        : $"Makes the ticked cards of the {FeaturePlanCount} feature plans, each on its own board, in the order they unblock each other, with the new ids in their Blocked by lines.";
+    /// <summary>Why each card Make all leaves out can't be made, a line each (plan, card, reason).</summary>
+    public IReadOnlyList<string> AllCant => _all.Cant.Select(c => $"Can't be made yet: {c.Text}.").ToList();
+    public bool HasAllCant => _all.Cant.Count > 0;
+    public IReadOnlyList<string> AllOpenQuestions =>
+        PlanStore.FeaturePlans(Plan, _plans).Prepend(Plan).Where(p => _all.Ordered.Any(r => r.Plan == p))
+            .SelectMany(p => p.OpenQuestions.Select(q => $"{PlanScope.NameOf(p)}: {q.Question}")).ToList();
+    public string AllOpenText => $"{AllOpenQuestions.Count} {(AllOpenQuestions.Count == 1 ? "question is" : "questions are")} still open in the plans that would get cards" +
+                                 (ConfirmingAll ? ". Press again to make them anyway." : ".");
+    public bool HasAllOpen => ShowMakeAll && AllOpenQuestions.Count > 0 && CanMakeAll;
+
+    void RecheckAll()
+    {
+        if (!Plan.IsProject) return;
+        var rows = PlanStore.AllRows(Plan, _plans);
+        _allRows = rows.Count;
+        _all = PlanMaking.Plan(Scope, rows);
+        foreach (var n in new[] { nameof(FeaturePlanCount), nameof(ShowMakeAll), nameof(CanMakeAll), nameof(MakeAllText), nameof(MakeAllHint), nameof(AllCant),
+                     nameof(HasAllCant), nameof(AllOpenQuestions), nameof(AllOpenText), nameof(HasAllOpen) })
+            OnPropertyChanged(n);
+    }
+
+    [RelayCommand]
+    void MakeAll()
+    {
+        if (!CanMakeAll) return;
+        var result = _owner.MakeAll(File, ConfirmingAll, skipBlocked: _all.Cant.Count > 0);
+        ConfirmingAll = result.NeedsConfirm;
+        RecheckAll();
+    }
+
+    IReadOnlyList<PlanDoc> _plans;
+    PlanScope Scope => PlanScope.For(Plan, _plans);
 
     public PlanPage(DesignViewModel owner, PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index, IReadOnlyList<AgentReport> reports,
         IReadOnlyList<PlanDoc>? plans = null, IReadOnlyList<PlanDoc>? sub = null)
@@ -794,15 +885,18 @@ public sealed partial class PlanPage : ObservableObject
     }
 
     /// <summary>Read the cards' rows and Needs you again from the board, the rest of the page left as it is.</summary>
-    public void RefreshCards(PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index, IReadOnlyList<PlanDoc> sub)
+    public void RefreshCards(PlanDoc plan, IReadOnlyDictionary<string, BoardCard> index, IReadOnlyList<PlanDoc> sub, IReadOnlyList<PlanDoc>? plans = null)
     {
         Plan = plan;
+        if (plans is not null) _plans = plans;
+        var scope = Scope;
         // rows that read the same keep their controls (ListSync compares by reference)
-        var want = plan.Cards.Select(c => new PlanCardRow(_owner, plan, c, index, this))
+        var want = plan.Cards.Select(c => new PlanCardRow(_owner, plan, c, index, this, scope))
             .Select(row => Cards.FirstOrDefault(old => old.Key == row.Key && old.Same(row)) ?? row).ToList();
         ListSync.Sync(Cards, want);
         OnPropertyChanged(nameof(HasCards));
         NotifyMake();
+        RecheckAll();
         var (done, total) = DesignViewModel.Count(plan, index);
         var made = plan.Cards.Count(c => c.Made);
         // a project's progress is its features' plans' cards (WOR-0179)
@@ -951,8 +1045,12 @@ public sealed partial class PlanCardRow : ObservableObject
     public TicketScore? Quality { get; }
     public bool HasQuality => Quality is not null;
     public string Tip => Made ? $"Open {Id} on the board" : Quality?.Tip ?? "";
+    /// <summary>Why Make cards can't make this ticked row (WOR-0201), or "": set by the page as ticks change.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasCantMake), nameof(CantMakeText))] public partial string CantMake { get; set; } = "";
+    public bool HasCantMake => CantMake.Length > 0;
+    public string CantMakeText => "Can't be made yet: " + CantMake + ".";
 
-    public PlanCardRow(DesignViewModel owner, PlanDoc plan, PlanCard card, IReadOnlyDictionary<string, BoardCard> index, PlanPage? page = null)
+    public PlanCardRow(DesignViewModel owner, PlanDoc plan, PlanCard card, IReadOnlyDictionary<string, BoardCard> index, PlanPage? page = null, PlanScope? scope = null)
     {
         _owner = owner;
         Ticked = page is null || !page.Unticked.Contains(card.Title);
@@ -985,15 +1083,18 @@ public sealed partial class PlanCardRow : ObservableObject
             Column = "";
             Agent = "";
             Quality = card.Score;
-            // a proposed card's blockers: those made and not yet cleared, and those not made yet
-            var waits = card.BlockedBy.Select(r =>
+            // a proposed card's blockers: those made and not yet cleared, those not made yet (naming the plan when it's
+            // another one), and what names no card (WOR-0201)
+            var refs = (scope ?? new PlanScope([plan])).BlockersOf(plan, card);
+            var waits = refs.Select(b =>
             {
-                var target = plan.Find(r);
-                var id = target?.Made == true ? target.Id : target is null && Core.Blockers.ParseIds(r).Count == 1 ? r : null;
-                if (id is not null && index.TryGetValue(id, out var bc)) return Core.Blockers.IsCleared(bc) ? null : $"waits on {id}";
-                return $"waits on {r}";
+                if (b.Problem.Length > 0) return b.Problem;
+                if (b.Id is { } id && index.TryGetValue(id, out var bc)) return Core.Blockers.IsCleared(bc) ? null : $"waits on {id}";
+                if (b.Card is { } c) return $"waits on {(c.Made ? c.Id : c.Title)}" + (b.Plan != plan ? $" ({PlanScope.NameOf(b.Plan!)})" : "");
+                return $"waits on {b.Text}";
             }).OfType<string>().ToList();
-            Blockers = string.Join(", ", waits);
+            Blockers = string.Join("; ", waits);
+            BlockerWarning = refs.Any(b => b.Problem.Length > 0);
         }
     }
 

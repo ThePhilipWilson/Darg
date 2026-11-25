@@ -275,6 +275,23 @@
                 <Button HorizontalAlignment="Left" Content="{Binding Page.MakeFeaturesText, FallbackValue=''}" Command="{Binding Page.MakeFeaturesCommand, FallbackValue={x:Null}}"
                         IsEnabled="{Binding Page.CanMakeFeatures, FallbackValue=False}" IsVisible="{Binding Page.HasProposedFeatures, FallbackValue=False}"
                         AutomationProperties.Name="Draft feature plans" ToolTip.Tip="Start a planner on each ticked feature: it drafts the feature's plan, under this one"/>
+
+                <!-- WOR-0201: every feature plan's ticked cards, each on its own board, in the order they unblock each other -->
+                <StackPanel Spacing="4" Margin="0,8,0,0" IsVisible="{Binding Page.ShowMakeAll, FallbackValue=False}">
+                  <TextBlock Text="{Binding Page.MakeAllHint, FallbackValue=''}" Classes="dim small" TextWrapping="Wrap"/>
+                  <TextBlock Text="{Binding Page.AllOpenText, FallbackValue=''}" Classes="blocker small" TextWrapping="Wrap"
+                             IsVisible="{Binding Page.HasAllOpen, FallbackValue=False}"/>
+                  <ItemsControl ItemsSource="{Binding Page.AllCant, FallbackValue={x:Null}}" IsVisible="{Binding Page.HasAllCant, FallbackValue=False}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="x:String">
+                        <TextBlock Text="{Binding}" Classes="blocker bad small" TextWrapping="Wrap"/>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <Button HorizontalAlignment="Left" Content="{Binding Page.MakeAllText, FallbackValue=''}" Command="{Binding Page.MakeAllCommand, FallbackValue={x:Null}}"
+                          IsEnabled="{Binding Page.CanMakeAll, FallbackValue=False}" AutomationProperties.Name="Make all"
+                          ToolTip.Tip="Make every ticked card in the feature plans, each on its own board, in the order they unblock each other"/>
+                </StackPanel>
               </StackPanel>
             </Border>
 
@@ -310,6 +327,9 @@
                           <TextBlock Text="{Binding Where, StringFormat='Where: {0}'}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasWhere}"/>
                           <TextBlock Text="{Binding Done, StringFormat='Done when: {0}'}" Classes="dim small" TextWrapping="Wrap" IsVisible="{Binding HasDone}"/>
                           <TextBlock Text="{Binding Blockers}" Classes="blocker small" Classes.bad="{Binding BlockerWarning}" TextWrapping="Wrap" IsVisible="{Binding HasBlockers}"/>
+                          <!-- WOR-0201: a ticked row Make cards can't make says why, in full -->
+                          <TextBlock Text="{Binding CantMakeText}" Classes="blocker bad small" TextWrapping="Wrap" IsVisible="{Binding HasCantMake}"
+                                     AutomationProperties.Name="{Binding CantMakeText}"/>
                         </StackPanel>
                       </Button>
                      </DockPanel>
@@ -319,6 +339,8 @@
                 <!-- WOR-0177: one press makes the ticked cards; questions still open are listed and need a second press -->
                 <TextBlock Text="{Binding Page.OpenQuestionsText, FallbackValue=''}" Classes="blocker small" TextWrapping="Wrap"
                            IsVisible="{Binding Page.HasOpenQuestions, FallbackValue=False}"/>
+                <TextBlock Text="{Binding Page.CantText, FallbackValue=''}" Classes="blocker bad small" TextWrapping="Wrap"
+                           IsVisible="{Binding Page.HasCant, FallbackValue=False}"/>
                 <Button HorizontalAlignment="Left" Content="{Binding Page.MakeText, FallbackValue=''}" Command="{Binding Page.MakeCardsCommand, FallbackValue={x:Null}}"
                         IsEnabled="{Binding Page.CanMake, FallbackValue=False}" IsVisible="{Binding Page.HasProposed, FallbackValue=False}"
                         AutomationProperties.Name="Make cards" ToolTip.Tip="Make the ticked cards on the plan's story board, blockers and all"/>
@@ -387,7 +409,10 @@
     </Border>
 
     <Border Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,4">
-      <TextBlock Classes="dim small" Text="{Binding Status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}"/>
+      <!-- wrapped, not cut off: a reason nothing was made is read in full (WOR-0201) -->
+      <ScrollViewer MaxHeight="96" HorizontalScrollBarVisibility="Disabled">
+        <TextBlock Classes="dim small" Text="{Binding Status}" TextWrapping="Wrap"/>
+      </ScrollViewer>
     </Border>
   </Grid>
 </UserControl>

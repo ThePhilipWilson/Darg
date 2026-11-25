@@ -138,7 +138,9 @@ public static partial class Planner
             lines.AddRange([
                 "   Cards: each one small enough that one agent finishes it in a session, and each scoring 3 of 3 on Darg's ticket score: twenty words or more on what's wanted, " +
                 "a **Where:** line naming files or folders, and a **Done when:** line. **Blocked by:** names what has to land first, separated by commas: " +
-                "another card in this plan by its title, or a card on a board by its id; none when it can start at once.",
+                "another card in this plan, or in another feature plan of the same project, by its heading copied exactly as written there (commas in it are fine), " +
+                "or a card on a board by its id; none when it can start at once. Only if two plans share that heading, write it as Plan title: heading. " +
+                "A wait on a card in another plan goes in this line, never in prose elsewhere: Darg makes the cards across plans in that order.",
                 "3. Look for gaps before you stop: a part of the Design no card owns, or a card whose Done when needs something no earlier card makes. Add the card, or a Question if it's my call.",
             ]);
         }

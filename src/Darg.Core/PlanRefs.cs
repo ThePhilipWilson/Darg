@@ -41,7 +41,7 @@ public sealed partial class PlanScope
 
     static IEnumerable<PlanDoc> Flatten(PlanStore.Node n) => n.Children.SelectMany(Flatten).Prepend(n.Plan);
 
-    internal static bool SameFile(PlanDoc a, PlanDoc b) =>
+    public static bool SameFile(PlanDoc a, PlanDoc b) =>
         a.File.Length > 0 && b.File.Length > 0 && string.Equals(Path.GetFullPath(a.File), Path.GetFullPath(b.File), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A plan's name in a message: its title, else its file name.</summary>
@@ -225,7 +225,8 @@ public static class PlanMaking
         }
         foreach (var r in rows) if (!state.ContainsKey(r)) Visit(r);
 
-        // a row waiting on one that can't be made can't be made either
+        // a row waiting on one that can't be made can't be made either; listed after the rows that are the cause
+        var follows = new HashSet<Row>();
         for (var changed = true; changed;)
         {
             changed = false;
@@ -233,6 +234,7 @@ public static class PlanMaking
                 if (edges[r].FirstOrDefault(reason.ContainsKey) is { } w)
                 {
                     reason[r] = $"it waits on \"{w.Card.Title}\"" + (w.Plan != r.Plan ? $" in {PlanScope.NameOf(w.Plan)}" : "") + ", which can't be made";
+                    follows.Add(r);
                     changed = true;
                 }
         }
@@ -246,7 +248,7 @@ public static class PlanMaking
             ordered.Add(r);
         }
         foreach (var r in rows.Where(r => !reason.ContainsKey(r))) Place(r);
-        var cant = rows.Where(reason.ContainsKey).Select(r => new CantMake(r.Plan.File, PlanName(r.Plan), r.Card.Title, reason[r])).ToList();
+        var cant = rows.Where(reason.ContainsKey).OrderBy(follows.Contains).Select(r => new CantMake(r.Plan.File, PlanName(r.Plan), r.Card.Title, reason[r])).ToList();
         return new Check(ordered, cant);
     }
 

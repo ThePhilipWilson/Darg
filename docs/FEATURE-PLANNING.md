@@ -82,7 +82,7 @@ TLS on its own port, pairing by QR, a token per phone.
 **Blocked by:** AND-0002, AND-0003
 ```
 
-`status` is set by people (draft, agreed, dropped); building and built are worked out from the cards. `board` names the story board once made. `parent` makes the tree (a feature under its project plan). A proposed card's Blocked by names other cards in the plan by id when they have one, else by heading.
+`status` is set by people (draft, agreed, dropped); building and built are worked out from the cards. `board` names the story board once made. `parent` makes the tree (a feature under its project plan). A proposed card's Blocked by names other cards by id when they have one, else by heading copied as written: a card in this plan, or in another plan of the same project (its project plan and the feature plans under it), commas and "and"s in the heading and all. A heading two plans share is written `Plan title: heading`. A wait on another plan's card goes in this line, never in prose in the Design, so Make all can order it (WOR-0201).
 
 ## Where it lives
 
@@ -134,6 +134,10 @@ Recommended: Philip ticks the cards on the page (all ticked to start) and one pr
 - **Again later:** pressing it again makes only the rows with no id. A row removed from the plan never deletes its card; the page marks the card as no longer in the plan, for Philip to drop by hand.
 
 The `plan-cards` API command does the same, for Fettle.
+
+**Rows that can't be made** (WOR-0201). Make cards made nothing on the Seamless machine switching plans: their Blocked by lines named headings with commas and "and" in them ("Spike script: make a session, copy it under another path, resume it"), the line was cut at each, the fragments named no card, and one such row stopped the whole plan with the reason cut off in the status line. Now the line is cut only between things it names (`PlanScope`: a heading of this plan or of a plan beside it, an id, `Plan: heading`), and the page checks the ticked rows as they are: a row that can't be made is marked with why, in full, before anything is pressed. The reasons: under 3/3 (what it's missing), a heading two cards of the plan share, a blocker that is no card or is a heading in two plans, a wait on an unmade card that isn't ticked or is in another plan with no id yet, a loop of Blocked by (named, plans and all), or a wait on a row that can't be made (listed after the rows that cause it). Then the button reads "Make the 7 that can be made" and makes those. `plan-cards` refuses with the rows named, and makes the rest with `ready: true`, its reply's `cantMake` listing what was left.
+
+**Make all** (WOR-0201). A project plan's page has a Make all button under its Features: every ticked card with no id in the project plan and its features' plans (dropped ones aside), each on its own feature's story board as Make cards would put it (Philip, 2026-11-24), made in Blocked by order across the plans, so a card waiting on one in another feature comes after it and its Blocked by line holds the real id. What can't be made is listed above the button with why; a loop across plans makes nothing until the person asks for the rest. Open questions in any plan that would get cards need a second press. `plan-make-all {project, plan, confirm?, ready?}` in the API does the same.
 
 Turned down:
 

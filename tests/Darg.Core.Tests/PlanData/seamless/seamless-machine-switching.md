@@ -1,7 +1,6 @@
 ---
 kind: project
 status: agreed
-planner: b5cc7f0a-806c-4380-bbf9-e407aec63837
 ---
 # Seamless machine switching
 

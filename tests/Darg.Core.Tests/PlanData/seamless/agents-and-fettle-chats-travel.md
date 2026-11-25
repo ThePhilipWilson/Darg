@@ -2,7 +2,6 @@
 kind: feature
 status: draft
 parent: seamless-machine-switching
-planner: dcc9a89e-8bcd-426d-866d-b14b82c86a2a
 ---
 # Agents and Fettle chats travel
 

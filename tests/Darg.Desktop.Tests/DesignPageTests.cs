@@ -367,16 +367,26 @@ public class DesignPageTests
         Assert.Contains("Which port?", page.OpenQuestionsText);
         Assert.True(page.Cards.Single(c => c.Title == "Notifications").Quality!.Stars < 3);
 
-        // the thin card is refused with what it lacks: nothing made, no board
-        page.MakeCardsCommand.Execute(null);   // refused before the open question is even asked
-        Assert.Contains("\"Notifications\"", d.Status);
-        Assert.Contains("when it's done", d.Status);
+        // WOR-0201: the thin card is marked with what it lacks, before any press, and the button offers the other two
+        var thin = page.Cards.Single(c => c.Title == "Notifications");
+        Assert.True(thin.HasCantMake);
+        Assert.Contains("when it's done", thin.CantMakeText);
+        Assert.Equal("Make the 2 that can be made", page.MakeText);
+        Assert.Contains("1 of the 3 ticked can't be made", page.CantText);
+        Assert.False(Directory.Exists(Path.Combine(app.Boards, "Android app")));
+
+        // the API, asked for all three, makes nothing and names it
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => app.Api("plan-cards", new { project = "proj", plan = "android", confirm = "true" }));
+        Assert.Contains("\"Notifications\"", refused.Message);
+        Assert.Contains("ready: true", refused.Message);
         Assert.False(Directory.Exists(Path.Combine(app.Boards, "Android app")));
 
         // untick it: one press asks about the question, the next makes the other two
-        page.Cards.Single(c => c.Title == "Notifications").Ticked = false;
+        thin.Ticked = false;
+        Assert.False(thin.HasCantMake);
         Assert.False(page.Confirming);
         Assert.Equal(2, page.MakeCount);
+        Assert.Equal("Make 2 cards", page.MakeText);
         page.MakeCardsCommand.Execute(null);
         Assert.Contains("still open", d.Status);
         Assert.False(Directory.Exists(Path.Combine(app.Boards, "Android app")));
