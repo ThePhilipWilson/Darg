@@ -2,6 +2,7 @@
 kind: feature
 status: draft
 parent: seamless-machine-switching
+planner: 1c9fff9a-cfb0-4023-88e1-c6324ca85dd4
 ---
 # .darg on its own branch
 
@@ -31,12 +32,16 @@ Each repo's `.darg` folder becomes a git worktree on a `darg` branch with no cod
 
 **Context:** `git ls-tree` shows 4 files under `.darg` on origin/main and origin/mac-path-fixes, and 214 on origin/android. When a checkout overwrites ignored files, git doesn't warn.
 
+**Answer:** Every branch on GitHub that tracks them: main, android and mac-path-fixes (Philip, 2026-11-24)
+
 ### A sync round finds a lot of `.darg` gone. What does it do?
 - **Puts them back from the branch and says so** (recommended): if a round finds more than 10 files, or a whole board folder, deleted and Darg didn't delete them, it restores them from the last commit instead of committing the deletion. The status line names how many came back. A deletion Darg made itself (a forgotten agent, an archived report) commits as usual.
 - **Stops syncing and asks**: nothing is committed or restored until you pick "they were meant to go" or "put them back".
 - **Commits it like any other change**: simplest, but a deletion like tonight's would reach the other machine on the next push.
 
 **Context:** without a guard, Auto-sync would commit tonight's deletion within 30 seconds and the Mac would delete the same 210 cards on its next pull.
+
+**Answer:** Puts them back from the branch and says so (Philip, 2026-11-24)
 
 ### A repo whose visibility Darg can't read (GitLab, another host, gh not signed in): where does its `darg` branch go?
 - **Nowhere: committed locally only, and the footer says why** (recommended): nothing is pushed unless Darg knows the remote is private. Setup gets a "this repo is private" tick to override it.
@@ -45,11 +50,15 @@ Each repo's `.darg` folder becomes a git worktree on a `darg` branch with no cod
 
 **Context:** Darg reads GitHub visibility with `gh repo view --json visibility` as the project's account. GitLab has its own API (`GitLab.cs`), but making a private repo there is out of scope.
 
+**Answer:** Nowhere: committed locally only, and the footer says why (Philip, 2026-11-24)
+
 ### Should a `darg` push scan for the names that must never be committed?
 - **No: a `darg` branch only ever goes to a private remote, and that is the guard** (recommended): the push checks visibility every time, so it never goes to a public one. The names list stays in CLAUDE.local.md, where agents read it.
 - **Yes, from a list in project settings**: every push is grepped and refused on a hit. A second guard, but the list has to move from CLAUDE.local.md's prose into a file Darg reads, and a card or note that mentions a game by name would block syncing.
 
 **Context:** the parent plan's risks say the check runs on every `darg` push. The answer about public repos, which came later, sends their state to a private repo instead.
+
+**Answer:** No: a `darg` branch only ever goes to a private remote, and that is the guard (Philip, 2026-11-24)
 
 ### Projects whose boards are in the vault: does this feature move them into their repo's `.darg`?
 - **Yes, as part of that project's first sync** (recommended): boards and notes are copied into `.darg/tasks` and `.darg/notes`, the copy is checked, the config is repointed, and the vault's copy is renamed to `<folder>.moved-to-repo` rather than deleted. No sibling feature owns this.
@@ -58,12 +67,16 @@ Each repo's `.darg` folder becomes a git worktree on a `darg` branch with no cod
 
 **Context:** the parent plan answered that vault boards move into their repos' `.darg`, but none of its features names the move.
 
+**Answer:** Yes, as part of that project's first sync (Philip, 2026-11-24)
+
 ### When does a project's `.darg` first go onto the branch?
 - **On its first Sync now, after one inline confirm** (recommended): the button says what it will do ("Make ThePhilipWilson/Darg-darg (private), move .darg onto a darg branch, push"), and Yes does it. Projects nobody presses it for stay as they are, and Auto-sync only runs on projects that have the branch.
 - **At start, for every project with a repo**: like today's `ProjectData.Migrate`. Nothing to press, but it makes private repos on GitHub without asking.
 - **A switch per project in Setup**: deliberate, but one more place to visit before anything syncs.
 
 **Context:** the first sync moves the folder, may make a repo on GitHub, and pushes. Each later one only commits, pulls and pushes.
+
+**Answer:** On its first Sync now, after one inline confirm (Philip, 2026-11-24)
 
 ## Design
 
