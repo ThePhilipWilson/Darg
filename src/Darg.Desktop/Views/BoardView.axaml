@@ -74,6 +74,8 @@
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
     </Style>
     <Style Selector="Button.blocklink TextBlock"><Setter Property="Foreground" Value="{DynamicResource Dim}"/></Style>
+    <!-- WOR-0217: a story's cards read as its content; a missing one still takes the Warn colour below -->
+    <Style Selector="Button.blocklink.member TextBlock"><Setter Property="Foreground" Value="{DynamicResource Ink}"/></Style>
     <Style Selector="Button.blocklink.open TextBlock"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
     <Style Selector="Button.blocklink:pointerover TextBlock"><Setter Property="TextDecorations" Value="Underline"/></Style>
     <!-- WOR-0214: a state sub-column's heading, coloured by what it means -->
@@ -569,6 +571,20 @@
                          Text="Darg asks the agent that moved it for a decision, or drafts one from the card when no agent is around; open the card again to see it."/>
             </StackPanel>
           </Border>
+          <!-- WOR-0217: a story lists the cards it holds, each a link that opens it -->
+          <StackPanel Spacing="2" IsVisible="{Binding IsStoryCard}">
+            <TextBlock Classes="dim small" Text="{Binding StoryHeading}" TextWrapping="Wrap"/>
+            <ItemsControl ItemsSource="{Binding StoryLinks}" IsVisible="{Binding HasStoryLinks}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:BlockerLink">
+                  <Button Classes="blocklink member" Classes.open="{Binding IsWarning}" Command="{Binding Open}" ToolTip.Tip="Open this card"
+                          AutomationProperties.Name="{Binding Id, StringFormat='Open {0}'}">
+                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="12"/>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
           <TextBox Text="{Binding Description}" PlaceholderText="Description (markdown)" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="220"
                    IsVisible="{Binding DescriptionOpen}"/>
           <Button Content="▸ Description" IsVisible="{Binding !DescriptionOpen}" Command="{Binding OpenDescriptionCommand}" HorizontalAlignment="Left"

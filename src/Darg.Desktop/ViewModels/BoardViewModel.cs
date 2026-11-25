@@ -1915,6 +1915,7 @@ public partial class CardEditor : ObservableObject
         TypeChoices = CardTypes.All.Contains(Type) ? CardTypes.All : [.. CardTypes.All, Type];
         FlowTargets = MakeFlowTargets();
         InitBlockers();
+        InitStory();
     }
 
     List<MoveTarget> MakeFlowTargets() => _card is not { } card || HasAgent || card.InDone ? [] : _board.FlowList().Select(f => new MoveTarget("▶ " + f.Name, new RelayCommand(() =>
