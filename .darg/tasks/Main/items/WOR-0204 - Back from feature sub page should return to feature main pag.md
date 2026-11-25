@@ -1,12 +1,12 @@
 # WOR-0204: Back from feature sub page should return to feature main page
 
-- **Status:** In Progress
+- **Status:** Done
 - **Priority:**
 - **Type:** Bug
 - **Labels:**
 - **Created:** 2026-11-25
-- **Done:**
-- **Moved:** 2026-11-25 00:28:23
+- **Done:** 2026-11-25
+- **Moved:** 2026-11-25 04:33:34
 
 ## Description
 
