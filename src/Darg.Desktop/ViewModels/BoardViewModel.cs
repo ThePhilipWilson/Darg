@@ -572,7 +572,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public bool HasPicked => PickedCount > 0;
     public string PickedText => PickedCount == 1 ? "1 picked" : $"{PickedCount} picked";
     IEnumerable<CardViewModel> Shown() => Lists.SelectMany(l => l.Cards);
-    int ToStart => Root.Rows.Sum(r => r.Shown().Count(c => c.IsPicked && c.CanStart));
+    // a queued card's tile in its lane is picked by Ctrl+click as any other and counts here (WOR-0220); only Pick all
+    // and a column's pick leave the queue's cards to the queue
+    int ToStart => Root.Rows.Sum(r => r.Tiles().Count(c => c.IsPicked && c.CanStart));
     /// <summary>"▶ Work on 3", counting only picked cards with no agent on them yet.</summary>
     public string WorkOnPickedText => $"▶ Work on {ToStart}";
     public bool CanWorkOnPicked => ToStart > 0;
@@ -638,7 +640,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     {
         foreach (var r in Root.Rows)
         {
-            foreach (var c in r.Shown()) c.IsPicked = false;
+            foreach (var c in r.Tiles()) c.IsPicked = false;
             r._picked.Clear();
             r.PickedChanged();
         }
@@ -650,7 +652,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     [RelayCommand]
     void WorkOnPicked()
     {
-        var picked = Root.Rows.Select(r => (Row: r, Cards: r.Shown().Where(c => c.IsPicked && c.CanStart).Select(c => c.Card).ToList()))
+        var picked = Root.Rows.Select(r => (Row: r, Cards: r.Tiles().Where(c => c.IsPicked && c.CanStart).Select(c => c.Card).ToList()))
             .Where(p => p.Cards.Count > 0).ToList();
         if (picked.Count == 0) return;
         // a picked card with an open blocker is left out and named (WOR-0173); Work on alone on it asks instead
@@ -677,7 +679,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     [RelayCommand]
     void ImprovePicked()
     {
-        var picked = Root.Rows.Select(r => (Row: r, Cards: r.Shown().Where(c => c.IsPicked && c.CanStart).Select(c => c.Card).ToList()))
+        var picked = Root.Rows.Select(r => (Row: r, Cards: r.Tiles().Where(c => c.IsPicked && c.CanStart).Select(c => c.Card).ToList()))
             .Where(p => p.Cards.Count > 0).ToList();
         if (picked.Count == 0) return;
         var started = new List<string>();
@@ -1070,12 +1072,12 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             lists.Add(list);
         }
         ListSync.Sync(Lists, lists);
-        _picked.IntersectWith(Shown().Select(c => c.Id));
+        _lane = lane;
+        _picked.IntersectWith(Tiles().Select(c => c.Id));
         PickedChanged();
         foreach (var l in Lists) { l.BulkChanged(); l.SortChanged(); l.Regroup(); } // Work All counts across two columns, so every count is read again
         CountText = $"{total} of {_board.AllCards.Count()} cards";
         Status = _notice ?? _board.DuplicatesText ?? CountText;
-        _lane = lane;
         BuildMerged();
         queues?.TilesChanged();
     }
@@ -1386,7 +1388,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>What a drag of this card carries: every picked card showing, in board order, if it is
     /// picked; otherwise just it.</summary>
     public IReadOnlyList<CardViewModel> Carried(CardViewModel card) =>
-        !card.IsPicked ? [card] : (Root.ShowingAll ? Root.Rows.SelectMany(r => r.Shown()) : Shown()).Where(c => c.IsPicked).ToList();
+        !card.IsPicked ? [card] : (Root.ShowingAll ? Root.Rows.SelectMany(r => r.Tiles()) : Tiles()).Where(c => c.IsPicked).ToList();
 
     /// <summary>Cards dropped on one of this row's lists: moved there, those from another row's board brought over to
     /// this board first (they keep their ids). A card with a live agent stays on its board: the agent holds its file's path.</summary>

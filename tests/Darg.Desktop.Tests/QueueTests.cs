@@ -321,4 +321,46 @@ public class QueueTests
         Assert.Contains(BoardStore.ReadCards(app.BoardFolder), x => x.Id == done.Id);
         Assert.Contains(a.Id, BoardStore.ReadCards(app.BoardFolder).Select(x => x.Id));
     }
+
+    /// <summary>WOR-0220 QA: a tile in a queue's lane Ctrl+clicked is picked like any other, so ▶ Work on N counts it,
+    /// keeps the pick through a reload and starts it; Pick all still leaves the queue's cards to the queue.</summary>
+    [AvaloniaFact]
+    public async Task A_lane_tile_picked_with_Ctrl_counts_for_Work_on_N_and_starts()
+    {
+        using var app = DargApp.Make();
+        var queued = app.Card("queued card", "Backlog");
+        var free = app.Card("free card", "Backlog");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await app.Api("queue-new", new { project = "proj", name = "Q", cards = queued.Id });
+        var board = app.Board;
+        await app.Until(() => board.LaneTile(queued.Id) is not null, "the queued card's lane tile");
+
+        // Pick all picks the free card only
+        board.PickAllCommand.Execute(null);
+        Assert.Equal("1 picked", board.PickedText);
+        Assert.False(board.LaneTile(queued.Id)!.IsPicked);
+        board.ClearPickedCommand.Execute(null);
+
+        // Ctrl+click on the lane tile picks it, and Work on N counts it
+        var tile = board.LaneTile(queued.Id)!;
+        tile.Board.Click(tile, Avalonia.Input.KeyModifiers.Control);
+        Assert.True(tile.IsPicked);
+        Assert.Equal("1 picked", board.PickedText);
+        Assert.Equal("▶ Work on 1", board.WorkOnPickedText);
+        Assert.True(board.CanWorkOnPicked);
+
+        // a reload keeps the pick
+        board.Reload();
+        await DargApp.Settle(200);
+        Assert.Equal("▶ Work on 1", board.WorkOnPickedText);
+        Assert.True(board.LaneTile(queued.Id)!.IsPicked);
+        app.Shot("lane-tile-picked");
+
+        // and Work on N starts it
+        board.WorkOnPickedCommand.Execute(null);
+        await app.Until(() => app.Agents.ForCard(queued.Id) is not null && app.Read(queued.Id).Status == "In Progress", "an agent on the picked lane card");
+        Assert.Null(app.Agents.ForCard(free.Id));
+        Assert.False(board.HasPicked);
+    }
 }
