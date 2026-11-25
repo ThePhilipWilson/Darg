@@ -1,7 +1,8 @@
 ---
 kind: feature
-status: draft
+status: agreed
 parent: seamless-machine-switching
+board: Per-user settings sync
 ---
 # Per-user settings sync
 
@@ -31,6 +32,8 @@ What is about Philip rather than a project or a machine (theme, Optimise tokens,
 
 **Context:** the parent plan settled a private settings repo synced like `darg` branches, but not its name, owner or what instances share.
 
+**Answer:** A private `darg-settings-<instance>` repo under the account picked in Settings (Philip, 2026-11-24)
+
 ### Where does Clone put a repo that isn't on this machine?
 - **Beside the project's other repos if any are here, else in a clone folder set once per machine** (recommended): the first clone asks for that folder, defaulting to the parent of an existing repo of the same owner (`D:\GitHub\ThePhilipWilson` on the PC, `~/GitHub/ThePhilipWilson` on the Mac).
 - **Ask with a folder picker every time**: nothing guessed, one more step per clone.
@@ -38,11 +41,15 @@ What is about Philip rather than a project or a machine (theme, Optimise tokens,
 
 **Context:** paths differ by OS and drive, so only the remote URL travels; this machine has to decide the folder.
 
+**Answer:** Beside the project's other repos if any are here, else in a clone folder set once per machine (Philip, 2026-11-24)
+
 ### What does removing a project in Setup do on the other machine?
 - **Removes it here only, with Remove everywhere beside it** (recommended): it stays in the synced list and Setup shows it under "On your other machine" to clone or add again. Remove everywhere takes it off the list for both.
 - **Always removes it everywhere**: one list, no hidden projects, but taking a game project off the Mac takes it off the PC too.
 
 **Context:** some projects only make sense on one machine (Unity work on the PC), so "not here" and "gone" may need to differ.
+
+**Answer:** Removes it here only, with Remove everywhere beside it (Philip, 2026-11-24)
 
 ### Does the ntfy access token go in the settings repo?
 - **Yes, with the server and topic** (recommended): the repo is private, the topic name is already the secret, and the phone keeps working whichever machine sends.
@@ -50,11 +57,15 @@ What is about Philip rather than a project or a machine (theme, Optimise tokens,
 
 **Context:** only a protected ntfy topic has a token; the default ntfy.sh topic has none, and the real instance has no `push` set yet.
 
+**Answer:** Yes, with the server and topic (Philip, 2026-11-24)
+
 ### The settings repo needs the git sync the `.darg` on its own branch and Auto-sync features build. How do these cards wait for it?
 - **Build what needs no git now, and hold the two git cards** (recommended): the first seven cards below start as their own Blocked by allows; "Connect the settings repo" and "Keep the settings repo synced" stay unticked until those features' cards exist, then their ids go into Blocked by.
 - **This feature builds the git sync first**, as a Core `GitSync` the `.darg` feature then reuses: settings travel sooner, but the engine is designed around one folder of small files rather than `.darg`'s worktree.
 
 **Context:** a plan's Blocked by can only name cards in this plan or on a board, and the sibling features have no cards yet.
+
+**Answer:** This feature builds the git sync first (Philip, 2026-11-24)
 
 ## Design
 
@@ -104,55 +115,55 @@ Settings gets a Sync part: the account (from `gh auth status`), the repo name (p
 
 ## Cards
 
-### Move the settings files into a synced folder
+### PER-0001: Move the settings files into a synced folder
 Theme, Optimise tokens, model profiles and shared flows are files scattered in the instance folder. Put them in `<instance>/synced/` through one `SyncedFolder` class in Core, change `AppSettings.FilePath`, `ModelProfiles.FilePath` and `FlowStore.Folder` to use it, and add `SyncedFolder.Migrate`, run first thing in `MainViewModel`'s constructor beside `ProjectData.Migrate`, which moves `settings.json`, `profiles.md` and `flows/` in and never overwrites a file already there (the old one goes beside it as `.mine`). The footer line says what moved, as `ProjectData.Migrate`'s does, and CLAUDE.md's lines naming these files say where they are now.
 **Where:** `src/Darg.Core/SyncedFolder.cs` (new), `src/Darg.Core/Themes.cs`, `src/Darg.Core/ModelProfiles.cs`, `src/Darg.Core/Flow.cs`, `src/Darg.Desktop/ViewModels/MainViewModel.cs`, `tests/Darg.Core.Tests`, `CLAUDE.md`
 **Done when:** unit tests show an old instance folder migrated (files moved, an existing file in `synced/` kept with the other as `.mine`, a second run doing nothing), and an integration test shows the theme, Optimise tokens, ✎ Profiles and the Flows list all reading from `synced/`.
 **Blocked by:** none
 
-### Phone notification settings move to synced/ntfy.json
+### PER-0002: Phone notification settings move to synced/ntfy.json
 The ntfy server, topic and token (`PushConfig`) live in instance.json's `push`, which stays per machine. Move them to `synced/ntfy.json`, read and written by Settings' notifications part, the API's `push` and `push-test`, and `MainViewModel.Push`; the migration moves an existing `push` out of instance.json. `push.json` (sent decision keys) stays in the instance folder, since only the machine that sent a decision answers its buttons.
 **Where:** `src/Darg.Core/Push.cs`, `src/Darg.Core/SyncedFolder.cs`, `src/Darg.Core/Instance.cs`, `src/Darg.Desktop/ViewModels/MainViewModel.Push.cs`, `src/Darg.Desktop/ViewModels/SettingsViewModel.cs`
 **Done when:** a test migrates an instance.json with `push` set into `synced/ntfy.json` and instance.json no longer has it; the existing push tests (`FakeNtfy`) pass reading the new file; `push.json` is still written in the instance folder.
 **Blocked by:** Move the settings files into a synced folder
 
-### A synced project list with each repo's remote
+### PER-0003: A synced project list with each repo's remote
 A second machine has no idea which projects exist. Write `synced/projects.json` from instance.json whenever Setup saves and when Darg starts: each project's id, name and tab order, and for each repo its folder name, its `origin` remote URL and the project's gh account, with no paths. Read it back into a `SyncedProjects` model that says, for this machine, which projects are missing entirely and which have a repo missing. Removing a project follows the answer to the removal Question (here only, or everywhere).
 **Where:** `src/Darg.Core/SyncedProjects.cs` (new), `src/Darg.Core/Instance.cs`, `src/Darg.Core/Repo.cs`, `src/Darg.Desktop/ViewModels/SetupViewModel.cs`, `tests/Darg.Core.Tests`
 **Done when:** unit tests on two throwaway instances show A's projects written with remotes and no paths, B told which are missing and which have a missing repo, and a removal on A behaving as the Question settles on B.
 **Blocked by:** Move the settings files into a synced folder
 
-### Setup offers to clone projects from the other machine
+### PER-0004: Setup offers to clone projects from the other machine
 Setup shows the projects `SyncedProjects` says are missing under "On your other machine", each with Clone, and a project with one repo missing gets a Clone for that repo. Clone runs `gh repo clone` with the project's account's token in `GH_TOKEN` for that call only (never switching gh's active account), into the folder the clone-location Question settles, off the UI thread with progress in the row, then adds the project to instance.json with the new path and opens it. A failure says why and which account it tried.
 **Where:** `src/Darg.Desktop/ViewModels/SetupViewModel.cs`, `src/Darg.Desktop/Views/SetupView.axaml`, `src/Darg.Core/SyncedProjects.cs`, `src/Darg.Core/GitHub.cs`, `tests/Darg.Desktop.Tests`
 **Done when:** an integration test with `fake_gh.py` playing the clone shows a missing project listed, Clone adding it to instance.json with the cloned path and its tab appearing, and a failed clone showing the account it tried; `app.Shot` shows the Setup list.
 **Blocked by:** A synced project list with each repo's remote
 
-### Open on the project and section used last, on either machine
+### PER-0005: Open on the project and section used last, on either machine
 Darg reopens the last project but not the section, and only from this machine. Keep the section too, and write `synced/last-open.json` (project id, section, machine name, time) when either changes, at most once every 30 seconds and on close. On start, open the newer of this machine's `last-project` and the synced file; a section this project doesn't show opens Home. Never apply it while running.
 **Where:** `src/Darg.Core/LastProject.cs`, `src/Darg.Core/SyncedFolder.cs`, `src/Darg.Desktop/ViewModels/MainViewModel.cs`, `src/Darg.Desktop/ViewModels/MainViewModel.Nav.cs`, `tests/Darg.Desktop.Tests`
 **Done when:** an integration test closes the app on project B's Board and a second start opens B's Board; another writes a newer `last-open.json` naming project C's Reports, and the start opens C's Reports; switching tabs ten times in a second writes the file once.
 **Blocked by:** Move the settings files into a synced folder
 
-### Fettle chats with no project live in synced/chats
+### PER-0006: Fettle chats with no project live in synced/chats
 General Fettle chats (`AgentRecord.Project` null) are saved in `agents/~bench/` with absolute paths. Save them to `synced/chats/` instead, with cwd and preview image paths stored relative to the home folder or `synced/` and turned back on load, move their preview images to `synced/previews/`, move existing ones on migration, and move a chat out to the project store when `MascotViewModel.Guess` gives it a project. Chats with a project stay where they are.
 **Where:** `src/Darg.Desktop/ViewModels/MascotViewModel.cs`, `src/Darg.Core/AgentStore.cs`, `src/Darg.Core/SyncedFolder.cs`, `src/Darg.Desktop/ViewModels/AgentsViewModel.cs`, `tests/Darg.Desktop.Tests`
 **Done when:** a test saves a no-project chat under one home folder and loads it under another with its cwd and previews resolving; migration moves existing no-project chats and leaves project chats; the chat still lists in every project's Fettle list.
 **Blocked by:** Move the settings files into a synced folder
 
-### Apply synced settings that change while Darg is open
+### PER-0007: Apply synced settings that change while Darg is open
 When a pull changes `synced/`, Darg should show it without a restart. Watch the folder (debounced, off the UI thread) and apply each file: the theme through `ThemeManager`, Optimise tokens through `TokenSaver.Load` (running agents take it from their next turn, as the toggle does), the Flows list read again, `PushClient` restarted on a new ntfy topic, Setup's "On your other machine" refreshed. `last-open.json` is ignored while running.
 **Where:** `src/Darg.Core/SyncedFolder.cs`, `src/Darg.Desktop/ViewModels/MainViewModel.cs`, `src/Darg.Desktop/ViewModels/SettingsViewModel.cs`, `src/Darg.Desktop/ViewModels/AgentsViewModel.cs`, `tests/Darg.Desktop.Tests`
 **Done when:** an integration test writes each file into `synced/` from outside the app and sees the theme change, the Optimise tokens toggle flip, a new flow listed and pushes go to the new topic (`FakeNtfy`), while editing `last-open.json` changes nothing on screen.
 **Blocked by:** Move the settings files into a synced folder, Phone notification settings move to synced/ntfy.json
 
-### Connect the settings repo from Settings
+### PER-0008: Connect the settings repo from Settings
 Settings gets a Sync part: the gh account, the repo name the repo Question settles, and Connect. Connect clones the repo if it exists, else creates it private (`gh repo create --private`) and pushes, refuses a public repo, then merges this machine's `synced/` files in, a file on both sides kept through the Sync panel's conflict handling. The connection (account, repo) is kept per machine outside `synced/`. Its Blocked by gets the `.darg` on its own branch feature's sync card ids once they exist (the ordering Question).
 **Where:** `src/Darg.Desktop/ViewModels/SettingsViewModel.cs`, `src/Darg.Desktop/Views/SettingsView.axaml`, `src/Darg.Core/SyncedFolder.cs`, `tests/Darg.Desktop.Tests`
 **Done when:** an integration test with a local bare repo standing in for GitHub connects instance A (creating it) then instance B (cloning it); B ends up with A's theme and flows plus its own, a file both had shows as a conflict, and a public repo is refused.
 **Blocked by:** Move the settings files into a synced folder
 
-### Keep the settings repo synced
+### PER-0009: Keep the settings repo synced
 Once connected, `synced/` syncs with the Auto-sync engine: pull on open (before the last project is picked), on window focus and on its timer; commit a few seconds after changes stop and push; commit and push on close. Commit messages are generated from what changed ("Darg settings: theme, 2 flows") and go through the Auto-sync engine's never-commit check. Settings' Sync part shows last synced, changes waiting, offline or a conflict. Its Blocked by gets the Auto-sync feature's card ids once they exist (the ordering Question).
 **Where:** `src/Darg.Core/SyncedFolder.cs`, `src/Darg.Desktop/ViewModels/MainViewModel.cs`, `src/Darg.Desktop/ViewModels/SettingsViewModel.cs`, `tests/Darg.Desktop.Tests`
 **Done when:** an integration test with two instances on one bare repo changes the theme on A and sees it on B after B's next pull, with no restart; a change made offline pushes once the remote is back; a commit message holding a never-commit name is refused by the engine's check.
