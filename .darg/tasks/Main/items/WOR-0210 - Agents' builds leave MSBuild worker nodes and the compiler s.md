@@ -1,11 +1,12 @@
 # WOR-0210: Agents' builds leave MSBuild worker nodes and the compiler server running
 
-- **Status:** Backlog
+- **Status:** Done
 - **Priority:**
 - **Type:** Task
 - **Labels:** memory
 - **Created:** 2026-11-25
-- **Done:**
+- **Done:** 2026-11-25
+- **Moved:** 2026-11-25 04:21:25
 
 ## Description
 
@@ -16,3 +17,16 @@ Proposal to measure, not assume: run agents' builds without node reuse (dotnet b
 **Where:** tools/test.ps1 (the build step), src/Darg.Core/Agent.cs (AgentSession.Start environment).
 
 **Done when:** a before and after of build time and of dotnet processes left 1 minute after a suite is written into this card, and the change is made if it frees the workers for less than a few seconds per build, or the card says why not.
+
+## Measured 2026-11-25
+
+Full rebuild of Darg.sln (`--no-incremental`), other agents' builds running at the same time, so noisy:
+
+| | build time | new workers left at end | +60 s |
+|---|---|---|---|
+| default (node reuse) | 49.4 s | 0 (it reused 8 workers already left by other builds) | 0 new |
+| `-nodeReuse:false` | 37.2 s | 0 | 0 |
+
+An incremental rebuild: 2.8 s with reuse, 3.7 s without. Before either run, 8 `/nodeReuse` workers and the compiler server were already sitting there (dotnet/VBCS total 4.4 GB), left by earlier builds. So no build time cost beyond noise (about 1 s on a touch rebuild), and the workers it leaves are the existing ones: with reuse a build adopts them and leaves more behind; without, it starts its own and ends them.
+
+Change made: `MSBUILDDISABLENODEREUSE=1` in every agent's environment (`AgentSession.NoBuildNodeReuse`, unless the person's own environment sets it), and `-nodeReuse:false` on tools/test.ps1's build. The compiler server is left alone. Test: `BuildNodeReuseTests`. Workers already running stay until they idle out or are killed; new agent sessions stop adding to them.
