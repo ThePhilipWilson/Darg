@@ -1,8 +1,9 @@
 ---
 kind: feature
-status: draft
+status: agreed
 parent: seamless-machine-switching
 planner: dcc9a89e-8bcd-426d-866d-b14b82c86a2a
+board: Agents and Fettle chats travel
 ---
 # Agents and Fettle chats travel
 
@@ -132,55 +133,55 @@ The failure class: no conversation anywhere; Claude refuses the session (exits, 
 
 ## Cards
 
-### Agent records store paths as tokens that read on both machines
+### AGE-0001: Agent records store paths as tokens that read on both machines
 Saved agent records hold absolute Windows paths in Cwd, Args, Plan and each transcript item's ImagePath and Images, so a record copied to the Mac points at nothing. Add a `PathTokens` class in Core that turns a path under a known root into a token (`{repo:<folder name>}`, `{darg}`, `{instance}`, `{home}`) plus the rest, and back again with this machine's roots, and have `AgentStore` apply it on every write and read. It must match the whole class of spellings: back slashes, forward slashes, mixed, JSON-doubled back slashes, drive-letter case, a trailing slash and Mac paths. A path under no root stays as it is.
 **Where:** `src/Darg.Core/PathTokens.cs` (new), `src/Darg.Core/AgentStore.cs`, `tests/Darg.Core.Tests/`
 **Done when:** unit tests round-trip every spelling listed in the plan against Windows roots and Mac roots (a record saved with `D:\...` roots loads with `/Users/...` roots and every path points under them), and an unknown path survives unchanged.
 **Blocked by:** none
 
-### Resume that fails starts fresh from the transcript
+### AGE-0002: Resume that fails starts fresh from the transcript
 Today a saved agent whose conversation Claude can't resume just fails, and the person has to start a new agent and explain it all again. Detect the failure class (no conversation, Claude refusing the session id before a session starts, a first turn that ends in an error about the session), then write `transcript.md` beside the agent's record from its saved items, start a fresh session in the same folder whose first message is shaped as the plan's last Question settles, store the new session id and add a transcript note saying why. Run `claude --resume` with a made-up id once to record Claude's real output, and teach fake claude to play it (e.g. `FAKE_NO_SESSION`). A cwd that doesn't exist on this machine says so and starts nothing.
 **Where:** `src/Darg.Desktop/ViewModels/AgentsViewModel.cs` (`AgentViewModel.Begin`, `On`), `src/Darg.Core/AgentStore.cs`, `tools/perf/fake_claude.py`, `tests/Darg.Desktop.Tests/`
 **Done when:** an integration test resumes a saved agent whose session fake claude refuses, and the agent carries on in a new session with the transcript note shown, `transcript.md` written and the new session id saved; breaking the detection makes the test fail.
 **Blocked by:** none
 
-### Saved agents and project Fettle chats move into .darg
+### AGE-0003: Saved agents and project Fettle chats move into .darg
 Move each project's saved agents from `<instance>/agents/<project id>/` to `.darg/agents/<id>/agent.json`, and Fettle chats that belong to a project from `<instance>/agents/~bench/` to that project's `.darg/chats/<id>/chat.json`, a folder per agent so forgetting deletes one folder. `AgentsViewModel` and `MascotViewModel` read and write there through `ProjectData.Root`; chats with no project stay in the instance folder. Fettle chats rebuild their args from this machine's project list when they resume instead of using saved ones. `ProjectData.Migrate` moves the old files once (tokenising paths), and `ProjectData.Rewrite` follows the new folders.
 **Where:** `src/Darg.Core/AgentStore.cs`, `src/Darg.Core/ProjectData.cs`, `src/Darg.Desktop/ViewModels/AgentsViewModel.cs`, `src/Darg.Desktop/ViewModels/MascotViewModel.cs`, `tests/Darg.Core.Tests/`, `tests/Darg.Desktop.Tests/`
 **Done when:** a test instance with agents and chats in the old folders starts with them listed as before and their files in `.darg/agents` and `.darg/chats`; a second start moves nothing; forgetting an agent removes its folder; a resumed Fettle chat's args name this instance's projects, not the saved ones.
 **Blocked by:** Agent records store paths as tokens that read on both machines
 
-### Preview pictures go with the agent that shows them
+### AGE-0004: Preview pictures go with the agent that shows them
 Tool previews are written to `<instance>/previews`, which no other machine sees, and 89 MB of them belong to no saved agent. Write new previews into the agent's own `previews/` folder in `.darg`, store pictures inside a repo repo-relative, and handle pictures outside the repos as the plan's Question on them settles (a thumbnail copy, if that's the answer). Restoring a transcript shows the copy when the original isn't on this machine. Migration moves the previews a saved agent points at into its folder and treats the rest of `<instance>/previews` as the Question on the 89 MB settles.
 **Where:** `src/Darg.Desktop/ViewModels/AgentsViewModel.cs` (`ToolItem.SetResult`, `ToolItem.Restore`), `src/Darg.Core/ProjectData.cs`, `src/Darg.Core/AgentStore.cs`, `tests/Darg.Desktop.Tests/`
 **Done when:** an integration test's tool result with an image puts the file under `.darg/agents/<id>/previews/`, and the transcript restored with the original deleted still shows the picture; migration of a test instance leaves no preview a saved agent points at in the instance folder.
 **Blocked by:** Saved agents and project Fettle chats move into .darg
 
-### The Claude conversation is copied into .darg and back before resume
+### AGE-0005: The Claude conversation is copied into .darg and back before resume
 For Carry on to work on the other machine, the agent's Claude conversation has to travel with it. Start only once the Resume spike feature has reported: its findings say how Claude Code makes the folder key and which files a resume needs. When a turn ends, copy the conversation file (and its side folder if needed) from Claude's folder into the agent's `session/`; before `--resume`, if this machine's Claude folder has no copy under the key for the agent's cwd here, or a shorter one, copy `session/` in first. Off the UI thread, saved agents only, and through `UserHome` so tests never touch the real `~/.claude`.
 **Where:** `src/Darg.Core/SessionCarry.cs` (new), `src/Darg.Core/UserHome.cs`, `src/Darg.Desktop/ViewModels/AgentsViewModel.cs` (`Begin`, turn end), `tools/perf/fake_claude.py` (writes a conversation file under the sandbox's Claude folder, as the real one does), `tests/Darg.Core.Tests/`, `tests/Darg.Desktop.Tests/`
 **Done when:** a unit test with two fake home folders and two cwds copies a session from one machine's key into the other's before resume, and leaves a longer local copy alone; an integration test shows `session/` filled after a turn.
 **Blocked by:** Saved agents and project Fettle chats move into .darg
 
-### Agents show which machine runs them and only that machine runs them
+### AGE-0006: Agents show which machine runs them and only that machine runs them
 Add the running machine to the record: a stable machine id kept in the instance folder, a label ("the PC", "the Mac", plus the machine name when both are the same OS), and the start time of a running turn, saved at once when a turn starts and ends. A record running on another machine lists as "Running on the PC since 14:02" with the message box greyed; once clear, a message carries it on here and the transcript notes it. Take over follows the plan's first Question. A machine that finds its live agent now named for another machine ends its session with a note. `ContinueAt` is honoured only by the named machine. The API's `agents`, `agent` and `needs-you` carry `runningOn`; `say`, `decide` to its agent and `darg.send()` to it are refused with that reason.
 **Where:** `src/Darg.Core/AgentStore.cs` (`AgentRecord`), `src/Darg.Core/Instance.cs`, `src/Darg.Desktop/ViewModels/AgentsViewModel.cs`, `src/Darg.Desktop/Views/`, `src/Darg.Desktop/ViewModels/MainViewModel.Api.cs`, `src/Darg.Core/Artifacts.cs`, `tests/Darg.Desktop.Tests/`
 **Done when:** an integration test with a record marked as another machine's shows the running-on line and a refused `say`; clearing the mark lets a message resume it here with the note; a live agent whose record is rewritten to another machine ends its session.
 **Blocked by:** Saved agents and project Fettle chats move into .darg
 
-### The Agents list and Fettle's chats follow changes on disk
+### AGE-0007: The Agents list and Fettle's chats follow changes on disk
 The Agents view reads its saved agents once at start, so records a pull brings in would never show. Watch `.darg/agents` and `.darg/chats` (debounced, off the UI thread, updating the bound lists in place with `ListSync`): a new record appears, a changed record that isn't live here reloads its transcript and running-on state, a deleted one leaves the list unless it's live here, in which case its next save writes it back.
 **Where:** `src/Darg.Desktop/ViewModels/AgentsViewModel.cs`, `src/Darg.Desktop/ViewModels/MascotViewModel.cs`, `tests/Darg.Desktop.Tests/`
 **Done when:** an integration test that writes a new record, edits a saved one and deletes another under `.darg/agents` sees the list follow each within a few seconds, and a live agent's deleted record comes back after its next turn.
 **Blocked by:** Saved agents and project Fettle chats move into .darg
 
-### Card branches are pushed at turn end and checked out on Carry on
+### AGE-0008: Card branches are pushed at turn end and checked out on Carry on
 A card agent works on its card branch in `.claude/worktrees/<branch>`, which exists only on the machine it ran on. When its turn ends with commits on that branch, push the branch to the remote the plan's second Question settles (signing in with the project's account through `gh auth token --user`, running the never-commit check first on a public repo). Carrying it on where the branch or its worktree isn't present fetches the branch and adds the worktree at the same repo-relative path before resuming. Uncommitted changes don't travel; the transcript says so if the worktree had any.
 **Where:** `src/Darg.Core/CardBranch.cs`, `src/Darg.Core/Repo.cs`, `src/Darg.Desktop/ViewModels/AgentsViewModel.cs`, `tests/Darg.Core.Tests/`
 **Done when:** a unit test with a bare remote and two clones pushes a card branch from one after a turn and, on Carry on in the other, finds the branch checked out in `.claude/worktrees/<branch>` with the commit in it.
 **Blocked by:** The Claude conversation is copied into .darg and back before resume
 
-### Two machines in one test: an agent carried on from the other
+### AGE-0009: Two machines in one test: an agent carried on from the other
 Each card above tests its own part; nothing yet shows the whole trip. Write an integration test with two throwaway instances standing in for the PC and the Mac, with different repo paths for the same repo, sharing its `.darg` by copying it between them as a sync would. An agent runs a turn on the first; the second lists it with its transcript and preview, shows it running while the mark is set, then carries it on with the conversation copied under its own key, and the first ends its copy. A second run with the conversation removed falls back to a fresh session from the transcript.
 **Where:** `tests/Darg.Desktop.Tests/`, `tools/perf/fake_claude.py`
 **Done when:** the test passes in `pwsh -File tools/test.ps1 -Integration`, and fails if path tokens, the conversation copy or the running-on mark is broken.
