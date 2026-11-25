@@ -301,7 +301,18 @@ public sealed class AgentSession : IAsyncDisposable
         if (model is not null) { psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model); }
         foreach (var a in extraArgs ?? []) psi.ArgumentList.Add(a);
         if (apiUrl is not null) psi.Environment["DARG_API"] = apiUrl;
+        NoBuildNodeReuse(psi);
         return Run(psi, timings);
+    }
+
+    /// <summary>WOR-0210: an agent's dotnet builds leave MSBuild worker nodes behind (started with /nodeReuse:true, they
+    /// outlive the build and its agent: 4 per build, 60 to 540 MB each). MSBUILDDISABLENODEREUSE=1 makes them exit
+    /// with the build; the compiler server is left alone (it idles out itself and speeds every build). Set unless the
+    /// person's own environment already says.</summary>
+    public static void NoBuildNodeReuse(ProcessStartInfo psi)
+    {
+        if (psi.Environment.TryGetValue("MSBUILDDISABLENODEREUSE", out var v) && !string.IsNullOrEmpty(v)) return;
+        psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
     }
 
     /// <summary>Run a session on a process that speaks stream-json (claude, as <see cref="Start(string, string?, IEnumerable{string}?)"/>

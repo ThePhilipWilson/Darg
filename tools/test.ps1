@@ -75,7 +75,7 @@ while ($true) {
 }
 
 try {
-    dotnet build "$repo/Darg.sln" -v quiet -nologo
+    dotnet build "$repo/Darg.sln" -v quiet -nologo -nodeReuse:false   # WOR-0210: no MSBuild workers left behind
     if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED" -ForegroundColor Red; exit 1 }
 
     $results = Join-Path $shots 'test-results'
