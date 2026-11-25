@@ -1,11 +1,12 @@
 # WOR-0218: In Progress Work All count should show workable backlog tickets
 
-- **Status:** Backlog
+- **Status:** Done
 - **Priority:**
 - **Type:** Bug
 - **Labels:**
 - **Created:** 2026-11-25
-- **Done:**
+- **Done:** 2026-11-25
+- **Moved:** 2026-11-25 15:08:50
 
 ## Description
 
