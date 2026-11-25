@@ -1,11 +1,12 @@
 # WOR-0201: Design: Make cards works, says which cards can't be made and why, and Make all on a project plan
 
-- **Status:** Backlog
+- **Status:** QA Ready
 - **Priority:**
 - **Type:** Bug
 - **Labels:** design
 - **Created:** 2026-11-24
 - **Done:**
+- **Moved:** 2026-11-25 01:49:52
 
 ## Description
 
@@ -39,3 +40,13 @@ Make cards on a plan page should make the cards. Where one can't be made, the pa
 **Questions left:**
 - How is a card in another plan named in Blocked by: its bare heading (found across the project's plans), or `Plan title: heading`? Bare heading is the simplest, as long as clashes are flagged.
 - Overlaps WOR-0200 (showing where a plan is and what waits on Philip). Unmakeable rows are this card; the wider progress view is that one.
+
+## How to check
+
+Changed: Blocked by keeps a heading whole (commas and " and " no longer split it) and finds cards in sibling plans (`src/Darg.Core/PlanRefs.cs`, `Plans.cs`); the Design page marks rows that can't be made with the full reason and offers "Make the N that can be made"; a project plan has Make all; API `plan-cards` reports the unmakeable rows and `plan-make-all` does what Make all does.
+
+Branch `android` (merged from `wor-0201`), commits 6049bd2 and 82cc618.
+
+Try: `pwsh -File tools/test.ps1 -Filter PlanMaking` and `-Filter MakeAll`; or in the app open Design on a project plan with feature plans (the Seamless plans, copied as in `tests/Darg.Core.Tests/PlanData/seamless`) and press Make all. Look for: ids in every Blocked by, cards on each feature's own board, a marked row with its reason when one can't be made, a named loop on a cycle.
+
+Full suite passes except `TerminalReadTests.Terminal_command_returns_the_last_lines_a_console_shows`, which fails the same on the untouched `android` too (not from this card).
