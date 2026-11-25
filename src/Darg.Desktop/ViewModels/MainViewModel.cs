@@ -138,6 +138,7 @@ public partial class MainViewModel : ObservableObject
     ProjectViewModel Make(ProjectConfig p)
     {
         var vm = new ProjectViewModel(p);
+        vm.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ProjectViewModel.StatusLine) && vm == Selected) OnPropertyChanged(nameof(FooterLine)); };
         if (vm.Agents is { } agents)
         {
             agents.Notify += (agent, what, detail) => Tell(vm, agent, what, detail);
@@ -538,7 +539,13 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
     [ObservableProperty] public partial bool IsActive { get; set; }
-    public string StatusLine => $"{Name} · {Config.WorkingFolder()}" + (Board?.SelectedBoard is { } b ? $" · board {b}" : "");
+    /// <summary>The footer's line: the project, its folder and the board on screen (all boards on the All board, WOR-0214).</summary>
+    public string StatusLine => $"{Name} · {Config.WorkingFolder()}" + (Board switch
+    {
+        { ShowingAll: true } => " · all boards",
+        { SelectedBoard: { } b } => $" · board {b}",
+        _ => "",
+    });
 
     public bool OnHome => Section == Section.Home;
     public bool OnBoard => Section == Section.Board;
@@ -568,7 +575,15 @@ public partial class ProjectViewModel : ObservableObject
         DarkBrush = new SolidColorBrush(Mix(baseColour, Colors.Black, 0.25));
         ShavingBrush = new SolidColorBrush(Mix(baseColour, Colors.Black, 0.4));
         Context = new ContextViewModel(config);
-        if (config.Uses(Features.Board)) Board = new BoardViewModel(config);
+        if (config.Uses(Features.Board))
+        {
+            Board = new BoardViewModel(config);
+            // the footer names the board on screen, so it follows the pick and the All board (WOR-0214)
+            Board.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName is nameof(BoardViewModel.SelectedBoard) or nameof(BoardViewModel.ShowingAll)) OnPropertyChanged(nameof(StatusLine));
+            };
+        }
         if (config.Uses(Features.Agents))
         {
             Agents = new AgentsViewModel(config);

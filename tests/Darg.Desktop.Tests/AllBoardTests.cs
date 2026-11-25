@@ -111,6 +111,55 @@ public class AllBoardTests
         Assert.Equal("", app.Crashes());
     }
 
+    /// <summary>QA found ids cut to "WOR-0:" in a sub-column, where Run QA and Work on took the line: there the buttons
+    /// go under the id, which shows whole; a long board name is trimmed; the footer says all boards on All.</summary>
+    [AvaloniaFact]
+    public async Task In_a_narrow_sub_column_a_tiles_id_shows_whole_and_the_footer_says_all_boards()
+    {
+        using var app = DargApp.Make();
+        var other = BoardStore.CreateBoard(app.Boards, "Agents and Fettle chats travel between machines", DargApp.Columns, "AGE");
+        var qa = app.Card("waiting for its check", "QA Ready");
+        var far = BoardStore.Create(other, "a card from the long-named board", "");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        var board = app.Board;
+        app.Window.Width = 1500;
+        board.Tabs.Single(t => t.Name == "Main").PickCommand.Execute(null);
+        await DargApp.Settle(200);
+        Assert.EndsWith(" · board Main", app.Main.FooterLine);
+
+        TextBlock IdOf(string id) => Shown(app).Single(t => t.Text == id);
+        Views.TileHead? HeadOf(TextBlock t) => t.GetVisualAncestors().OfType<Views.TileHead>().FirstOrDefault();
+        // unsplit, the column is wide enough: the buttons sit beside the id
+        Assert.False(HeadOf(IdOf(qa.Id))?.Stacked ?? false);
+
+        board.PickAllBoardCommand.Execute(null);
+        board.ActiveSplit = true;
+        await DargApp.Settle(200);
+        Assert.EndsWith(" · all boards", app.Main.FooterLine);
+        Assert.True(List(board.AllRow!, "QA Ready").IsSplit);
+        foreach (var id in new[] { qa.Id, far.Id })
+        {
+            // the id and the board name sit in a wrapping panel that clips what runs past its edge
+            var t = IdOf(id);
+            var box = (Control)t.GetVisualParent()!;
+            double RightEdge(Control c) => c.TranslatePoint(new Point(c.Bounds.Width, 0), box)!.Value.X;
+            t.Measure(Size.Infinity);
+            var whole = t.DesiredSize.Width - t.Margin.Left - t.Margin.Right; // DesiredSize carries the margin, Bounds doesn't
+            Assert.True(t.Bounds.Width >= whole - 0.5, $"{id} is cut: {t.Bounds.Width} of {whole}");
+            Assert.True(RightEdge(t) <= box.Bounds.Width + 0.5, $"{id} is cut at the edge of its part of the line: {RightEdge(t)} of {box.Bounds.Width}");
+            // the long board name is trimmed to fit, not run under the edge
+            var name = Shown(app).Single(b => b.DataContext is CardViewModel c && c.Id == id && b.Text == c.BoardName);
+            Assert.True(RightEdge(name) <= box.Bounds.Width + 0.5, $"{id}'s board name is cut at the edge: {RightEdge(name)} of {box.Bounds.Width}");
+        }
+        Assert.True(HeadOf(IdOf(qa.Id))?.Stacked == true, "Run QA and Work on go under the id in a sub-column");
+        app.Shot("narrow-sub-column");
+
+        board.Tabs.Single(t => t.Name == "Main").PickCommand.Execute(null);
+        Assert.EndsWith(" · board Main", app.Main.FooterLine);
+        Assert.Equal("", app.Crashes());
+    }
+
     [AvaloniaFact]
     public async Task By_state_splits_each_column_into_a_sub_column_per_state_kept_per_board()
     {
