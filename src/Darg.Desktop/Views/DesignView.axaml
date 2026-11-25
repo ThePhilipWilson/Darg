@@ -24,7 +24,6 @@
       <Setter Property="CornerRadius" Value="0"/>
       <Setter Property="Padding" Value="4,8"/>
       <Setter Property="HorizontalAlignment" Value="Stretch"/>
-      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
     </Style>
     <Style Selector="TextBlock.quality"><Setter Property="Foreground" Value="{DynamicResource Bad}"/></Style>
     <Style Selector="TextBlock.quality.zero"><Setter Property="Foreground" Value="{DynamicResource Zero}"/></Style>
@@ -103,7 +102,10 @@
                       AutomationProperties.Name="Plan kind" ToolTip.Tip="A feature plan proposes cards; a project plan lists features"/>
           </DockPanel>
         </StackPanel>
-        <TreeView ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedNode}" Background="Transparent">
+        <!-- no sideways scrolling: each row is laid out to the column's width, so a long title is cut short and its
+             needs count and n/m stay in view (they went past the edge when rows sized to the widest one, WOR-0200) -->
+        <TreeView ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedNode}" Background="Transparent"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
           <TreeView.Styles>
             <Style Selector="TreeViewItem" x:DataType="vm:PlanNode">
               <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>

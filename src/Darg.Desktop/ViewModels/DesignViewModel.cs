@@ -636,7 +636,8 @@ public sealed partial class PlanNode : ObservableObject
     public bool HasMark => Mark.Length > 0;
     public bool Dropped => Plan.Status == "dropped";
     public string Progress { get; }
-    public string Tip => $"{(Plan.IsProject ? "Project" : "Feature")} plan · {Plan.Status}" + (Progress.Length > 0 ? $" · {Progress} cards done" + (Plan.IsProject ? ", with its features'" : "") : "") + $"\n{Plan.File}";
+    /// <summary>The title in full first: the row cuts a long one short to keep its count and n/m in view.</summary>
+    public string Tip => $"{Title}\n{(Plan.IsProject ? "Project" : "Feature")} plan · {Plan.Status}" + (Progress.Length > 0 ? $" · {Progress} cards done" + (Plan.IsProject ? ", with its features'" : "") : "") + $"\n{Plan.File}";
     /// <summary>Things waiting on the person in this plan and the plans under it (WOR-0200).</summary>
     public int Needs { get; }
     public bool HasNeeds => Needs > 0;

@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
@@ -512,6 +513,76 @@ public class DesignPageTests
         Assert.Equal("Quiet", d.Page!.Title);
         await AvaloniaSettle();
         app.Shot("design-planner-waiting");
+        Assert.Equal("", app.Crashes());
+    }
+
+    /// <summary>WOR-0200 rework: in the 300 px Plans column, a plan with a long title still shows its needs-you count and
+    /// its n/m on screen; the title is cut short instead (QA found them past the column's right edge on real plans, each
+    /// row laid out against the widest one).</summary>
+    [AvaloniaFact]
+    public async Task A_long_titled_plan_keeps_its_needs_count_and_progress_inside_the_tree()
+    {
+        using var app = DargApp.Make();
+        var made = app.Card("Seamless machine switching first card", "To Do");
+        var design = Directory.CreateDirectory(Path.Combine(app.Docs, "design")).FullName;
+        File.WriteAllText(Path.Combine(design, "proj.md"), """
+            ---
+            kind: project
+            status: draft
+            ---
+            # Seamless machine switching between every computer I work on, with nothing to remember
+
+            ## Features
+            - [Agents and Fettle chats travel with the work from machine to machine](phone.md): the chats go too.
+            """);
+        File.WriteAllText(Path.Combine(design, "phone.md"), $"""
+            ---
+            kind: feature
+            status: draft
+            board: Main
+            parent: proj
+            ---
+            # Agents and Fettle chats travel with the work from machine to machine
+
+            ## Questions
+
+            ### Which machine wins when both changed?
+            - **The newer** (recommended): simplest.
+            - **Ask**: safest.
+
+            ## Cards
+
+            ### {made.Id}: Seamless machine switching first card
+            The first step.
+
+            ### Second card
+            **What's wanted:** more. **Where:** here. **Done when:** done.
+            """);
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Design" });
+        var d = app.Project.Design!;
+        await app.Until(() => d.Tree.Count == 1 && d.Tree[0].Children.Count == 1 && d.Tree[0].Needs == 1, "the plan tree");
+        d.Tree[0].IsExpanded = true;
+        await AvaloniaSettle();
+        app.Shot("design-tree-long-titles");
+
+        var tree = app.Window.GetVisualDescendants().OfType<TreeView>().Single(t => t.ItemsSource == d.Tree);
+        var shown = tree.GetVisualDescendants().OfType<ScrollViewer>().First();
+        foreach (var node in new[] { d.Tree[0], d.Tree[0].Children[0] })
+        {
+            var row = tree.GetVisualDescendants().OfType<DockPanel>().Single(p => p.DataContext == node && p.Parent is not DockPanel);
+            var parts = row.GetVisualDescendants().OfType<TextBlock>().ToList();
+            var count = parts.Single(t => t.Text == node.NeedsText);
+            var progress = parts.Single(t => t.Text == node.Progress && t.Text != "");
+            foreach (var part in new[] { count, progress })
+            {
+                Assert.True(part.IsEffectivelyVisible, $"{part.Text} on {node.Title} hidden");
+                var right = part.TranslatePoint(new Point(part.Bounds.Width, 0), shown)!.Value.X;
+                Assert.True(right <= shown.Viewport.Width + 0.5,
+                    $"\"{part.Text}\" on \"{node.Title}\" ends at {right:0} px, past the tree's {shown.Viewport.Width:0} px");
+            }
+            Assert.StartsWith(node.Title + "\n", node.Tip);   // the title cut short is there in full on hover
+        }
         Assert.Equal("", app.Crashes());
     }
 
