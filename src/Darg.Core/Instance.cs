@@ -153,6 +153,9 @@ public sealed class ProjectConfig
     /// "push", "commit", "ask" or "never" (<see cref="Core.Commits"/>). A folder with no rule is never committed
     /// by Fettle; a card agent there follows the repo's own CLAUDE.md.</summary>
     public Dictionary<string, string>? Commits { get; set; }
+    /// <summary>The MCP servers its agents start (WOR-0208, <see cref="McpServers"/>): those ticked on its Context page, with
+    /// their definitions kept, and those on by default it unticked. Not set: only the ones on by default.</summary>
+    public McpChoice? Mcp { get; set; }
 
     public string? NotesFolder() => Notes ?? (Boards is null ? null : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(Boards))!, "notes"));
     /// <summary>Features this project uses; an empty list means all of them.</summary>

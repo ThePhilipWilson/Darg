@@ -326,6 +326,7 @@ public partial class AgentsViewModel : ObservableObject
     void Add(AgentViewModel agent, bool select)
     {
         agent.StoreFolder ??= _store;
+        agent.McpArgs ??= McpLaunch;
         agent.MistakeLogFile ??= MistakeLog.PathFor(project.Id);
         agent.ProjectName ??= project.Name;
         agent.CardDone = IsCardDone(agent.CardId);
@@ -575,7 +576,8 @@ public partial class AgentsViewModel : ObservableObject
         var profile = Task.Run(() => ModelProfiles.Pick(ModelProfiles.Load(), forJob));
         var folder = string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd;
         var agent = new AgentViewModel(folder, prompt, cardId, name ?? ChatTitle.Guess(prompt),
-            args: [.. ArtifactArgs(id), .. RepoArgs(folder), .. (dirs ?? []).SelectMany(d => new[] { "--add-dir", d })], id: id, profile: profile) { StoreFolder = _store, Purpose = purpose };
+            args: [.. ArtifactArgs(id), .. RepoArgs(folder), .. (dirs ?? []).SelectMany(d => new[] { "--add-dir", d })], id: id, profile: profile, mcp: McpLaunch)
+            { StoreFolder = _store, Purpose = purpose };
         Add(agent, select: true);
         if (cardId is not null && purpose is AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa) ForgetReplacedBy(agent);
         agent.Save();
@@ -584,6 +586,9 @@ public partial class AgentsViewModel : ObservableObject
     }
 
     public static string NewId() => Guid.NewGuid().ToString("N")[..10];
+
+    /// <summary>The MCP servers ticked on this project's Context page, as flags (WOR-0208): read when each session starts.</summary>
+    IReadOnlyList<string> McpLaunch() => McpServers.LaunchArgs(project);
 
     /// <summary>The project's other repos, so an agent started in one can work in the rest (Site and Workspace).
     /// Kept in its saved args like the artifacts folder.</summary>
@@ -954,9 +959,10 @@ public partial class AgentViewModel : ObservableObject
     /// <param name="profile">The model profile for its job, still being picked (WOR-0034): the session starts once
     /// it is in, on that profile's model and effort. Null: start now on the person's own settings.</param>
     public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null, string? shown = null, string? id = null,
-        Task<ProfilePick?>? profile = null)
+        Task<ProfilePick?>? profile = null, Func<IReadOnlyList<string>>? mcp = null)
     {
         if (id is not null) Id = id;
+        McpArgs = mcp;
         _firstClock = new AgentTimings(Id); // from now, so the model pick counts in its first turn (WOR-0206)
         Cwd = cwd;
         CardId = cardId;
@@ -1005,6 +1011,11 @@ public partial class AgentViewModel : ObservableObject
         Begin(prompt, resume: false);
         Save();
     }
+
+    /// <summary>The MCP flags each session it starts or resumes gets (WOR-0208, <see cref="McpServers.LaunchArgs"/>), asked
+    /// afresh every time so a server ticked on the Context page reaches it from its next start. Never saved with it. Not set:
+    /// none at all (--strict-mcp-config alone).</summary>
+    public Func<IReadOnlyList<string>>? McpArgs { get; set; }
 
     /// <summary>Set for Bench's chats: turns what the person typed into what's sent (adds where they are).</summary>
     public Func<string, string>? Wrap { get; set; }
@@ -1065,6 +1076,10 @@ public partial class AgentViewModel : ObservableObject
             List<string> args = resume && SessionId is not null ? ["--resume", SessionId, .. _args] : [.. _args];
             var (runModel, runEffort) = Running();
             args.AddRange(AgentChoices.LaunchArgs(runModel, runEffort, _mode));
+            IReadOnlyList<string> mcp;
+            try { mcp = McpArgs?.Invoke() ?? McpServers.LaunchArgs(null); }
+            catch (Exception) { mcp = McpServers.LaunchArgs(null); }
+            args.AddRange(mcp);
             if (runModel != _model || runEffort != _effort)
                 Items.Add(new NoteItem($"Optimise tokens is on: starting on {TokenSaver.Describe(runModel, runEffort)} (it was given {TokenSaver.Describe(_model, _effort)})", false));
             AgentSession session;

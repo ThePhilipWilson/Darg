@@ -26,6 +26,11 @@ public static class DefaultContext
         var mistakes = MistakeLog.PathFor(project.Id, instanceFolder).Replace('\\', '/');
         sb.AppendLine($"- `--add-dir {Path.GetDirectoryName(mistakes)!.Replace('\\', '/')}`: the project's mistake log folder, so it can append to the log.");
         sb.AppendLine($"- `--add-dir {ReportStore.FolderFor(project.Id, instanceFolder).Replace('\\', '/')}`: the project's reports folder, where a card agent files its report when it finishes.");
+        Dictionary<string, System.Text.Json.Nodes.JsonObject> mcp;
+        try { mcp = McpServers.Chosen(project); } catch (Exception) { mcp = []; }
+        sb.AppendLine(mcp.Count == 0
+            ? "- `--strict-mcp-config`: no MCP servers (none is ticked on the Context page; the person's, plugins' and the repo's .mcp.json are left out)."
+            : $"- `--strict-mcp-config --mcp-config {McpServers.FileFor(project.Id, instanceFolder).Replace('\\', '/')}`: only the MCP servers ticked on the Context page ({string.Join(", ", mcp.Keys)}).");
         sb.AppendLine("- `--append-system-prompt`, with this text:");
         sb.AppendLine();
         sb.AppendLine("```text");

@@ -165,8 +165,20 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         a.AsksSettled += () => AsksSettled?.Invoke(a);
         // typed in the Agents view too, it still hears where Philip is, and an untagged chat joins the project it carries on in
         a.Wrap = text => { a.Project ??= ProjectId; return WithContext(text); };
+        a.McpArgs ??= () => McpFor(a.Project)();
         return a;
     }
+
+    /// <summary>A chat's MCP flags (WOR-0208): the servers ticked for its project, read from instance.json as it starts
+    /// (the Context page saves there; Projects may be an older copy); none for a chat of no project.</summary>
+    static Func<IReadOnlyList<string>> McpFor(string? projectId) => () =>
+    {
+        ProjectConfig? project = null;
+        if (projectId is not null)
+            try { project = InstanceConfig.Load().Projects.FirstOrDefault(p => string.Equals(p.Id, projectId, StringComparison.OrdinalIgnoreCase)); }
+            catch (Exception) { } // unreadable: no servers rather than no chat
+        return McpServers.LaunchArgs(project);
+    };
 
     string WithContext(string text)
     {
@@ -220,7 +232,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         Fresh();
         var home = InstanceConfig.Folder();
         Directory.CreateDirectory(home);
-        Agent = Wire(new AgentViewModel(home, WithContext(text), name: ChatTitle.Guess(shown), args: Args(), shown: shown, profile: ProfileFor(text)) { StoreFolder = Store, Project = ProjectId });
+        Agent = Wire(new AgentViewModel(home, WithContext(text), name: ChatTitle.Guess(shown), args: Args(), shown: shown, profile: ProfileFor(text), mcp: McpFor(ProjectId)) { StoreFolder = Store, Project = ProjectId });
         Agent.Save();
         ListChats();
         Open = true;
@@ -246,7 +258,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
             var home = InstanceConfig.Folder();
             Directory.CreateDirectory(home);
             // a quick title from the words now, a better one from Haiku a few seconds later
-            Agent = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text, profile: ProfileFor(text)) { StoreFolder = Store, Project = ProjectId });
+            Agent = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text, profile: ProfileFor(text), mcp: McpFor(ProjectId)) { StoreFolder = Store, Project = ProjectId });
             Agent.Save();
             ListChats();
             _ = Retitle(Agent.Id, text);
@@ -269,7 +281,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         {
             var home = InstanceConfig.Folder();
             Directory.CreateDirectory(home);
-            chat = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text, profile: ProfileFor(text, projectId))
+            chat = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text, profile: ProfileFor(text, projectId), mcp: McpFor(projectId))
                 { StoreFolder = Store, Project = projectId });
             chat.Save();
             _ = Retitle(chat.Id, text);

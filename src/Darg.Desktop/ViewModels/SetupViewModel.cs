@@ -157,6 +157,7 @@ public partial class ProjectSetup : ObservableObject
             Commands = SavedCommand.Parse(CommandsText).Select(c => _keep.Commands.FirstOrDefault(o => o.Name == c.Name && o.Command == c.Command) ?? c).ToList(),
             Commits = Core.Commits.ParseText(CommitsText),
             Preview = _keep.Preview, // not editable here yet: set in instance.json
+            Mcp = _keep.Mcp, // ticked on the Context page (WOR-0208)
             // every feature ticked is stored as "all", so features added later are on by default
             Features = on.Count == Core.Features.All.Length ? [] : on,
         };

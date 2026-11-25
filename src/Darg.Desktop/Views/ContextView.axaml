@@ -9,6 +9,27 @@
     <!-- instructions, memory and what Darg adds, each with its group underneath -->
     <Border Grid.RowSpan="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
+        <!-- WOR-0208: the MCP servers agents start, only the ticked ones -->
+        <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="12,10,12,8">
+          <StackPanel Spacing="4">
+            <TextBlock Text="MCP servers agents start" Classes="dim small"/>
+            <ScrollViewer MaxHeight="280">
+              <ItemsControl ItemsSource="{Binding Servers}" AutomationProperties.Name="MCP servers">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:McpTick">
+                    <CheckBox IsChecked="{Binding On}" ToolTip.Tip="{Binding Tip}" AutomationProperties.Name="{Binding Name}" Margin="0,1">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding Source}" Classes="dim small" TextWrapping="Wrap"/>
+                      </StackPanel>
+                    </CheckBox>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <TextBlock Text="{Binding ServersNote}" Classes="dim small" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
         <TextBlock DockPanel.Dock="Top" Text="What agents start with" Classes="dim small" Margin="12,10,12,4"/>
         <ListBox ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="Context files">
           <ListBox.ItemTemplate>
