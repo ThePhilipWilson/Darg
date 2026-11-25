@@ -26,3 +26,18 @@ public class TerminalReadTests
         Assert.DoesNotContain("marker-alpha-7431", last);
     }
 }
+
+public class BarePromptTests
+{
+    [Theory]
+    [InlineData(@"PS D:\GitHub\x>", true)]
+    [InlineData(@"PS D:\GitHub\x> ", true)]
+    [InlineData(@"C:\Users\me>", true)]
+    [InlineData(@"me@host:~/src$", true)]
+    [InlineData(@"PS D:\x> echo hi", false)]
+    [InlineData("marker-omega-9152", false)]
+    [InlineData("a > b", false)]
+    [InlineData("", false)]
+    public void Recognises_an_empty_prompt(string line, bool expected) =>
+        Assert.Equal(expected, Darg.Desktop.ViewModels.ConsolesViewModel.IsBarePrompt(line));
+}

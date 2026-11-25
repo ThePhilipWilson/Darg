@@ -65,6 +65,7 @@ public partial class ConsolesView : UserControl
         var lines = Avalonia.Threading.Dispatcher.UIThread.CheckAccess() ? Collect(term) : Avalonia.Threading.Dispatcher.UIThread.Invoke(() => Collect(term));
         var end = lines.Count;
         while (end > 0 && lines[end - 1].Length == 0) end--;
+        if (end > 1 && ConsolesViewModel.IsBarePrompt(lines[end - 1])) end--;
         return string.Join('\n', lines.Skip(Math.Max(0, end - n)).Take(n));
     }
 

@@ -121,6 +121,12 @@ public partial class ConsolesViewModel : ObservableObject
         public IRelayCommand OpenCommand => _open ??= new RelayCommand(() => owner.Pick(shell));
     }
 
+    /// <summary>A line that is only a shell's prompt with nothing typed after it (PowerShell "PS D:\x>", cmd "C:\x>",
+    /// bash "me@host:~$"): the empty prompt that comes back after a command, which says nothing about its output.</summary>
+    public static bool IsBarePrompt(string line) => BarePrompt.IsMatch(line);
+    static readonly System.Text.RegularExpressions.Regex BarePrompt = new(
+        @"^\s*(PS [^>]*>|[A-Za-z]:\\[^>]*>|[\w.-]+@[\w.-]+[^$#%>]*[$#%])\s*$");
+
     /// <summary>What a console shows now (the Darg API's terminal command): the last <paramref name="lines"/> lines of
     /// the tab named <paramref name="tab"/> (a name, or its 1-based number), else the selected one.</summary>
     public string Read(string? tab, int lines)
