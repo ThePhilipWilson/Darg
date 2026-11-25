@@ -160,8 +160,13 @@ def work(text):
     global asks
     card = re.search(r"Card file: (.+)", text)
     card = card.group(1).strip() if card else None
+    started = time.time()
+    # as the real CLI starts a turn: its SessionStart hook, then init with its MCP servers (one down, as tabby is here)
+    emit({"type": "system", "subtype": "hook_started", "hook_name": "SessionStart:startup", "hook_event": "SessionStart"})
+    emit({"type": "system", "subtype": "hook_response", "hook_name": "SessionStart:startup", "hook_event": "SessionStart", "outcome": "success"})
     emit({"type": "system", "subtype": "init", "session_id": sid, "model": "fake", "cwd": os.getcwd(),
-          "apiKeySource": "none", "permissionMode": "auto"})
+          "apiKeySource": "none", "permissionMode": "auto",
+          "mcp_servers": [{"name": "fake-mcp", "status": "connected"}, {"name": "down-mcp", "status": "failed"}]})
     if "FAKE_ASK" in text:
         asks += 1
         img = re.search(r"FAKE_ASK_IMAGE (\S+)", text)
@@ -219,7 +224,8 @@ def work(text):
             except OSError:
                 pass
         time.sleep(1 / rate)
-    emit({"type": "result", "is_error": False, "result": "done", "total_cost_usd": 0.0})
+    emit({"type": "result", "is_error": False, "result": "done", "total_cost_usd": 0.0,
+          "duration_ms": int((time.time() - started) * 1000), "duration_api_ms": 0})
 
 for line in sys.stdin:
     try:

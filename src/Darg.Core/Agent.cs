@@ -142,12 +142,17 @@ public sealed record UsageLimited(string Status, DateTimeOffset? ResetsAt, strin
 /// <summary>Turns one line of stream-json into events (none for lines the host doesn't show).</summary>
 public static class StreamParser
 {
-    public static IEnumerable<AgentEvent> Parse(string line)
+    public static IEnumerable<AgentEvent> Parse(string line) => Read(line) is { } m ? Parse(m) : [];
+
+    /// <summary>One line of stream-json as an object; null for anything else.</summary>
+    public static JsonObject? Read(string line)
     {
-        JsonObject? m;
-        try { m = JsonNode.Parse(line) as JsonObject; }
-        catch (JsonException) { yield break; }
-        if (m is null) yield break;
+        try { return JsonNode.Parse(line) as JsonObject; }
+        catch (JsonException) { return null; }
+    }
+
+    public static IEnumerable<AgentEvent> Parse(JsonObject m)
+    {
         switch ((string?)m["type"])
         {
             case "system" when (string?)m["subtype"] == "init":
@@ -260,6 +265,8 @@ public sealed class AgentSession : IAsyncDisposable
     public string Cwd { get; }
     public string? SessionId { get; private set; }
     public bool Running => !_proc.HasExited;
+    /// <summary>The session's clock (WOR-0206): each step of its start and turns goes to agents.log; null: not timed.</summary>
+    public AgentTimings? Timings { get; private set; }
 
     AgentSession(Process proc, string cwd) { _proc = proc; Cwd = cwd; }
 
@@ -278,7 +285,8 @@ public sealed class AgentSession : IAsyncDisposable
 
     /// <param name="apiUrl">The Darg API's address with the token (<see cref="ArtifactServer.ApiUrl"/>), set as DARG_API
     /// so an agent calls a command with no token to find (WOR-0138).</param>
-    public static AgentSession Start(string cwd, string? model = null, IEnumerable<string>? extraArgs = null, string? apiUrl = null)
+    /// <param name="timings">The agent's clock, started when it was made (so its model pick counts); null: not timed.</param>
+    public static AgentSession Start(string cwd, string? model = null, IEnumerable<string>? extraArgs = null, string? apiUrl = null, AgentTimings? timings = null)
     {
         var claude = FindClaude() ?? throw new FileNotFoundException("Couldn't find claude. Set CLAUDE_PATH or put it on PATH.");
         var psi = new ProcessStartInfo(claude)
@@ -293,16 +301,18 @@ public sealed class AgentSession : IAsyncDisposable
         if (model is not null) { psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model); }
         foreach (var a in extraArgs ?? []) psi.ArgumentList.Add(a);
         if (apiUrl is not null) psi.Environment["DARG_API"] = apiUrl;
-        return Run(psi);
+        return Run(psi, timings);
     }
 
     /// <summary>Run a session on a process that speaks stream-json (claude, as <see cref="Start(string, string?, IEnumerable{string}?)"/>
     /// sets it up, or a stand-in). Its stdin, stdout and stderr must be redirected.</summary>
-    public static AgentSession Run(ProcessStartInfo psi)
+    public static AgentSession Run(ProcessStartInfo psi, AgentTimings? timings = null)
     {
         var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        var s = new AgentSession(proc, psi.WorkingDirectory);
+        var s = new AgentSession(proc, psi.WorkingDirectory) { Timings = timings };
+        var spawn = Stopwatch.StartNew();
         proc.Start();
+        timings?.ProcessStarted(spawn.Elapsed, psi.ArgumentList.Count);
         s._group = ChildProcesses.Leftovers(proc, LeftBehind);
         proc.StandardInput.AutoFlush = true;
         s._writer = Task.Run(s.WriteLoop);
@@ -316,13 +326,18 @@ public sealed class AgentSession : IAsyncDisposable
     {
         string? line;
         while ((line = await _proc.StandardOutput.ReadLineAsync()) is not null)
-            foreach (var e in StreamParser.Parse(line))
+        {
+            if (StreamParser.Read(line) is not { } m) continue;
+            Timings?.Saw(m); // stamped here, as it's read, not when the UI thread gets to it
+            foreach (var e in StreamParser.Parse(m))
             {
                 if (e is SessionStarted st) SessionId = st.SessionId;
                 if (e is UsageLimited u) UsageMeter.Shared.Report(u);
                 Event?.Invoke(e);
             }
+        }
         await _proc.WaitForExitAsync();
+        Timings?.Exited(_proc.ExitCode);
         string err; lock (_stderr) err = _stderr.ToString();
         Event?.Invoke(new SessionExited(_proc.ExitCode, err));
     }
@@ -351,6 +366,7 @@ public sealed class AgentSession : IAsyncDisposable
                 ["source"] = new JsonObject { ["type"] = "base64", ["media_type"] = MediaType(p), ["data"] = Convert.ToBase64String(File.ReadAllBytes(p)) },
             });
         SendRaw(new JsonObject { ["type"] = "user", ["message"] = new JsonObject { ["role"] = "user", ["content"] = content } });
+        Timings?.Sent();
     }
 
     public void Allow(string requestId, JsonObject input) => Respond(requestId,
@@ -397,11 +413,15 @@ public sealed class AgentSession : IAsyncDisposable
         ["type"] = "control_request", ["request_id"] = $"set-{Interlocked.Increment(ref _nextId)}", ["request"] = request,
     });
 
-    void Respond(string requestId, JsonObject response) => SendRaw(new JsonObject
+    void Respond(string requestId, JsonObject response)
     {
-        ["type"] = "control_response",
-        ["response"] = new JsonObject { ["subtype"] = "success", ["request_id"] = requestId, ["response"] = response },
-    });
+        SendRaw(new JsonObject
+        {
+            ["type"] = "control_response",
+            ["response"] = new JsonObject { ["subtype"] = "success", ["request_id"] = requestId, ["response"] = response },
+        });
+        Timings?.Answered(requestId);
+    }
 
     static string MediaType(string path) => Path.GetExtension(path).ToLowerInvariant() switch
     {

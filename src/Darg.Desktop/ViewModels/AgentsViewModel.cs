@@ -957,6 +957,7 @@ public partial class AgentViewModel : ObservableObject
         Task<ProfilePick?>? profile = null)
     {
         if (id is not null) Id = id;
+        _firstClock = new AgentTimings(Id); // from now, so the model pick counts in its first turn (WOR-0206)
         Cwd = cwd;
         CardId = cardId;
         _args = args?.ToList() ?? [];
@@ -973,18 +974,22 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>The model profile it started on ("Deep"), if one was picked.</summary>
     [ObservableProperty] public partial string Profile { get; set; } = "";
     bool _handPicked, _ended;
+    // the clock its first session takes over: started when the agent was made (WOR-0206); a resumed session starts its own
+    AgentTimings? _firstClock;
 
     /// <summary>Wait for the profile (a rule's is there at once; Haiku's takes a few seconds), take its model
     /// and effort unless the person picked their own meanwhile, then start.</summary>
     async void StartOnProfile(Task<ProfilePick?> profile, string prompt)
     {
         ProfilePick? pick = null;
+        _firstClock?.PickStarted();
         if (!profile.IsCompleted)
         {
             State = AgentState.Starting;
             Activity = "Picking a model…";
         }
         try { pick = await profile; } catch (Exception) { }
+        _firstClock?.PickEnded(pick?.Profile.Name, pick?.Why);
         if (_ended) return; // closed or forgotten while it was being picked
         if (pick is not null && !_handPicked)
         {
@@ -1063,7 +1068,9 @@ public partial class AgentViewModel : ObservableObject
             if (runModel != _model || runEffort != _effort)
                 Items.Add(new NoteItem($"Optimise tokens is on: starting on {TokenSaver.Describe(runModel, runEffort)} (it was given {TokenSaver.Describe(_model, _effort)})", false));
             AgentSession session;
-            using (StallWatch.Shared.Section("AgentSession.Start")) session = AgentSession.Start(Cwd, extraArgs: args, apiUrl: ArtifactHost.Server?.ApiUrl);
+            var clock = _firstClock ?? new AgentTimings(Id);
+            _firstClock = null;
+            using (StallWatch.Shared.Section("AgentSession.Start")) session = AgentSession.Start(Cwd, extraArgs: args, apiUrl: ArtifactHost.Server?.ApiUrl, timings: clock);
             _session = session;
             (_runModel, _runEffort) = (runModel, runEffort);
             // a session closed on request still reports its last events and its exit: they're not news
@@ -1188,7 +1195,9 @@ public partial class AgentViewModel : ObservableObject
                 if (f.IsError) Items.Add(new NoteItem(f.Text, true));
                 // Claude Code reports a cost on every turn, priced as if on the API; on a subscription
                 // nothing is charged per turn, so only an API-key session shows it
-                Items.Add(new NoteItem(!OnSubscription && f.CostUsd is { } cost ? $"Turn done · ${cost:0.000} (API key)" : "Turn done", false));
+                // how long it took, from agents.log's clock (WOR-0206): the first turn's counts from the agent being made
+                var took = _session?.Timings?.LastTurn is { Length: > 0 } spent ? $" · {spent}" : "";
+                Items.Add(new NoteItem(!OnSubscription && f.CostUsd is { } cost ? $"Turn done{took} · ${cost:0.000} (API key)" : $"Turn done{took}", false));
                 TurnFailed = f.IsError;
                 Activity = OneLine(f.IsError ? f.Text : Items.OfType<TextItem>().LastOrDefault()?.Text ?? f.Text);
                 State = AgentState.Idle;
