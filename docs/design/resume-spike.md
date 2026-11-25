@@ -1,7 +1,8 @@
 ---
 kind: feature
-status: draft
+status: agreed
 parent: seamless-machine-switching
+board: Resume spike
 ---
 # Resume spike
 
@@ -28,6 +29,8 @@ A throwaway experiment, not a feature: copy a finished agent's Claude conversati
 
 **Context:** the Mac has a `claude` and a Darg build (`docs/MAC-NOTES.md` says starting a real agent there is untried).
 
+**Answer:** On this PC, into a second folder with a different path key, then the Mac as the final check (Philip, 2026-11-24)
+
 ### Which conversation is the guinea pig?
 - **A throwaway session the spike makes itself** (recommended): a short Haiku session that reads a file, makes a note and is told a secret word, so a resume can be checked ("what was the word?") and costs nothing real.
 - **One of Philip's real saved agents**: shows the real shape (long, with subagents and large tool results) but a failed or odd resume touches something he may want.
@@ -35,12 +38,16 @@ A throwaway experiment, not a feature: copy a finished agent's Claude conversati
 
 **Context:** a throwaway proves the mechanism; a real long one shows whether size or subagent folders matter.
 
+**Answer:** A throwaway session the spike makes itself (Philip, 2026-11-24)
+
 ### If the plain copy doesn't resume, how far does the spike go?
 - **Stop and report what Claude Code said** (recommended): a failed resume is a finding. The agents feature then plans the fresh-with-transcript fallback only.
 - **Try rewriting the paths in the copied file and resume again**: may rescue it, but editing Claude's own file format is fragile and ties Darg to it.
 - **Try both, and report which of them worked**: a fuller answer for one more card.
 
 **Context:** the project plan already treats the fresh-with-transcript fallback as wanted either way.
+
+**Answer:** Stop and report what Claude Code said (Philip, 2026-11-24)
 
 ## Design
 
@@ -67,25 +74,25 @@ A script, `tools/resume-spike.ps1`, does 1 to 3 and 5 so the PC run can be repea
 
 ## Cards
 
-### Spike script: make a session, copy it under another path, resume it
+### RES-0001: Spike script: make a session, copy it under another path, resume it
 Write `tools/resume-spike.ps1`, which makes a short Haiku session in one folder with a secret word in it, copies the session file into the key folder for a second path, resumes from there and prints the result. It takes the two folders, whether to copy the session's sibling folder, and writes its commands and outputs to a log so a run can be repeated or compared.
 **Where:** `tools/resume-spike.ps1`, `.shots/resume-spike/` for its output
 **Done when:** running the script prints whether the resumed session knew the secret word, shows the key folder it used for each path, and leaves a log of every command and Claude's output.
 **Blocked by:** none
 
-### Run the spike on this PC and record what has to be copied
+### RES-0002: Run the spike on this PC and record what has to be copied
 Run the script from the spike card: file only, then file plus sibling folder, then the edge checks (resume from a folder with no copy, and the exact error). Note the Claude Code version and which variants resumed. Write the results as the PC part of the findings file.
 **Where:** `docs/resume-spike-findings.md`, `tools/resume-spike.ps1`
 **Done when:** the findings file has a table of what was copied against whether resume worked, the exact error text when it didn't, and the Claude Code version.
 **Blocked by:** Spike script: make a session, copy it under another path, resume it
 
-### Run the Mac step and write what the agent makes of Windows paths
+### RES-0003: Run the Mac step and write what the agent makes of Windows paths
 With the PC's sample session copied to the Mac, resume it under the Mac's path key and ask the agent its working folder and the secret word; note whether it tries `D:\` paths from its old history. This needs Philip at the Mac, so the card writes the exact commands first and leaves the results for him to paste in, then adds them.
 **Where:** `docs/resume-spike-findings.md`
 **Done when:** the findings file's Mac part lists the commands, the Mac's Claude Code version, whether resume worked, and what the agent said about the working folder and Windows paths.
 **Blocked by:** Run the spike on this PC and record what has to be copied
 
-### State the rule for the agents feature
+### RES-0004: State the rule for the agents feature
 From the findings, add a short section to the findings file saying what the agents feature must copy, how it derives the key for a folder, how it detects a failed resume, and whether the fresh-with-transcript fallback is the only path. Link the findings from the project plan's agents section.
 **Where:** `docs/resume-spike-findings.md`, `docs/design/seamless-machine-switching.md`
 **Done when:** the findings end with a "the agents feature should" list of at least four lines, and the project plan's spike bullet links to the file.
