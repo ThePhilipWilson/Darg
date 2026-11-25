@@ -377,7 +377,7 @@ public class PlansTests : IDisposable
         var before = File.ReadAllText(f);
         var r = PlanStore.MakeCards(f, boards);
         Assert.False(r.Ok);
-        Assert.Contains("\"Notifications\" is 2/3", r.Problem);
+        Assert.Contains("\"Notifications\": it is 2/3", r.Problem);
         Assert.Contains("when it's done", r.Problem);
         Assert.Empty(r.Made);
         Assert.False(Directory.Exists(Path.Combine(boards, "Android app")));   // not even the board
@@ -399,7 +399,7 @@ public class PlansTests : IDisposable
         var loop = Save(ThreeCards.Replace("**Where:** `src/Remote.cs`", "**Blocked by:** Pairing in the app\n**Where:** `src/Remote.cs`"), "loop.md");
         Assert.Contains("loop", PlanStore.MakeCards(loop, Boards("boards2")).Problem);
         var typo = Save(ThreeCards.Replace("**Blocked by:** none", "**Blocked by:** Nothing like it"), "typo.md");
-        Assert.Contains("no card in the plan", PlanStore.MakeCards(typo, Boards("boards3")).Problem);
+        Assert.Contains("is no card in this plan", PlanStore.MakeCards(typo, Boards("boards3")).Problem);
     }
 
     /// <summary>WOR-0179: a feature's title is linked to the file named for its plan, however the line is written, and

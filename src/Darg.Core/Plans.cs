@@ -89,6 +89,9 @@ public sealed record PlanCard(string Id, string Title, string Description, strin
         Description + (Where.Length > 0 ? "\n\n**Where:** " + Where : "") + (Done.Length > 0 ? "\n\n**Done when:** " + Done : "");
     /// <summary>How the card is named in another card's Blocked by: its id once made, else its heading.</summary>
     public string Ref => Made ? Id : Title;
+    /// <summary>The Blocked by line as written (several lines joined with commas), for <see cref="PlanScope"/> to cut
+    /// against the headings of the plans beside this one too (WOR-0201).</summary>
+    public string BlockedByText { get; init; } = "";
 }
 
 /// <summary>A feature a project plan lists: a line (or heading) with its feature plan linked once there is one.</summary>
@@ -132,13 +135,12 @@ public sealed partial record PlanDoc(
     /// <summary>What names this plan in another's <c>parent</c>: its file name without .md.</summary>
     public string Slug => string.IsNullOrEmpty(File) ? "" : Path.GetFileNameWithoutExtension(File);
 
-    /// <summary>The card a Blocked by entry names: by id, else by heading (case aside); null when it names none.</summary>
-    public PlanCard? Find(string reference) =>
-        Cards.FirstOrDefault(c => c.Made && c.Id.Equals(reference.Trim(), StringComparison.OrdinalIgnoreCase))
-        ?? Cards.FirstOrDefault(c => c.Title.Equals(reference.Trim(), StringComparison.OrdinalIgnoreCase));
+    /// <summary>The card a Blocked by entry names in this plan: by id, else by heading (case aside); null when it names
+    /// none here. <see cref="PlanScope.Resolve"/> looks in the plans beside it too.</summary>
+    public PlanCard? Find(string reference) => new PlanScope([this]).Resolve(this, reference).Card;
 
     /// <summary>Blocked by entries that name no card in this plan and aren't shaped like a card id (which may be a
-    /// card on a board): a typo, shown as a warning.</summary>
+    /// card on a board): a typo, or a card in a plan beside this one, which <see cref="PlanScope"/> finds.</summary>
     public IReadOnlyList<string> UnknownBlockers() =>
         Cards.SelectMany(c => c.BlockedBy).Where(r => Find(r) is null && !IdRx().IsMatch(r)).Distinct().ToList();
 
@@ -172,7 +174,7 @@ public sealed partial record PlanDoc(
             Items(Of("Goals")), Items(Of("Not doing", "Non-goals", "Out of scope")),
             Subsections(Of("Questions")).Select(s => Question(s.Heading, s.Lines)).ToList(),
             string.Join("\n", Of("Design")).Trim(),
-            Subsections(Of("Cards")).Select(s => Card(s.Heading, s.Lines)).ToList(),
+            OwnBlockers(Subsections(Of("Cards")).Select(s => Card(s.Heading, s.Lines)).ToList()),
             ReadFeatures(features))
         {
             Unticked = PropList(P(PlanStore.UntickedKey)), UntickedFeatures = PropList(P(PlanStore.UntickedFeaturesKey)),
@@ -255,10 +257,18 @@ public sealed partial record PlanDoc(
             else if (l.Trim().Length == 0) current = null;
             else (current ?? desc).Add(l.Trim());
         }
-        var blocked = string.Join(",", fields["Blocked by"]).Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .SelectMany(s => AndRx().Split(s)).Select(s => s.Trim().Trim('.', '`', '*').Trim())
-            .Where(s => s.Length > 0 && !NoneRx().IsMatch(s)).ToList();
-        return new PlanCard(id, title, string.Join("\n", desc).Trim(), string.Join(" ", fields["Where"]), string.Join(" ", fields["Done when"]), blocked);
+        return new PlanCard(id, title, string.Join("\n", desc).Trim(), string.Join(" ", fields["Where"]), string.Join(" ", fields["Done when"]), [])
+        {
+            BlockedByText = string.Join(", ", fields["Blocked by"]),
+        };
+    }
+
+    /// <summary>Each card's Blocked by cut into entries, a heading of this plan kept whole however many commas or "and"s
+    /// it has (WOR-0201: they were cut apart, so no row naming one could be made).</summary>
+    static List<PlanCard> OwnBlockers(List<PlanCard> cards)
+    {
+        var names = new HashSet<string>(cards.SelectMany(c => c.Made ? new[] { c.Title, c.Id } : [c.Title]).Select(PlanScope.Clean), StringComparer.OrdinalIgnoreCase);
+        return cards.Select(c => c with { BlockedBy = PlanScope.Split(c.BlockedByText, s => names.Contains(PlanScope.Clean(s))) }).ToList();
     }
 
     /// <summary>A project's features: a <c>###</c> heading each, else a bullet each.</summary>
@@ -297,8 +307,6 @@ public sealed partial record PlanDoc(
     [GeneratedRegex(@"^\s*(?:[-*+]\s+)?(?:\*\*|__)?\s*([A-Za-z][A-Za-z ]{2,12}?)\s*(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.*)$")] private static partial Regex LabelRx();
     [GeneratedRegex(@"^([A-Za-z][A-Za-z0-9]*-\d+)\s*(?:[:\-–—]\s*)?(.*)$")] private static partial Regex IdHeadingRx();
     [GeneratedRegex(@"^[A-Za-z][A-Za-z0-9]*-\d+$")] private static partial Regex IdRx();
-    [GeneratedRegex(@"\s+and\s+", RegexOptions.IgnoreCase)] private static partial Regex AndRx();
-    [GeneratedRegex(@"^(none|nothing|n/a|-|–|—)\.?$", RegexOptions.IgnoreCase)] private static partial Regex NoneRx();
     [GeneratedRegex(@"\[([^\]]+)\]\(([^)]+)\)")] private static partial Regex LinkRx();
 }
 
@@ -512,7 +520,17 @@ public static class PlanStore
         IReadOnlyList<string> OpenQuestions, bool CreatedBoard)
     {
         public bool Ok => Problem.Length == 0 && !NeedsConfirm;
+        /// <summary>The rows that can't be made and why (WOR-0201): nothing is made while there are any, unless asked to
+        /// make just the rest.</summary>
+        public IReadOnlyList<PlanMaking.CantMake> Cant { get; init; } = [];
+        /// <summary>How many of the rows asked for can be made.</summary>
+        public int CanMake { get; init; }
+        /// <summary>Each card made, with its plan file and board (Make all makes on several).</summary>
+        public IReadOnlyList<MadeCard> Detail { get; init; } = [];
+        public IReadOnlyList<string> CreatedBoards { get; init; } = [];
     }
+
+    public sealed record MadeCard(string Id, string Title, string PlanFile, string Board);
 
     /// <summary>Make a plan's cards on its story board (WOR-0177, docs/FEATURE-PLANNING.md "From plan to board"). The board is
     /// the plan's <c>board:</c>, or one named for the plan, made with the project's columns and a prefix from the plan's name
@@ -522,11 +540,14 @@ public static class PlanStore
     /// a row under 3/3 (its missing parts named), an unknown or circular Blocked by, a repeated heading, or open questions
     /// without <paramref name="confirmOpen"/> make nothing. Run again it makes only the rows still without an id; it never
     /// deletes a card.</summary>
-    public static MadeCards MakeCards(string file, string boardsFolder, IEnumerable<string>? only = null, bool confirmOpen = false)
+    /// <remarks>WOR-0201: a Blocked by entry may name a card in a plan beside this one under the same project
+    /// (<see cref="PlanScope"/>): one made counts by its id, one not made yet stops the row. Every row that can't be made
+    /// is named with why (<see cref="MadeCards.Cant"/>); <paramref name="skipBlocked"/> makes the rest.</remarks>
+    public static MadeCards MakeCards(string file, string boardsFolder, IEnumerable<string>? only = null, bool confirmOpen = false, bool skipBlocked = false)
     {
         var plan = PlanDoc.Load(file);
         var open = plan.OpenQuestions.Select(q => q.Question).ToList();
-        MadeCards Stop(string problem, bool confirm = false) => new(plan.Board, [], problem, confirm, open, false);
+        MadeCards Stop(string problem) => new(plan.Board, [], problem, false, open, false);
 
         var pick = only?.Select(o => o.Trim()).Where(o => o.Length > 0).ToList();
         if (pick is not null)
@@ -535,68 +556,35 @@ public static class PlanStore
         var rows = plan.Cards.Where(c => !c.Made && (pick is null || pick.Any(o => o.Equals(c.Title, StringComparison.OrdinalIgnoreCase)))).ToList();
         if (rows.Count == 0) return Stop("Every card in the plan has been made already.");
         if (plan.Status == "dropped") return Stop("The plan is dropped.");
+        var scope = PlanScope.For(plan, List(Path.GetDirectoryName(file)));
+        return PlanMaking.Make(scope, rows.Select(c => new PlanMaking.Row(plan, c)).ToList(), boardsFolder, confirmOpen, skipBlocked, "");
+    }
 
-        var unready = rows.Where(c => !c.Ready).ToList();
-        if (unready.Count > 0)
-            return Stop("Not made: " + string.Join("; ", unready.Select(c =>
-                $"\"{c.Title}\" is {c.Score.Stars}/{TicketScore.Max} and doesn't say {string.Join(" or ", c.Score.Missing)}")) + ". Fix the plan first.");
-        var dup = plan.Cards.GroupBy(c => c.Title, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() > 1);
-        if (dup is not null) return Stop($"Two cards in the plan are headed \"{dup.Key}\": give each its own heading.");
+    /// <summary>The rows Make all makes for a project plan (WOR-0201): every card with no id, ticked (not in its plan's
+    /// <c>unticked</c>), in the project plan and in each of its features' plans that isn't dropped.</summary>
+    public static List<PlanMaking.Row> AllRows(PlanDoc project, IReadOnlyList<PlanDoc> plans) =>
+        FeaturePlans(project, plans).Prepend(project).Where(p => p.Status != "dropped")
+            .SelectMany(p => p.Cards.Where(c => !c.Made && !p.Unticked.Contains(c.Title, StringComparer.OrdinalIgnoreCase)).Select(c => new PlanMaking.Row(p, c)))
+            .ToList();
 
-        // order: a row after every row it waits on
-        var chosen = rows.ToHashSet();
-        var ordered = new List<PlanCard>();
-        var visiting = new HashSet<PlanCard>();
-        string? bad = null;
-        void Visit(PlanCard c)
-        {
-            if (bad is not null || ordered.Contains(c)) return;
-            if (!visiting.Add(c)) { bad = $"\"{c.Title}\" waits on itself through a loop of Blocked by."; return; }
-            foreach (var r in c.BlockedBy)
-            {
-                var t = plan.Find(r);
-                if (t is null) { if (Blockers.ParseIds(r).Count == 0) bad = $"\"{c.Title}\" is blocked by \"{r}\", which is no card in the plan."; continue; }
-                if (t.Made) continue;
-                if (!chosen.Contains(t)) { bad = $"\"{c.Title}\" waits on \"{t.Title}\", which isn't being made: include it too."; return; }
-                Visit(t);
-            }
-            visiting.Remove(c);
-            if (bad is null) ordered.Add(c);
-        }
-        foreach (var c in rows) Visit(c);
-        if (bad is not null) return Stop(bad);
+    /// <summary>A project plan's features' plans, in the order its Features list them, each once.</summary>
+    public static List<PlanDoc> FeaturePlans(PlanDoc project, IReadOnlyList<PlanDoc> plans) =>
+        project.Features.Select(f => FeaturePlan(project, f, plans)).OfType<PlanDoc>().Where(p => p != project).Distinct().ToList();
 
-        if (open.Count > 0 && !confirmOpen) return Stop("", confirm: true);
-
-        // the board
-        var name = plan.Board.Length > 0 ? plan.Board : (plan.Title.Length > 0 ? plan.Title : plan.Slug);
-        name = Regex.Replace(name, "[\\\\/:*?\"<>|]", " ").Trim().TrimStart('.').Trim();
-        if (name.Length == 0) return Stop("The plan has no name to give its board: set board: in its properties.");
-        var folder = Path.Combine(boardsFolder, name);
-        var created = false;
-        if (!File.Exists(Path.Combine(folder, "board.json")))
-        {
-            if (Directory.Exists(folder)) return Stop($"{folder} exists but isn't a board.");
-            var columns = BoardStore.List(boardsFolder).Select(b => BoardStore.Load(Path.Combine(boardsFolder, b)).Columns.Select(c => c.Name).ToList())
-                .FirstOrDefault(c => c.Count > 0) ?? [.. BoardStore.DefaultColumns];
-            BoardStore.CreateBoard(boardsFolder, name, columns, PrefixFor(plan.Title.Length > 0 ? plan.Title : name));
-            created = true;
-        }
-        if (!plan.Board.Equals(name, StringComparison.Ordinal)) SetProperty(file, "board", name);
-
-        var ids = new Dictionary<PlanCard, string>();
-        var made = new List<(string, string)>();
-        foreach (var c in ordered)
-        {
-            var card = BoardStore.Create(folder, c.Title, c.Ticket, null, "", CardTypes.Guess(c.Title + "\n" + c.Description, []));
-            ids[c] = card.Id;
-            SetCardId(file, c.Title, card.Id);   // at once, so a failure further on leaves the plan knowing what exists
-            made.Add((card.Id, c.Title));
-            var waits = c.BlockedBy.Select(r => plan.Find(r) is { } t ? (t.Made ? t.Id : ids[t]) : r).ToList();
-            if (waits.Count > 0) BoardStore.SetBlockedBy(folder, card.Id, waits);
-        }
-        if (plan.Status != "agreed") SetProperty(file, "status", "agreed");
-        return new MadeCards(name, made, "", false, open, created);
+    /// <summary>Make all (WOR-0201): every ticked card with no id in a project plan and its features' plans, each on its own
+    /// plan's story board, in Blocked by order across the plans, so a card waiting on one in another feature is made after
+    /// it and its Blocked by line holds the new id. As <see cref="MakeCards"/>: nothing made while a row can't be made
+    /// (unless <paramref name="skipBlocked"/>) or questions are open in a plan that would get cards (until
+    /// <paramref name="confirmOpen"/>).</summary>
+    public static MadeCards MakeAll(string projectFile, string boardsFolder, bool confirmOpen = false, bool skipBlocked = false)
+    {
+        var all = List(Path.GetDirectoryName(projectFile));
+        var project = all.FirstOrDefault(p => PlanScope.SameFile(p, PlanDoc.Load(projectFile))) ?? PlanDoc.Load(projectFile);
+        if (!project.IsProject) return new(project.Board, [], $"{Path.GetFileName(projectFile)} is a feature plan: Make all is for a project plan.", false, [], false);
+        if (project.Status == "dropped") return new(project.Board, [], "The plan is dropped.", false, [], false);
+        var rows = AllRows(project, all);
+        return PlanMaking.Make(PlanScope.For(project, all), rows, boardsFolder, confirmOpen, skipBlocked,
+            FeaturePlans(project, all).Count == 0 ? "None of the features has a plan yet: draft the feature plans first." : "Every ticked card in the project's plans has been made already.");
     }
 
     /// <summary>A board prefix from a plan's name: its first three letters upper-cased (Android is AND); T with none.</summary>
