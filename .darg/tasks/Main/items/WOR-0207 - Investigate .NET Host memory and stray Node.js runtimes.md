@@ -6,7 +6,7 @@
 - **Labels:**
 - **Created:** 2026-11-25
 - **Done:** 2026-11-25
-- **Moved:** 2026-11-25 03:40:00
+- **Moved:** 2026-11-25 02:59:00
 
 ## Description
 
@@ -14,7 +14,7 @@ Philip reports the .NET Host process using a ton of memory, and a load of Node.j
 
 ## Findings
 
-Measured live on 2026-11-25 between 02:28 and 03:30 (process listings with parent chains, sampled every 20 s; Darg's perf.log since 2026-11-20).
+Measured live on 2026-11-25 between 02:28 and 02:58 (process listings with parent chains, sampled every 20 s; Darg's perf.log since 2026-11-20).
 
 - **The node processes are MCP servers, started by every Claude session.** Each agent's claude.exe starts the person's user-scope servers and the claude-draw plugin: three through `npx` (a 78 MB npx wrapper node plus the server's own node each), one through `uvx` (uv plus python), and claude-draw's node. That's 7 node processes and about 1 GB per session, on top of claude's own ~0.5 GB. With 8 agents running: 56 node processes and ~12 GB for claude plus its servers. None of the npx/uvx servers had ever been called in any transcript on disk. No orphans: every server's claude parent was alive, and they go when it does. The other 13 node processes on the machine (node20.exe) are a desk controller app's plugins, nothing to do with Darg.
 - **Haiku one-shots started the whole set too**, for a one-word answer with no tools. Fixed: `Haiku.Args` adds `--strict-mcp-config` (48ed882). Live check with the real CLI: peak child memory 1386 MB to 327 MB (hooks only), no node, 8.6 s to 6.5 s.
