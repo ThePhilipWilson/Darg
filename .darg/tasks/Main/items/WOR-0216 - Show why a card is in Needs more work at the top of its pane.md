@@ -1,11 +1,12 @@
 # WOR-0216: Show why a card is in Needs more work at the top of its panel
 
-- **Status:** Backlog
+- **Status:** QA Ready
 - **Priority:**
 - **Type:** Task
 - **Labels:**
 - **Created:** 2026-11-25
 - **Done:**
+- **Moved:** 2026-11-25 15:14:45
 
 ## Description
 
@@ -23,3 +24,11 @@ Show the latest send-back reason at the top of the card panel whenever the card 
 - An integration test in `tests/Darg.Desktop.Tests` fails without the change (send back, open the panel, see the box).
 
 **Questions:** "short summary" is taken as the newest entry shown as written (folded), not a model-made summary. Say if you want a Haiku summary instead.
+
+## How to check
+
+Changed: `QaNotes.Latest` (Core) and `CardEditor.SendBack*` plus BoardView.axaml's "Why it was sent back" box. Branch `android` (merged from `wor-0216`), commit 7efd3cd.
+
+Try: open a card in Needs more work that has a `## QA notes` section (or send one back from QA with Send back, then move it to Needs more work). Its panel shows an amber-bordered box above the description with the date, the newest entry (folded past 8 lines) and a Full QA notes button that shows every entry. A card in any other column, or with no QA notes, shows no box. I did not look at it in the running app, only through tests (`pwsh -File tools/test.ps1 -Filter SendBackReason`); check spacing and colour.
+
+Note: Full QA notes expands the whole section inside the box rather than scrolling the panel.
