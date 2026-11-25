@@ -201,6 +201,8 @@
                 </Style>
                 <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
                   <Setter Property="Foreground" Value="{DynamicResource Dim}"/>
+                  <!-- Fluent's disabled template paints a grey box; keep it bare like the enabled state -->
+                  <Setter Property="Background" Value="Transparent"/>
                 </Style>
               </Button.Styles>
             </Button>

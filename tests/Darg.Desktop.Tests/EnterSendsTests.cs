@@ -109,14 +109,21 @@ public class EnterSendsTests
         string Ink() => ((Avalonia.Media.ISolidColorBrush)clear.GetVisualDescendants()
             .OfType<Avalonia.Controls.Presenters.ContentPresenter>().First().Foreground!).Color.ToString();
         var idle = Ink();
+        string Back() => ((clear.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().First().Background)
+            as Avalonia.Media.ISolidColorBrush)?.Color.ToString() ?? "none";
+        var idleBack = Back();
+        app.Shot("clear-empty");
 
         Type(app, box, "half a thought");
         await DargApp.Settle();
         Assert.True(clear.IsEffectivelyEnabled);
+        app.Shot("clear-typed");
         // bright with something to clear, dim when empty
         string Key(string k) => ((Avalonia.Media.ISolidColorBrush)ThemeManager.Brush(k)).Color.ToString();
         Assert.Equal(Key("Dim"), idle);
         Assert.Equal(Key("Ink"), Ink());
+        // no grey box while empty: the highlight was on the wrong state
+        Assert.Equal(Back(), idleBack);
         var before = app.Prompts().Count;
         var at = clear.TranslatePoint(new Avalonia.Point(clear.Bounds.Width / 2, clear.Bounds.Height / 2), app.Window)!.Value;
         app.Window.MouseMove(at);
