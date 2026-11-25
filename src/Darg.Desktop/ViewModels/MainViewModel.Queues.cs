@@ -24,8 +24,26 @@ public partial class MainViewModel
             a => { var (qs, q) = Queue(a); var gone = a.List("cards").Where(id => qs.Remove(q, id)).ToList(); return gone.Count == 0 ? $"None of those is in {q.Name}." : $"Took {string.Join(", ", gone)} out of {q.Name}."; });
         Add("queue-run", "run a queue, or carry on after a pause (moving on past the card that failed), as its ▶ Run / Resume does; {pause: true} pauses it: " +
                          "{project, queue, pause?}. Running starts agents: only when Philip asks.", RunQueue);
-        Add("queue-delete", "delete a queue (its cards stay on their boards, agents at work carry on): {project, queue}.",
-            a => { var (qs, q) = Queue(a); qs.Delete(q); return $"Deleted {q.Name}."; });
+        Add("queue-delete", "delete a queue: {project, queue, cards?}. Its cards stay on their boards; with cards: true its unfinished cards are " +
+                            "deleted too (each to its board's .deleted folder; done ones stay). Agents at work carry on. Deleting cards: only when Philip asks.",
+            a =>
+            {
+                var (qs, q) = Queue(a);
+                var withCards = a.Get("cards") is { } c && (c.Equals("true", StringComparison.OrdinalIgnoreCase) || c is "1" or "yes");
+                var (deleted, failed) = qs.Delete(q, withCards);
+                return $"Deleted {q.Name}" + (deleted.Count > 0 ? $" and its unfinished cards {string.Join(", ", deleted)}" : withCards ? "; it had no unfinished cards" : "")
+                       + (failed.Count > 0 ? $"; couldn't delete {string.Join(", ", failed)}" : "") + ".";
+            });
+        Add("queue-rename", "rename a queue: {project, queue, name}.",
+            a => { var (qs, q) = Queue(a); var was = q.Name; return qs.Rename(q, a.Need("name")) is { } why ? throw new ApiError(why) : $"Renamed {was} to {q.Name}."; });
+        Add("queue-move", "move a queue among the project's queues, as dragging its lane does: {project, queue, to} (to: its new place, 1 first).",
+            a =>
+            {
+                var (qs, q) = Queue(a);
+                if (!int.TryParse(a.Need("to"), out var to) || to < 1) throw new ApiError("to is a place from 1.");
+                qs.Move(qs.All.ToList().IndexOf(q), to - 1);
+                return $"{q.Name} is queue {qs.All.ToList().IndexOf(q) + 1} of {qs.All.Count}.";
+            });
     }
 
     QueuesViewModel ProjectQueues(ApiArgs a)

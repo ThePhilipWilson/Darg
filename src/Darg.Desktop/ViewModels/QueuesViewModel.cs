@@ -24,8 +24,12 @@ public partial class QueuesViewModel : ObservableObject
     /// <summary>Start an agent on a card as Work on does (the board's <see cref="BoardViewModel.StartQueued"/>): null
     /// when started, else why not.</summary>
     public Func<string, string?>? Start { get; set; }
-    /// <summary>The board redraws its tiles (their queue chips and menus).</summary>
+    /// <summary>The board redraws its tiles (their queue chips and menus, and which cards sit in the lanes).</summary>
     public Action? Changed { get; set; }
+    /// <summary>A queued card's full tile from the board on screen (WOR-0220), or null when its board isn't showing.</summary>
+    public Func<string, CardViewModel?>? TileFor { get; set; }
+    /// <summary>Open a card's panel by id (a plain lane tile, for a card whose board isn't showing).</summary>
+    public Action<string>? OpenCard { get; set; }
     /// <summary>Ask the QA check (Haiku by default; tests may swap it).</summary>
     public Func<string, Task<string?>> Ask { get; set; } = prompt => Haiku.Ask(prompt, QueueCheck.Timeout);
 
@@ -53,6 +57,8 @@ public partial class QueuesViewModel : ObservableObject
     }
 
     public IReadOnlyList<CardQueue> All => _queues;
+    /// <summary>Whether any queue holds the card: then it shows in that queue's lane, not in its board's list.</summary>
+    public bool Has(string id) => _queues.Any(q => q.Has(id));
     public CardQueue? Find(string name) => _queues.FirstOrDefault(q => q.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>+ Queue: open the form, named for and filled from the board showing.</summary>
@@ -111,7 +117,41 @@ public partial class QueuesViewModel : ObservableObject
 
     public void Shift(CardQueue q, string id, int by) { if (QueueOrder.Shift(q, id, by)) Saved(); }
 
-    public void Delete(CardQueue q) { _queues.Remove(q); Saved(); }
+    /// <summary>Delete a queue (WOR-0220). With <paramref name="cards"/>, its unfinished cards go too, each to its board's
+    /// .deleted folder as a card's own Delete does (so they can come back); done ones stay as the record. Agents at work
+    /// on them carry on. Says which cards were deleted, and any that couldn't be.</summary>
+    public (IReadOnlyList<string> Deleted, IReadOnlyList<string> Failed) Delete(CardQueue q, bool cards = false)
+    {
+        var deleted = new List<string>();
+        var failed = new List<string>();
+        if (cards && _config.Boards is { } boards)
+        {
+            var all = CardIndex.Read(boards);
+            foreach (var id in q.Cards)
+            {
+                if (all.FirstOrDefault(c => c.Card.Id.Equals(id, StringComparison.OrdinalIgnoreCase)) is not { Done: false } c) continue;
+                try { BoardStore.Delete(Path.Combine(boards, c.Board), c.Card.Id); deleted.Add(c.Card.Id); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or System.Text.Json.JsonException) { failed.Add(c.Card.Id); }
+            }
+        }
+        _queues.Remove(q);
+        Saved();
+        return (deleted, failed);
+    }
+
+    /// <summary>Rename a queue: null when renamed, else why not (blank, or another queue's name).</summary>
+    public string? Rename(CardQueue q, string? name)
+    {
+        if (QueueStore.Rename(q, name, _queues) is { } why) return why;
+        Saved();
+        return null;
+    }
+
+    /// <summary>Move a queue to another place among the lanes (dragged by its grip, or the API's queue-move).</summary>
+    public void Move(int from, int to) { if (QueueStore.Move(_queues, from, to)) Saved(); }
+
+    /// <summary>The board has built its tiles again: each lane takes the new ones.</summary>
+    public void TilesChanged() { foreach (var row in Queues) row.Refresh(); }
 
     /// <summary>Run, Resume or Pause.</summary>
     public void Toggle(CardQueue q)
@@ -225,36 +265,62 @@ public partial class QueuesViewModel : ObservableObject
 
     QueueViewModel? Row(CardQueue q) => Queues.FirstOrDefault(r => r.Queue == q);
 
-    /// <summary>The strip's rows, one per queue, kept in place.</summary>
+    /// <summary>The lanes, one per queue in the queues' order, each kept while its queue is.</summary>
     void Show()
     {
-        foreach (var r in Queues.Where(r => !_queues.Contains(r.Queue)).ToList()) Queues.Remove(r);
-        for (var i = 0; i < _queues.Count; i++)
-            if (Row(_queues[i]) is null) Queues.Insert(i, new QueueViewModel(this, _queues[i]));
+        ListSync.Sync(Queues, _queues.Select(q => Row(q) ?? new QueueViewModel(this, q)).ToList());
         foreach (var r in Queues) r.Refresh();
         OnPropertyChanged(nameof(HasQueues));
         OnPropertyChanged(nameof(ShowsStrip));
     }
 }
 
-/// <summary>One queue in the strip: its name, how far it has got, what it's doing, Run / Pause, and its cards when opened.</summary>
+/// <summary>One queue's lane on the board (WOR-0220): a box holding its cards' tiles in the queue's order (they leave their
+/// lists while queued), headed by its name, how far it has got, what it's doing and Run / Pause, with a grip to drag it
+/// among the queues and a menu to rename or delete it, keeping its cards or deleting the unfinished ones with it. Folded,
+/// it shows the cards' ids in order on one line.</summary>
 public partial class QueueViewModel(QueuesViewModel owner, CardQueue queue) : ObservableObject
 {
     public CardQueue Queue { get; } = queue;
     public string Name => Queue.Name;
     [ObservableProperty] public partial string Summary { get; set; } = "";
     [ObservableProperty] public partial string Doing { get; set; } = "";
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Arrow))] public partial bool IsOpen { get; set; }
+    /// <summary>Open by default: the lane is where its cards are.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(Arrow), nameof(IsFolded))] public partial bool IsOpen { get; set; } = true;
+    public bool IsFolded => !IsOpen;
     public string Arrow => IsOpen ? "▾" : "▸";
     [ObservableProperty] public partial string AddText { get; set; } = "";
-    [ObservableProperty] public partial bool ConfirmingDelete { get; set; }
+    /// <summary>The cards' ids in order, for the folded lane: "1 T-0002 → 2 T-0001".</summary>
+    [ObservableProperty] public partial string Line { get; set; } = "";
     public ObservableCollection<QueueCardViewModel> Cards { get; } = [];
+    public bool IsEmpty => Cards.Count == 0;
     public string RunText => !Queue.Paused ? "⏸ Pause" : Queue.HasRun ? "▶ Resume" : "▶ Run";
     public string RunTip => !Queue.Paused ? "Start nothing new; what's at work carries on"
         : Queue.PausedOn is { } on ? $"Carry on: move on past {on} (it stays on its board for you) and start the next card"
         : "Start the first card; each next one starts once the one before is done, or in QA with nothing waiting on that QA";
     public bool IsPaused => Queue.Paused;
     public bool Failed => Queue.PausedOn is not null;
+
+    // renaming, in place of the name
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowsName))] public partial bool IsRenaming { get; set; }
+    public bool ShowsName => !IsRenaming;
+    [ObservableProperty] public partial string RenameText { get; set; } = "";
+    [ObservableProperty] public partial string RenameError { get; set; } = "";
+
+    // deleting asks first, saying what goes: the queue alone, or its unfinished cards too
+    public enum Deleting { No, Queue, WithCards }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ConfirmingDelete), nameof(DeleteQuestion), nameof(DeleteText))]
+    public partial Deleting AskingDelete { get; set; }
+    public bool ConfirmingDelete => AskingDelete != Deleting.No;
+    /// <summary>The cards Delete with its cards would delete: those not done.</summary>
+    List<string> Unfinished => Queue.Cards.Where(id => owner.Card(id) is { Done: false }).ToList();
+    public string DeleteQuestion => AskingDelete == Deleting.WithCards
+        ? Unfinished is { Count: > 0 } u
+            ? $"Delete {Name} and its {Plural(u.Count, "unfinished card")} ({string.Join(", ", u)})? They go to their boards' .deleted folders; done cards stay."
+            : $"Delete {Name}? It has no unfinished cards, so no card is deleted."
+        : $"Delete {Name}? Its cards stay on their boards.";
+    public string DeleteText => AskingDelete == Deleting.WithCards ? "Delete queue and cards" : "Delete queue";
+    static string Plural(int n, string what) => n == 1 ? $"1 {what}" : $"{n} {what}s";
 
     /// <summary>What the queue's last step said, in words.</summary>
     public void Said(QueueStep step) => Doing = step switch
@@ -275,15 +341,41 @@ public partial class QueueViewModel(QueuesViewModel owner, CardQueue queue) : Ob
         Summary = $"{done} of {Queue.Cards.Count} done";
         if (Queue.Paused && Doing.Length == 0) Doing = Queue.Why ?? "Not running yet: press Run to start it.";
         ListSync.Sync(Cards, states.Select((s, i) =>
-            Cards.FirstOrDefault(c => c.Id == s.Id && c.Matches(i + 1, s.Card, s.State)) ?? new QueueCardViewModel(this, i + 1, s.Id, s.Card, s.State)).ToList());
-        OnPropertyChanged(nameof(RunText)); OnPropertyChanged(nameof(RunTip)); OnPropertyChanged(nameof(IsPaused)); OnPropertyChanged(nameof(Failed));
+        {
+            var tile = owner.TileFor?.Invoke(s.Id);
+            return Cards.FirstOrDefault(c => c.Id == s.Id && c.Matches(i + 1, s.Card, s.State, tile, states.Count))
+                ?? new QueueCardViewModel(this, i + 1, s.Id, s.Card, s.State, tile, states.Count);
+        }).ToList());
+        Line = string.Join("  →  ", Cards.Select(c => $"{c.Place} {c.Id}"));
+        foreach (var n in new[] { nameof(Name), nameof(RunText), nameof(RunTip), nameof(IsPaused), nameof(Failed), nameof(IsEmpty), nameof(DeleteQuestion) })
+            OnPropertyChanged(n);
     }
 
     [RelayCommand] void Toggle() { Doing = ""; owner.Toggle(Queue); }
     [RelayCommand] void Open() => IsOpen = !IsOpen;
-    [RelayCommand] void AskDelete() => ConfirmingDelete = true;
-    [RelayCommand] void CancelDelete() => ConfirmingDelete = false;
-    [RelayCommand] void Delete() => owner.Delete(Queue);
+    [RelayCommand] void AskDelete() => AskingDelete = Deleting.Queue;
+    [RelayCommand] void AskDeleteCards() => AskingDelete = Deleting.WithCards;
+    [RelayCommand] void CancelDelete() => AskingDelete = Deleting.No;
+    [RelayCommand]
+    void Delete()
+    {
+        var (deleted, failed) = owner.Delete(Queue, AskingDelete == Deleting.WithCards);
+        AskingDelete = Deleting.No;
+        if (failed.Count > 0) owner.Error = $"Deleted {Name}, but couldn't delete {string.Join(", ", failed)}.";
+        else if (deleted.Count > 0) owner.Error = "";
+    }
+
+    [RelayCommand] void StartRename() { RenameText = Name; RenameError = ""; IsRenaming = true; }
+    [RelayCommand] void CancelRename() { IsRenaming = false; RenameError = ""; }
+    [RelayCommand]
+    void CommitRename()
+    {
+        if (RenameText.Trim() == Name) { CancelRename(); return; }
+        if (owner.Rename(Queue, RenameText) is { } why) { RenameError = why; return; }
+        IsRenaming = false;
+        RenameError = "";
+        OnPropertyChanged(nameof(Name));
+    }
 
     /// <summary>The box under the cards: ids typed (spaces or commas), each added with its open blockers.</summary>
     [RelayCommand]
@@ -299,23 +391,36 @@ public partial class QueueViewModel(QueuesViewModel owner, CardQueue queue) : Ob
     internal void Up(string id) => owner.Shift(Queue, id, -1);
     internal void Down(string id) => owner.Shift(Queue, id, +1);
     internal void Remove(string id) => owner.Remove(Queue, id);
+    internal void OpenCard(string id) => owner.OpenCard?.Invoke(id);
 }
 
-/// <summary>A card in an opened queue: its place, id, title and state, with ↑ ↓ ✕.</summary>
-public partial class QueueCardViewModel(QueueViewModel queue, int place, string id, BoardCard? card, string state)
+/// <summary>A card in a queue's lane (WOR-0220): its place and where it is, above its tile: the board's own tile (Work on,
+/// its menu, a click opens it) when its board is on screen, else a plain one that opens it. ← → move it in the queue, ✕
+/// takes it out (it goes back to its list).</summary>
+public partial class QueueCardViewModel(QueueViewModel queue, int place, string id, BoardCard? card, string state, CardViewModel? tile = null, int count = 0)
 {
     public int Place { get; } = place;
     public string Id { get; } = id;
     public string Title => card?.Card.Title ?? "";
     public string State { get; } = state;
+    /// <summary>Its board and column, "Main · QA Ready"; or that no board has it.</summary>
+    public string Where => card is null ? "not on a board" : $"{card.Board} · {card.Column}";
     public string Line => $"{Place}. {Id}  {Title}";
+    public CardViewModel? Tile { get; } = tile;
+    public bool HasTile => Tile is not null;
+    public bool NoTile => Tile is null;
+    public bool IsFirst => Place == 1;
+    public bool IsLast => Place >= count;
     public bool IsDone => State == "done";
     public bool IsWorking => State == "working";
     public bool IsFailed => State == "failed";
     /// <summary>Finished with (done, moved on): faded, so what's still to come stands out.</summary>
     public double Fade => State is "done" or "moved on" ? 0.55 : 1;
-    public bool Matches(int place, BoardCard? c, string state) => Place == place && State == state && Title == (c?.Card.Title ?? "");
+    public bool Matches(int place, BoardCard? c, string state, CardViewModel? tile, int count) =>
+        Place == place && State == state && Title == (c?.Card.Title ?? "") && Where == (c is null ? "not on a board" : $"{c.Board} · {c.Column}")
+        && ReferenceEquals(Tile, tile) && IsLast == (place >= count);
     [RelayCommand] void Up() => queue.Up(Id);
     [RelayCommand] void Down() => queue.Down(Id);
     [RelayCommand] void Remove() => queue.Remove(Id);
+    [RelayCommand] void Open() => queue.OpenCard(Id);
 }

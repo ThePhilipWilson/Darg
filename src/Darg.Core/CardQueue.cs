@@ -350,4 +350,28 @@ public static class QueueStore
         if (!taken.Contains(name)) return name;
         for (var n = 2; ; n++) if (!taken.Contains($"{name} {n}")) return $"{name} {n}";
     }
+
+    /// <summary>Rename a queue (WOR-0220): the name trimmed, refused when blank or another queue has it (in any case;
+    /// the queue's own name in another case is fine). Null when renamed, else why not.</summary>
+    public static string? Rename(CardQueue q, string? wanted, IEnumerable<CardQueue> queues)
+    {
+        var name = wanted?.Trim() ?? "";
+        if (name.Length == 0) return "A queue needs a name.";
+        if (queues.Any(o => o != q && o.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) return $"There's a queue called {name} already.";
+        q.Name = name;
+        return null;
+    }
+
+    /// <summary>Move a queue to another place among the project's queues (WOR-0220: dragged in the board's lanes), the
+    /// others closing up around it. Says whether anything moved.</summary>
+    public static bool Move(List<CardQueue> queues, int from, int to)
+    {
+        if (from < 0 || from >= queues.Count) return false;
+        to = Math.Clamp(to, 0, queues.Count - 1);
+        if (from == to) return false;
+        var q = queues[from];
+        queues.RemoveAt(from);
+        queues.Insert(to, q);
+        return true;
+    }
 }

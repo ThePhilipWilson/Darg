@@ -896,7 +896,12 @@ public partial class ProjectViewModel : ObservableObject
                 Board.ReloadAll(); // the lock shows at once, not when the agent's state next changes
             };
             // WOR-0212: named queues of cards, worked one at a time; the next starts as the one before finishes
-            Queues = new QueuesViewModel(config, Agents) { Start = Board.StartQueued, Changed = Board.ReloadAll };
+            Queues = new QueuesViewModel(config, Agents)
+            {
+                Start = Board.StartQueued, Changed = Board.ReloadAll,
+                // WOR-0220: a queue's lane draws its cards' own tiles, and a card on a board not showing opens by id
+                TileFor = Board.LaneTile, OpenCard = id => Board.OpenById(id),
+            };
             Board.Queues = Queues;
             Board.Reloaded += Queues.Look;
             Board.Flows = () => Agents.Flows;

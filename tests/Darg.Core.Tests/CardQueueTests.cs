@@ -267,4 +267,29 @@ public sealed class CardQueueTests : IDisposable
         Assert.Equal("Queue", QueueStore.NameFor("", []));
         Assert.Empty(QueueStore.Load(Path.Combine(_root, "none.json")));
     }
+
+    /// <summary>WOR-0220: a queue renamed in its lane keeps names unique; dragged, it moves among the queues.</summary>
+    [Fact]
+    public void A_queue_renames_to_a_free_name_and_moves_among_the_queues()
+    {
+        var a = new CardQueue { Name = "Travel" };
+        var b = new CardQueue { Name = "Fixes" };
+        var c = new CardQueue { Name = "Later" };
+        var all = new List<CardQueue> { a, b, c };
+        Assert.Equal("There's a queue called fixes already.", QueueStore.Rename(a, " fixes ", all));
+        Assert.Equal("A queue needs a name.", QueueStore.Rename(a, "  ", all));
+        Assert.Equal("Travel", a.Name);
+        Assert.Null(QueueStore.Rename(a, "travel", all)); // its own name in another case
+        Assert.Null(QueueStore.Rename(a, " Trips ", all));
+        Assert.Equal("Trips", a.Name);
+
+        Assert.True(QueueStore.Move(all, 0, 2));
+        Assert.Equal([b, c, a], all);
+        Assert.True(QueueStore.Move(all, 2, 0));
+        Assert.Equal([a, b, c], all);
+        Assert.True(QueueStore.Move(all, 1, 99)); // past the end: last
+        Assert.Equal([a, c, b], all);
+        Assert.False(QueueStore.Move(all, 1, 1));
+        Assert.False(QueueStore.Move(all, 5, 0));
+    }
 }

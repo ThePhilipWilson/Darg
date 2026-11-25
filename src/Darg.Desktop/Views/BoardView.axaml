@@ -19,6 +19,9 @@
       <Setter Property="Opacity" Value="0.5"/>
     </Style>
     <Style Selector="Border.list:pointerover Button.head"><Setter Property="Opacity" Value="1"/></Style>
+    <!-- a queue card's ← at the front or → at the end (WOR-0220): faint, with no grey block behind it -->
+    <Style Selector="Button.head:disabled /template/ ContentPresenter"><Setter Property="Background" Value="Transparent"/></Style>
+    <Style Selector="Button.head:disabled"><Setter Property="Opacity" Value="0.25"/></Style>
     <Style Selector="Button.enlarge">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Padding" Value="0"/>
@@ -261,10 +264,11 @@
       </DockPanel>
     </Border>
 
-    <!-- WOR-0212: the project's queues, a line each: name, progress, what it's doing, Run / Pause; opened, its cards in order -->
+    <!-- WOR-0212, WOR-0220: the project's queues, a boxed lane each, holding its cards' tiles in the queue's order (they leave
+         their lists while queued); its grip drags it among the queues, its ⋯ renames or deletes it -->
     <Border Grid.Row="2" DataContext="{Binding Queues}" x:DataType="vm:QueuesViewModel" IsVisible="{Binding ShowsStrip, FallbackValue=False}"
             BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,6" Background="{DynamicResource Panel}">
-      <StackPanel Spacing="4">
+      <StackPanel Spacing="6">
         <DockPanel IsVisible="{Binding IsMaking}" LastChildFill="True">
           <TextBlock DockPanel.Dock="Left" Text="New queue" VerticalAlignment="Center" Margin="0,0,8,0"/>
           <Button DockPanel.Dock="Right" Content="Cancel" Command="{Binding CancelNewCommand}" Margin="6,0,0,0"/>
@@ -274,51 +278,106 @@
           <TextBlock Classes="dim" Text="{Binding MakeHint}" VerticalAlignment="Center" Margin="10,0,0,0" TextTrimming="CharacterEllipsis"/>
         </DockPanel>
         <TextBlock Classes="bad" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-        <ItemsControl ItemsSource="{Binding Queues}">
+        <ScrollViewer MaxHeight="480" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <ItemsControl x:Name="QueueLanes" ItemsSource="{Binding Queues}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:QueueViewModel">
-              <StackPanel Spacing="2" Margin="0,1">
-                <DockPanel>
-                  <Button DockPanel.Dock="Left" Classes="head" Opacity="1" Content="{Binding Arrow}" Command="{Binding OpenCommand}"
-                          AutomationProperties.Name="{Binding Name, StringFormat='Show queue {0}'}" ToolTip.Tip="Show or hide its cards"/>
-                  <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                  <TextBlock DockPanel.Dock="Left" Classes="dim" Text="{Binding Summary}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                  <Button DockPanel.Dock="Right" Content="{Binding RunText}" Command="{Binding ToggleCommand}" Classes.primary="{Binding IsPaused}" Margin="8,0,0,0"
-                          ToolTip.Tip="{Binding RunTip}" AutomationProperties.Name="{Binding Name, StringFormat='Run or pause queue {0}'}"/>
-                  <TextBlock Classes="dim" Classes.bad="{Binding Failed}" Text="{Binding Doing}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Doing}"/>
-                </DockPanel>
-                <StackPanel IsVisible="{Binding IsOpen}" Margin="26,2,0,4" Spacing="2">
-                  <ItemsControl ItemsSource="{Binding Cards}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:QueueCardViewModel">
-                        <DockPanel Margin="0,1">
-                          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
-                            <Button Classes="head" Opacity="1" Content="↑" Command="{Binding UpCommand}" ToolTip.Tip="Earlier in the queue" AutomationProperties.Name="{Binding Id, StringFormat='Move {0} up'}"/>
-                            <Button Classes="head" Opacity="1" Content="↓" Command="{Binding DownCommand}" ToolTip.Tip="Later in the queue" AutomationProperties.Name="{Binding Id, StringFormat='Move {0} down'}"/>
-                            <Button Classes="head" Opacity="1" Content="✕" Command="{Binding RemoveCommand}" ToolTip.Tip="Take it out of the queue (it stays on its board)" AutomationProperties.Name="{Binding Id, StringFormat='Take {0} out'}"/>
-                          </StackPanel>
-                          <TextBlock DockPanel.Dock="Right" Classes="dim" Classes.bad="{Binding IsFailed}" Text="{Binding State}" FontSize="11" VerticalAlignment="Center" Margin="10,0"/>
-                          <TextBlock Text="{Binding Line}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Opacity="{Binding Fade}"/>
-                        </DockPanel>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                  <DockPanel Margin="0,4,0,0">
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="6,0,0,0">
-                      <Button Content="Delete queue…" Command="{Binding AskDeleteCommand}" IsVisible="{Binding !ConfirmingDelete}"/>
-                      <TextBlock Text="Delete it? Cards stay on their boards." VerticalAlignment="Center" IsVisible="{Binding ConfirmingDelete}"/>
-                      <Button Content="Delete" Command="{Binding DeleteCommand}" IsVisible="{Binding ConfirmingDelete}" AutomationProperties.Name="{Binding Name, StringFormat='Delete queue {0}'}"/>
-                      <Button Content="Keep" Command="{Binding CancelDeleteCommand}" IsVisible="{Binding ConfirmingDelete}"/>
-                    </StackPanel>
-                    <Button DockPanel.Dock="Left" Content="Add" Command="{Binding AddCardsCommand}" Margin="0,0,6,0"/>
-                    <TextBox Text="{Binding AddText}" PlaceholderText="Add cards by id (their open blockers come too)" MaxWidth="420" HorizontalAlignment="Left"
-                             views:EnterSends.Command="{Binding AddCardsCommand}" AutomationProperties.Name="{Binding Name, StringFormat='Add cards to {0}'}"/>
+              <Border Classes="queuelane" Tag="{Binding}" BorderBrush="{DynamicResource Accent}" BorderThickness="2" CornerRadius="10" Padding="8,6"
+                      Background="{DynamicResource Bg}" AutomationProperties.Name="{Binding Name, StringFormat='Queue {0}'}">
+                <StackPanel Spacing="4">
+                  <DockPanel>
+                    <Border DockPanel.Dock="Left" Classes="queuegrip" Background="Transparent" Cursor="SizeNorthSouth" Padding="2,0,6,0" VerticalAlignment="Center"
+                            ToolTip.Tip="Drag to move this queue among the queues">
+                      <TextBlock Text="⠿" FontSize="16" Foreground="{DynamicResource Dim}"/>
+                    </Border>
+                    <Button DockPanel.Dock="Left" Classes="head" Opacity="1" Content="{Binding Arrow}" Command="{Binding OpenCommand}"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Show queue {0}'}" ToolTip.Tip="Show its cards, or fold it to a line"/>
+                    <TextBlock DockPanel.Dock="Left" Classes="queuename" Tag="{Binding}" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0"
+                               IsVisible="{Binding ShowsName}" ToolTip.Tip="Double-click to rename"/>
+                    <TextBox DockPanel.Dock="Left" Classes="rename" Tag="{Binding}" Text="{Binding RenameText}" Width="200" Margin="0,0,10,0" IsVisible="{Binding IsRenaming}"
+                             views:EnterSends.Command="{Binding CommitRenameCommand}" AutomationProperties.Name="{Binding Name, StringFormat='Rename queue {0}'}"/>
+                    <TextBlock DockPanel.Dock="Left" Classes="dim" Text="{Binding Summary}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <Button DockPanel.Dock="Right" Classes="head" Opacity="1" Content="⋯" Margin="6,0,0,0" ToolTip.Tip="Rename or delete this queue"
+                            AutomationProperties.Name="{Binding Name, StringFormat='Queue {0} menu'}">
+                      <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                          <MenuItem Header="Rename" Command="{Binding StartRenameCommand}"/>
+                          <MenuItem Header="Delete queue, keep its cards…" Command="{Binding AskDeleteCommand}"
+                                    ToolTip.Tip="The queue goes; its cards go back to their lists"/>
+                          <MenuItem Header="Delete queue and its unfinished cards…" Command="{Binding AskDeleteCardsCommand}"
+                                    ToolTip.Tip="The queue goes, and every card in it not yet done goes to its board's .deleted folder (it can come back from there)"/>
+                        </MenuFlyout>
+                      </Button.Flyout>
+                    </Button>
+                    <Button DockPanel.Dock="Right" Content="{Binding RunText}" Command="{Binding ToggleCommand}" Classes.primary="{Binding IsPaused}" Margin="8,0,0,0"
+                            ToolTip.Tip="{Binding RunTip}" AutomationProperties.Name="{Binding Name, StringFormat='Run or pause queue {0}'}"/>
+                    <TextBlock Classes="dim" Classes.bad="{Binding Failed}" Text="{Binding Doing}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Doing}"/>
                   </DockPanel>
+                  <TextBlock Classes="bad" Text="{Binding RenameError}" IsVisible="{Binding RenameError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                  <DockPanel IsVisible="{Binding ConfirmingDelete}">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">
+                      <Button Content="{Binding DeleteText}" Command="{Binding DeleteCommand}" AutomationProperties.Name="{Binding Name, StringFormat='Delete queue {0}'}"/>
+                      <Button Content="Keep" Command="{Binding CancelDeleteCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding DeleteQuestion}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                  </DockPanel>
+                  <!-- folded: the cards' ids in order on one line -->
+                  <TextBlock Classes="dim" Text="{Binding Line}" IsVisible="{Binding IsFolded}" Margin="26,0,0,0" TextTrimming="CharacterEllipsis"/>
+                  <StackPanel IsVisible="{Binding IsOpen}" Spacing="4">
+                    <TextBlock Classes="dim" Text="No cards in it yet: add them by id below, or from a card's menu." IsVisible="{Binding IsEmpty}" Margin="4,0"/>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding !IsEmpty}">
+                      <ItemsControl ItemsSource="{Binding Cards}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:QueueCardViewModel">
+                            <StackPanel Width="250" Spacing="2" Opacity="{Binding Fade}">
+                              <DockPanel>
+                                <Border DockPanel.Dock="Left" Background="{DynamicResource Accent}" CornerRadius="9" MinWidth="18" Height="18" Padding="5,0" Margin="0,0,6,0"
+                                        VerticalAlignment="Center" ToolTip.Tip="Its place in the queue">
+                                  <TextBlock Text="{Binding Place}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Bg}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                  <Button Classes="head" Opacity="1" Content="←" Command="{Binding UpCommand}" IsEnabled="{Binding !IsFirst}" ToolTip.Tip="Earlier in the queue"
+                                          AutomationProperties.Name="{Binding Id, StringFormat='Move {0} up'}"/>
+                                  <Button Classes="head" Opacity="1" Content="→" Command="{Binding DownCommand}" IsEnabled="{Binding !IsLast}" ToolTip.Tip="Later in the queue"
+                                          AutomationProperties.Name="{Binding Id, StringFormat='Move {0} down'}"/>
+                                  <Button Classes="head" Opacity="1" Content="✕" Command="{Binding RemoveCommand}" ToolTip.Tip="Take it out of the queue: it goes back to its list"
+                                          AutomationProperties.Name="{Binding Id, StringFormat='Take {0} out'}"/>
+                                </StackPanel>
+                                <StackPanel VerticalAlignment="Center">
+                                  <TextBlock Classes="dim" FontSize="10" Text="{Binding Where}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Where}"/>
+                                  <TextBlock Classes="dim" Classes.bad="{Binding IsFailed}" FontSize="10" Text="{Binding State}"/>
+                                </StackPanel>
+                              </DockPanel>
+                              <!-- the board's own tile when its board is on screen; else a plain one that opens the card -->
+                              <ContentControl Content="{Binding Tile}" ContentTemplate="{StaticResource CardTile}" IsVisible="{Binding HasTile}"/>
+                              <Button IsVisible="{Binding NoTile}" Command="{Binding OpenCommand}" Classes="enlarge" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                      ToolTip.Tip="Open this card (its board isn't showing)">
+                                <Border Classes="card" Margin="0,0,0,7">
+                                  <StackPanel Spacing="4">
+                                    <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}"/>
+                                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+                                  </StackPanel>
+                                </Border>
+                              </Button>
+                            </StackPanel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                    <DockPanel>
+                      <Button DockPanel.Dock="Left" Content="Add" Command="{Binding AddCardsCommand}" Margin="0,0,6,0"/>
+                      <TextBox Text="{Binding AddText}" PlaceholderText="Add cards by id (their open blockers come too)" MaxWidth="420" HorizontalAlignment="Left"
+                               views:EnterSends.Command="{Binding AddCardsCommand}" AutomationProperties.Name="{Binding Name, StringFormat='Add cards to {0}'}"/>
+                    </DockPanel>
+                  </StackPanel>
                 </StackPanel>
-              </StackPanel>
+              </Border>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        </ScrollViewer>
       </StackPanel>
     </Border>
 

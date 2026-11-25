@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
@@ -21,7 +22,9 @@ public class QueueTests
         File.WriteAllText(file, text.Insert(end, $"\n- **Blocked by:** {string.Join(", ", ids)}"));
     }
 
-    static CardViewModel? Tile(DargApp app, string id) => app.Board.Rows.SelectMany(r => r.Lists).SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == id);
+    /// <summary>The card's tile, in its list or (queued, WOR-0220) in its queue's lane.</summary>
+    static CardViewModel? Tile(DargApp app, string id) => InLists(app, id) ?? app.Board.LaneTile(id);
+    static CardViewModel? InLists(DargApp app, string id) => app.Board.Rows.SelectMany(r => r.Lists).SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == id);
     static AgentViewModel? Live(DargApp app, string id) => app.Agents.ForCard(id);
     static CardQueue Queue(DargApp app) => app.Project.Queues!.All.Single();
 
@@ -151,10 +154,10 @@ public class QueueTests
         queues.MakeNewCommand.Execute(null);
         await app.Until(() => queues.Queues.Count == 1 && queues.Queues[0].Summary.StartsWith("0 of 2 done", StringComparison.Ordinal), "the strip's line");
         Assert.Equal([a.Id, b.Id], Queue(app).Cards);
-        queues.Queues[0].OpenCommand.Execute(null);
+        Assert.True(queues.Queues[0].IsOpen); // a lane opens with its cards showing (WOR-0220)
         await DargApp.Settle(200);
         Assert.Contains(app.Window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == "Next up");
-        Assert.Contains(app.Window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == $"2. {b.Id}  two");
+        Assert.Contains(app.Window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == "two");
         app.Shot("strip");
 
         // the tile's menu takes it out; a new card's menu adds it
@@ -170,5 +173,152 @@ public class QueueTests
         Assert.Equal([b.Id, a.Id], Queue(app).Cards);
         Assert.Null(app.Agents.ForCard(a.Id));
         Assert.True(File.Exists(Path.Combine(ProjectData.Root("proj"), QueueStore.FileName)));
+    }
+
+    /// <summary>The lanes of the window's board: each queue's boxed lane, top to bottom.</summary>
+    static List<Border> Lanes(DargApp app) => app.Window.GetVisualDescendants().OfType<Border>()
+        .Where(b => b.Classes.Contains("queuelane") && b.IsEffectivelyVisible).OrderBy(b => b.TranslatePoint(new Point(0, 0), app.Window)!.Value.Y).ToList();
+
+    /// <summary>The ids of the card tiles drawn inside a lane, left to right.</summary>
+    static List<string> LaneIds(DargApp app, Border lane) => lane.GetVisualDescendants().OfType<Border>()
+        .Where(b => b.Classes.Contains("card") && b.IsEffectivelyVisible && b.Tag is CardViewModel)
+        .OrderBy(b => b.TranslatePoint(new Point(0, 0), app.Window)!.Value.X).Select(b => ((CardViewModel)b.Tag!).Id).ToList();
+
+    /// <summary>The ids of the card tiles drawn in the board's lists (and their state sub-columns).</summary>
+    static HashSet<string> ListIds(DargApp app) => app.Window.GetVisualDescendants().OfType<Border>()
+        .Where(b => b.Classes.Contains("list") && b.IsEffectivelyVisible)
+        .SelectMany(l => l.GetVisualDescendants().OfType<Border>()).Where(b => b.Classes.Contains("card") && b.IsEffectivelyVisible && b.Tag is CardViewModel)
+        .Select(b => ((CardViewModel)b.Tag!).Id).ToHashSet();
+
+    /// <summary>WOR-0220: a queue reads as one boxed group: its cards leave their lists (by state or not) for its lane,
+    /// drawn as the board's own tiles in the queue's order, not the board's; taken out, a card goes back to its list.</summary>
+    [AvaloniaFact]
+    public async Task A_queue_is_one_boxed_lane_of_its_cards_in_queue_order_and_they_leave_their_lists()
+    {
+        using var app = DargApp.Make();
+        var a = app.Card("in the backlog", "Backlog");
+        var b = app.Card("being worked", "In Progress");
+        var c = app.Card("waiting for a check", "QA Ready");
+        var other = app.Card("not queued", "Backlog");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await app.Api("queue-new", new { project = "proj", name = "Travel", cards = $"{c.Id} {a.Id} {b.Id}" });
+        var queues = app.Project.Queues!;
+        Assert.Equal([c.Id, a.Id, b.Id], Queue(app).Cards);
+
+        // the queued cards are in the lane, as the board's own tiles, in the queue's order; the other stays in its list
+        await app.Until(() => Lanes(app).Count == 1 && LaneIds(app, Lanes(app)[0]).SequenceEqual([c.Id, a.Id, b.Id]), "the lane's tiles in queue order");
+        Assert.All(queues.Queues[0].Cards, s => Assert.True(s.HasTile));
+        Assert.Equal(["Main · QA Ready", "Main · Backlog", "Main · In Progress"], queues.Queues[0].Cards.Select(s => s.Where));
+        var listed = ListIds(app);
+        Assert.Contains(other.Id, listed);
+        Assert.DoesNotContain(a.Id, listed);
+        Assert.DoesNotContain(b.Id, listed);
+        Assert.DoesNotContain(c.Id, listed);
+        Assert.Null(InLists(app, a.Id));
+        app.Shot("lane");
+
+        // split by state, the same: the queue's cards stay together in the lane rather than in the state columns
+        app.Board.ActiveSplit = true;
+        await DargApp.Settle(200);
+        Assert.DoesNotContain(app.Board.Rows.SelectMany(r => r.Lists).SelectMany(l => l.Groups).SelectMany(g => g.Cards), t => Queue(app).Has(t.Id));
+        Assert.Equal([c.Id, a.Id, b.Id], LaneIds(app, Lanes(app)[0]));
+        Assert.Contains(other.Id, ListIds(app));
+        app.Shot("lane-by-state");
+        app.Board.ActiveSplit = false;
+
+        // reordered in the lane, it draws in the new order
+        queues.Queues[0].Cards[2].UpCommand.Execute(null);
+        await app.Until(() => LaneIds(app, Lanes(app)[0]).SequenceEqual([c.Id, b.Id, a.Id]), "the lane in its new order");
+
+        // taken out: back in its list
+        queues.Queues[0].Cards.Single(s => s.Id == b.Id).RemoveCommand.Execute(null);
+        await app.Until(() => ListIds(app).Contains(b.Id) && LaneIds(app, Lanes(app)[0]).SequenceEqual([c.Id, a.Id]), "the card back in its list");
+
+        // folded, the lane is one line of its cards in order
+        queues.Queues[0].OpenCommand.Execute(null);
+        await DargApp.Settle(100);
+        Assert.Empty(LaneIds(app, Lanes(app)[0]));
+        Assert.Contains(app.Window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == $"1 {c.Id}  →  2 {a.Id}");
+    }
+
+    /// <summary>WOR-0220: a queue is renamed in place, dragged by its grip among the queues, and deleted keeping its cards
+    /// (they go back to their lists) or with its unfinished cards (to the board's .deleted folder; a done one stays).</summary>
+    [AvaloniaFact]
+    public async Task A_queue_renames_drags_among_the_queues_and_deletes_with_or_without_its_cards()
+    {
+        using var app = DargApp.Make();
+        var a = app.Card("first queue's card", "Backlog");
+        var b = app.Card("second queue's open card", "To Do");
+        var done = app.Card("second queue's done card", "Done");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await app.Api("queue-new", new { project = "proj", name = "One", cards = a.Id });
+        await app.Api("queue-new", new { project = "proj", name = "Two", cards = $"{b.Id} {done.Id}" });
+        var queues = app.Project.Queues!;
+        var file = QueueStore.PathFor("proj");
+        string Names() => string.Join(",", queues.All.Select(q => q.Name));
+
+        // rename: another queue's name is refused, a free one is kept on disk
+        var one = queues.Queues[0];
+        one.StartRenameCommand.Execute(null);
+        await DargApp.Settle(100);
+        Assert.Contains(app.Window.GetVisualDescendants().OfType<TextBox>(), t => t.IsEffectivelyVisible && t.Classes.Contains("rename") && t.Text == "One");
+        one.RenameText = "two";
+        one.CommitRenameCommand.Execute(null);
+        Assert.Equal("There's a queue called two already.", one.RenameError);
+        Assert.True(one.IsRenaming);
+        one.RenameText = "Trips";
+        one.CommitRenameCommand.Execute(null);
+        Assert.False(one.IsRenaming);
+        Assert.Equal("Trips,Two", Names());
+        Assert.Equal(["Trips", "Two"], QueueStore.Load(file).Select(q => q.Name));
+        Assert.Contains("Renamed Trips to Days", await app.Api("queue-rename", new { project = "proj", queue = "Trips", name = "Days" }));
+
+        // drag Two's lane by its grip above the first: it moves there, and the order is kept
+        await app.Until(() => Lanes(app).Count == 2, "both lanes");
+        var top = app.Window;
+        Point Grip(Border lane)
+        {
+            var g = lane.GetVisualDescendants().OfType<Border>().First(x => x.Classes.Contains("queuegrip"));
+            return g.TranslatePoint(new Point(g.Bounds.Width / 2, g.Bounds.Height / 2), top)!.Value;
+        }
+        var from = Grip(Lanes(app)[1]);
+        var to = Lanes(app)[0].TranslatePoint(new Point(10, 2), top)!.Value;
+        Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, from);
+        Avalonia.Headless.HeadlessWindowExtensions.MouseDown(top, from, Avalonia.Input.MouseButton.Left);
+        for (var i = 1; i <= 4; i++)
+            Avalonia.Headless.HeadlessWindowExtensions.MouseMove(top, from + (to - from) * (i / 4.0), Avalonia.Input.RawInputModifiers.LeftMouseButton);
+        app.Shot("lane-dragging");
+        Avalonia.Headless.HeadlessWindowExtensions.MouseUp(top, to, Avalonia.Input.MouseButton.Left);
+        await DargApp.Settle(100);
+        Assert.Equal("Two,Days", Names());
+        Assert.Equal(["Two", "Days"], QueueStore.Load(file).Select(q => q.Name));
+        await app.Until(() => Lanes(app).Count == 2 && LaneIds(app, Lanes(app)[0]).Contains(b.Id), "Two's lane drawn first");
+        // and back, through the API
+        Assert.Contains("Two is queue 2 of 2", await app.Api("queue-move", new { project = "proj", queue = "Two", to = 2 }));
+        Assert.Equal("Days,Two", Names());
+        app.Shot("lanes-moved");
+
+        // delete keeping its cards: the queue goes, its card back to its list, on its board still
+        var days = queues.Queues[0];
+        days.AskDeleteCommand.Execute(null);
+        Assert.Equal("Delete Days? Its cards stay on their boards.", days.DeleteQuestion);
+        days.DeleteCommand.Execute(null);
+        Assert.Equal("Two", Names());
+        await app.Until(() => ListIds(app).Contains(a.Id), "the kept card back in its list");
+        Assert.Equal("Backlog", app.Read(a.Id).Status);
+
+        // delete with its cards: the unfinished one goes to .deleted, the done one stays
+        var two = queues.Queues[0];
+        two.AskDeleteCardsCommand.Execute(null);
+        Assert.Contains($"its 1 unfinished card ({b.Id})", two.DeleteQuestion);
+        app.Shot("delete-with-cards");
+        two.DeleteCommand.Execute(null);
+        Assert.Empty(queues.All);
+        Assert.DoesNotContain(BoardStore.ReadCards(app.BoardFolder), x => x.Id == b.Id);
+        Assert.True(File.Exists(Path.Combine(app.BoardFolder, ".deleted", b.File)));
+        Assert.Contains(BoardStore.ReadCards(app.BoardFolder), x => x.Id == done.Id);
+        Assert.Contains(a.Id, BoardStore.ReadCards(app.BoardFolder).Select(x => x.Id));
     }
 }

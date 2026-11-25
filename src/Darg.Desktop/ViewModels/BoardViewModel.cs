@@ -472,7 +472,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             Filter = "";
             foreach (var l in Labels) l.Mode = ChipMode.Off;
             if (!ShowCompleted && row._board?.Lists[Board.Completed].Any(c => c.Id == id) == true) ShowCompleted = true;
-            return row.Lists.SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == id);
+            return row.Tiles().FirstOrDefault(c => c.Id == id);
         }
         Status = $"No card {id} on this project's boards.";
         return null;
@@ -996,6 +996,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (reuse)
         {
             foreach (var l in Lists) { oldLists.TryAdd(l.Id, l); foreach (var c in l.Cards) oldCards.TryAdd(c.Id, c); }
+            foreach (var c in _lane.Values) oldCards.TryAdd(c.Id, c);
         }
         var used = new HashSet<CardViewModel>();
         CardViewModel ViewOf(Card c)
@@ -1012,14 +1013,22 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         }
         var lists = new List<ListViewModel>();
         var total = 0;
+        // WOR-0220: a queued card leaves its list for its queue's lane above the board, in the queue's order, whatever
+        // the filter or Show completed say (the lane is the queue whole); the list counts only what stays in it
+        var queues = Queues;
+        var lane = new Dictionary<string, CardViewModel>(StringComparer.OrdinalIgnoreCase);
         foreach (var (id, name) in _board.ListOrder())
         {
+            var inList = _board.Lists[id];
+            var queued = queues is null ? 0 : inList.Count(c => queues.Has(c.Id));
+            if (queued > 0)
+                foreach (var c in inList.Where(c => queues!.Has(c.Id))) lane.TryAdd(c.Id, ViewOf(c));
             if (id == Board.Completed && !root.ShowCompleted) continue;
-            var cards = SortOf(SelectedBoard + "/" + id).Apply(_board.Lists[id].Where(Keep)).Select(ViewOf).ToList();
+            var cards = SortOf(SelectedBoard + "/" + id).Apply(inList.Where(c => (queued == 0 || !queues!.Has(c.Id)) && Keep(c))).Select(ViewOf).ToList();
             total += cards.Count;
             var minimized = _board.Minimized.Contains(id);
-            if (oldLists.TryGetValue(id, out var list) && list.Name == name && list.IsMinimized == minimized) list.Show(cards, _board.Lists[id].Count);
-            else list = new ListViewModel(this, id, name, cards, _board.Lists[id].Count, minimized);
+            if (oldLists.TryGetValue(id, out var list) && list.Name == name && list.IsMinimized == minimized) list.Show(cards, inList.Count - queued);
+            else list = new ListViewModel(this, id, name, cards, inList.Count - queued, minimized);
             list.Kind = BoardLayouts.KindOf(_board, id);
             lists.Add(list);
         }
@@ -1029,8 +1038,20 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         foreach (var l in Lists) { l.BulkChanged(); l.SortChanged(); l.Regroup(); } // Work All counts across two columns, so every count is read again
         CountText = $"{total} of {_board.AllCards.Count()} cards";
         Status = _notice ?? _board.DuplicatesText ?? CountText;
+        _lane = lane;
         BuildMerged();
+        queues?.TilesChanged();
     }
+
+    /// <summary>This board's queued cards' tiles (WOR-0220), by id: they show in their queue's lane, not in a list.</summary>
+    Dictionary<string, CardViewModel> _lane = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>A queued card's tile for its queue's lane, from whichever row on screen holds it; null when its board isn't
+    /// showing (the lane then draws a plain one).</summary>
+    public CardViewModel? LaneTile(string id) => Root.Rows.Select(r => r._lane.GetValueOrDefault(id)).FirstOrDefault(t => t is not null);
+
+    /// <summary>Every tile this row draws: its lists' cards and its queued cards in the lanes.</summary>
+    IEnumerable<CardViewModel> Tiles() => Lists.SelectMany(l => l.Cards).Concat(_lane.Values);
 
     /// <summary>Start an agent on a card: it goes to the board's working column ("In Progress", else
     /// the first column) if it was waiting in the backlog or the first column, and the agent opens. A card with an open
@@ -1133,7 +1154,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public string? SendBackById(string cardId, string notes)
     {
         foreach (var row in Root.Rows)
-            if (row._board?.AllCards.Any(c => c.Id == cardId) == true && row.Lists.SelectMany(l => l.Cards).FirstOrDefault(c => c.Id == cardId) is { } vm)
+            if (row._board?.AllCards.Any(c => c.Id == cardId) == true && row.Tiles().FirstOrDefault(c => c.Id == cardId) is { } vm)
                 return row.SendBack(vm, notes);
         return $"{cardId} isn't on a board that's showing; open its board first.";
     }

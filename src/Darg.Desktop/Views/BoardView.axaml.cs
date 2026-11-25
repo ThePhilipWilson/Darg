@@ -37,6 +37,9 @@ public partial class BoardView : UserControl
         RowDividers(this);
         // a board tab dragged along the row moves there, and the order is kept (WOR-0213)
         TabDrag.Attach(BoardTabs, (from, to) => (DataContext as BoardViewModel)?.MoveBoard(from, to), tabIsButton: true);
+        // a queue's lane dragged by its grip moves among the queues, and the order is kept (WOR-0220)
+        TabDrag.Attach(QueueLanes, (from, to) => (DataContext as BoardViewModel)?.Queues?.Move(from, to), vertical: true,
+            grip: v => v is Border b && b.Classes.Contains("queuegrip"));
         ChipDoubleClicks(this);
         // a board tab pressed with Ctrl adds or removes it (WOR-0149); the button's click reads the flag
         AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (_, e) =>
@@ -48,7 +51,16 @@ public partial class BoardView : UserControl
         AddHandler(DoubleTappedEvent, (_, e) =>
         {
             if (e.Source is TextBlock { Tag: ListViewModel list } t && t.Classes.Contains("listname")) { list.StartRenameCommand.Execute(null); e.Handled = true; }
+            // a queue's name too (WOR-0220)
+            else if (e.Source is TextBlock { Tag: QueueViewModel queue } q && q.Classes.Contains("queuename")) { queue.StartRenameCommand.Execute(null); e.Handled = true; }
         });
+        // a queue's name box: Esc leaves it as it was (Enter renames, through EnterSends)
+        AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Avalonia.Input.Key.Escape || e.Source is not TextBox { Tag: QueueViewModel queue } box || !box.Classes.Contains("rename")) return;
+            queue.CancelRenameCommand.Execute(null);
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         // an enlarged picture (WOR-0167) takes Escape and the arrows first, wherever focus is
         AddHandler(KeyDownEvent, (_, e) =>
         {
