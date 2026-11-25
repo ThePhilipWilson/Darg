@@ -88,13 +88,16 @@ public sealed class MovedWatch
         var now = board.Lists.SelectMany(l => l.Value.Select(c => (Place: l.Key, Card: c))).ToList();
         var known = _places is not null && _folder == folder;
         var before = _places;
-        _places = now.ToDictionary(x => x.Card.Id, x => x.Place);
+        // two files can claim one id (Board.Duplicates): such an id has no one place, so it's never stamped
+        var twice = board.Duplicates.Select(d => d.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _places = new Dictionary<string, string>();
+        foreach (var (place, card) in now) _places[card.Id] = place;
         _folder = folder;
         if (!known) return [];
         var stamped = new List<string>();
         foreach (var (place, card) in now)
         {
-            if (!before!.TryGetValue(card.Id, out var was) || was == place) continue;
+            if (twice.Contains(card.Id) || !before!.TryGetValue(card.Id, out var was) || was == place) continue;
             if (card.Moved is { } m && DateTime.Now - m < TimeSpan.FromSeconds(10)) continue; // already stamped by Move
             try { BoardStore.MarkMoved(folder, card); stamped.Add(card.Id); } catch (Exception) { }
         }

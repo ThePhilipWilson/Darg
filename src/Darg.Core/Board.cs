@@ -98,6 +98,15 @@ public sealed class Board
     public IReadOnlyDictionary<string, List<Card>> Lists { get; init; } = new Dictionary<string, List<Card>>();
     /// <summary>Lists shown folded to a narrow strip (board.json's "minimized"; Tatty keeps keys it doesn't know).</summary>
     public IReadOnlySet<string> Minimized { get; init; } = new HashSet<string>();
+    /// <summary>Ids that more than one card file claims, with those files (DAR-0003). Both cards still show; nothing
+    /// that reads the board may assume an id is one card. Two files with one id come from a rename that left the old
+    /// file behind (a git checkout of a renamed card where the old name is ignored, a copy made by hand).</summary>
+    public IReadOnlyList<(string Id, IReadOnlyList<string> Files)> Duplicates { get; init; } = [];
+
+    /// <summary>What to tell the person about <see cref="Duplicates"/>; null when there are none.</summary>
+    public string? DuplicatesText => Duplicates.Count == 0 ? null
+        : string.Join(" ", Duplicates.Select(d => $"{d.Id} is in {d.Files.Count} files on {Name}: {string.Join(", ", d.Files.Select(f => $"\"{f}\""))}."))
+          + " Delete the stale copy in its items folder; meanwhile both show.";
 
     /// <summary>Lists in display order: backlog, the columns, completed.</summary>
     public IEnumerable<(string Id, string Name)> ListOrder()
@@ -147,6 +156,9 @@ public static class BoardStore
             Name = Path.GetFileName(folder), Folder = folder, Prefix = (string?)json["prefix"] ?? "",
             Columns = columns, Lists = lists,
             Minimized = (json["minimized"] as JsonArray ?? []).Select(x => (string?)x).OfType<string>().ToHashSet(),
+            Duplicates = cards.GroupBy(c => c.Id, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1)
+                .Select(g => (g.Key, (IReadOnlyList<string>)g.Select(c => c.File).Order(StringComparer.OrdinalIgnoreCase).ToList()))
+                .OrderBy(d => d.Key, StringComparer.OrdinalIgnoreCase).ToList(),
         };
     }
 

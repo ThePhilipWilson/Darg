@@ -949,7 +949,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         PickedChanged();
         foreach (var l in Lists) { l.BulkChanged(); l.SortChanged(); } // Work All counts across two columns, so every count is read again
         CountText = $"{total} of {_board.AllCards.Count()} cards";
-        Status = _notice ?? CountText;
+        Status = _notice ?? _board.DuplicatesText ?? CountText;
     }
 
     /// <summary>Start an agent on a card: it goes to the board's working column ("In Progress", else

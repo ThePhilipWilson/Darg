@@ -85,6 +85,30 @@ public sealed class ColumnSortTests : IDisposable
     }
 
     [Fact]
+    public void Two_files_with_one_id_read_and_are_named_not_stamped()
+    {
+        // DAR-0003: a renamed card's old file left beside the new one made every read of the board throw
+        Make(1, "one", "2026-11-10");
+        Make(2, "two", "2026-11-10");
+        var file = Directory.GetFiles(Path.Combine(_dir, "items")).Single(f => Path.GetFileName(f).StartsWith("T-0001"));
+        var copy = Path.Combine(_dir, "items", "T-0001 - one, old name.md");
+        File.WriteAllText(copy, File.ReadAllText(file).Replace("**Status:** To Do", "**Status:** Doing"));
+        var board = BoardStore.Load(_dir);
+        Assert.Equal(2, board.AllCards.Count(c => c.Id == "T-0001"));
+        var dup = Assert.Single(board.Duplicates);
+        Assert.Equal("T-0001", dup.Id);
+        Assert.Equal(2, dup.Files.Count);
+        Assert.Contains("T-0001 is in 2 files", board.DuplicatesText);
+        var watch = new MovedWatch();
+        Assert.Empty(watch.Read(_dir, board));
+        File.WriteAllText(file, File.ReadAllText(file).Replace("**Status:** To Do", "**Status:** Doing"));
+        Assert.Empty(watch.Read(_dir, BoardStore.Load(_dir))); // ambiguous: neither file is stamped
+        var other = Directory.GetFiles(Path.Combine(_dir, "items")).Single(f => Path.GetFileName(f).StartsWith("T-0002"));
+        File.WriteAllText(other, File.ReadAllText(other).Replace("**Status:** To Do", "**Status:** Doing"));
+        Assert.Equal(["T-0002"], watch.Read(_dir, BoardStore.Load(_dir))); // the rest of the board still is
+    }
+
+    [Fact]
     public void Sorts_are_kept_per_column_and_manual_is_not_kept()
     {
         var instance = Directory.CreateTempSubdirectory("wb-sorts-").FullName;
