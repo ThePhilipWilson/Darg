@@ -29,6 +29,22 @@ public sealed class BulkStartTests
     }
 
     [Fact]
+    public void InProgressWorkAllTakesTheBacklogAndToDoDoesNot()
+    {
+        // WOR-0218: a board whose first column is In Progress counted nothing, the backlog being Improve All's
+        Assert.Equal(["c2", Board.Backlog], BulkStart.Sources("c2", Philips));
+        Assert.Equal(["c1", "c2", Board.Backlog], BulkStart.Sources("c2", Default));
+        Assert.Equal(["c1", "c2"], BulkStart.Sources("c1", Default));
+        Assert.Equal([Board.Backlog], BulkStart.Sources(Board.Backlog, Philips));
+        Assert.Equal(["c4"], BulkStart.Sources("c4", Philips));
+        Assert.Empty(BulkStart.Sources("c3", Philips));
+        Assert.Equal("c2", BulkStart.ButtonList(BulkStart.Kind.Work, Default));
+        Assert.Equal("c4", BulkStart.ButtonList(BulkStart.Kind.Qa, Philips));
+        Assert.Null(BulkStart.ButtonList(BulkStart.Kind.Qa, Default));
+        Assert.Null(BulkStart.ButtonList(BulkStart.Kind.Work, [new("c1", "Done")]));
+    }
+
+    [Fact]
     public void QaRunAllSitsOnTheQaColumnOnly()
     {
         Assert.Equal("c4", BulkStart.QaList(Philips));

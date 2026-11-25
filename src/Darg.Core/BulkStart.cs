@@ -1,7 +1,8 @@
 namespace Darg.Core;
 
-/// <summary>The board's bulk buttons (WOR-0125): ▶ Work All at the top of the working column (and a To Do) starts; ✦ Improve All at the top of the backlog starts an improve agent on every thin card there with none on it; Work All starts an
-/// agent on every card in either with none on it, and 🧪 QA Run All at the top of the QA column runs QA on every card there
+/// <summary>The board's bulk buttons (WOR-0125): ▶ Work All at the top of the working column (and a To Do) starts an agent
+/// on every card in those with none on it, the working column's taking the backlog's cards too (WOR-0218); ✦ Improve All at
+/// the top of the backlog starts an improve agent on every thin card there with none on it; and 🧪 QA Run All at the top of the QA column runs QA on every card there
 /// with no QA agent on it. Which lists carry which button, when to ask first, and what the status line says after.</summary>
 public static class BulkStart
 {
@@ -23,6 +24,28 @@ public static class BulkStart
         if (Working(columns) is { } w) lists.Add(w.Id);
         return lists.Distinct().Where(id => !IsDone(id, columns)).ToList();
     }
+
+    /// <summary>The lists a list's button starts cards from (WOR-0218). The working column's ▶ Work All takes the backlog's
+    /// cards too, so a board whose first column is In Progress (no To Do) still has something to count; a To Do's keeps to
+    /// <see cref="WorkLists"/>, and the backlog's own button is ✦ Improve All.</summary>
+    public static IReadOnlyList<string> Sources(string listId, IReadOnlyList<Column> columns) => For(listId, columns) switch
+    {
+        Kind.Work when Working(columns)?.Id == listId => [.. WorkLists(columns), Board.Backlog],
+        Kind.Work => WorkLists(columns),
+        Kind.Qa => [listId],
+        Kind.Improve => [Board.Backlog],
+        _ => [],
+    };
+
+    /// <summary>The list whose button the API's work-all / qa-all / improve presses: the working column, the QA column, the
+    /// backlog. Null when the board has no such button.</summary>
+    public static string? ButtonList(Kind kind, IReadOnlyList<Column> columns) => kind switch
+    {
+        Kind.Work => Working(columns) is { } w && For(w.Id, columns) == Kind.Work ? w.Id : null,
+        Kind.Qa => QaList(columns),
+        Kind.Improve => Board.Backlog,
+        _ => null,
+    };
 
     /// <summary>The QA column's id, if the board has one.</summary>
     public static string? QaList(IReadOnlyList<Column> columns) =>

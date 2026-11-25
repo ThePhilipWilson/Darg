@@ -732,44 +732,51 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>The cards a column's bulk button would start (WOR-0125), among those showing on this row: for Work All,
-    /// every card in the backlog and the working column that its own ▶ Work on is offered on (no live agent, not done);
-    /// for QA Run All, every card in the QA column its own 🧪 Run QA is offered on (no QA agent running). Work All leaves
-    /// out a card with an open blocker (WOR-0173): <see cref="BulkBlocked"/> lists those.</summary>
-    List<CardViewModel> BulkCards(BulkStart.Kind kind) =>
-        kind == BulkStart.Kind.Work ? BulkCandidates(kind).Where(c => OpenBlockers(c.Card).Count == 0).ToList() : BulkCandidates(kind);
+    /// every card in its <see cref="BulkStart.Sources"/> (the working column's take in the backlog, WOR-0218) that its own
+    /// ▶ Work on is offered on (no live agent, not done); for QA Run All, every card in the QA column its own 🧪 Run QA is
+    /// offered on (no QA agent running). Work All leaves out a card with an open blocker (WOR-0173): <see cref="BulkBlocked"/>
+    /// lists those.</summary>
+    List<CardViewModel> BulkCards(string listId) =>
+        BulkKindOf(listId) == BulkStart.Kind.Work ? BulkCandidates(listId).Where(c => OpenBlockers(c.Card).Count == 0).ToList() : BulkCandidates(listId);
 
     /// <summary>The cards Work All would start but for an open blocker, each with what it waits on (WOR-0173).</summary>
-    List<(string Id, IReadOnlyList<BlockerState> Open)> BulkBlocked(BulkStart.Kind kind) =>
-        kind != BulkStart.Kind.Work ? [] : BulkCandidates(kind).Select(c => (c.Id, OpenBlockers(c.Card))).Where(b => b.Item2.Count > 0).ToList();
+    List<(string Id, IReadOnlyList<BlockerState> Open)> BulkBlocked(string listId) =>
+        BulkKindOf(listId) != BulkStart.Kind.Work ? [] : BulkCandidates(listId).Select(c => (c.Id, OpenBlockers(c.Card))).Where(b => b.Item2.Count > 0).ToList();
 
-    List<CardViewModel> BulkCandidates(BulkStart.Kind kind)
+    List<CardViewModel> BulkCandidates(string listId)
     {
         if (_board is null) return [];
-        IReadOnlyList<string> lists = kind switch
-        {
-            BulkStart.Kind.Work => BulkStart.WorkLists(_board.Columns),
-            BulkStart.Kind.Qa when BulkStart.QaList(_board.Columns) is { } qa => [qa],
-            BulkStart.Kind.Improve => [Core.Board.Backlog],
-            _ => [],
-        };
+        var kind = BulkKindOf(listId);
+        var lists = BulkStart.Sources(listId, _board.Columns);
         return Lists.Where(l => lists.Contains(l.Id)).SelectMany(l => l.Cards)
             .Where(c => kind == BulkStart.Kind.Qa ? c.ShowRunQa : kind == BulkStart.Kind.Improve ? c.ShowImprove : c.CanStart).DistinctBy(c => c.Id).ToList();
     }
 
     public BulkStart.Kind BulkKindOf(string listId) => _board is null ? BulkStart.Kind.None : BulkStart.For(listId, _board.Columns);
-    public int BulkCount(BulkStart.Kind kind) => kind == BulkStart.Kind.None ? 0 : BulkCards(kind).Count;
+    public int BulkCount(string listId) => BulkKindOf(listId) == BulkStart.Kind.None ? 0 : BulkCards(listId).Count;
     /// <summary>How many cards Work All leaves out for an open blocker (WOR-0173): its label says so.</summary>
-    public int BulkBlockedCount(BulkStart.Kind kind) => BulkBlocked(kind).Count;
+    public int BulkBlockedCount(string listId) => BulkBlocked(listId).Count;
 
-    /// <summary>Work All / QA Run All (WOR-0125): start every card the button counts, at once, the board staying on
-    /// screen. Work All moves backlog cards to In Progress as Work on does, and tells each agent the others beside it.
-    /// What started and what didn't goes in the status line, with no dialog per card. Returns that line. Work All leaves
-    /// out cards with an open blocker and names them (WOR-0173), unless <paramref name="force"/> (the API's).</summary>
+    /// <summary>The API's work-all / qa-all: what the working column's ▶ Work All (backlog included, WOR-0218) or the QA
+    /// column's 🧪 QA Run All would do.</summary>
     public string StartBulk(BulkStart.Kind kind, bool force = false)
     {
+        if (_board is not null && BulkStart.ButtonList(kind, _board.Columns) is { } list) return StartBulk(list, force);
+        _notice = kind == BulkStart.Kind.Qa ? "Nothing to QA: this board has no QA column" : "Nothing to start: this board has no column to work in";
+        Apply();
+        return _notice;
+    }
+
+    /// <summary>Work All / QA Run All (WOR-0125): start every card the list's button counts, at once, the board staying on
+    /// screen. Work All moves backlog and To Do cards to In Progress as Work on does, and tells each agent the others beside
+    /// it. What started and what didn't goes in the status line, with no dialog per card. Returns that line. Work All leaves
+    /// out cards with an open blocker and names them (WOR-0173), unless <paramref name="force"/> (the API's).</summary>
+    public string StartBulk(string listId, bool force = false)
+    {
+        var kind = BulkKindOf(listId);
         BlockersStale(); // as things are now: a blocker may have reached QA on a board this one hasn't reloaded for
-        var cards = (force ? BulkCandidates(kind) : BulkCards(kind)).Select(c => c.Card).ToList();
-        List<(string Id, IReadOnlyList<BlockerState> Open)> blocked = force ? [] : BulkBlocked(kind);
+        var cards = (force ? BulkCandidates(listId) : BulkCards(listId)).Select(c => c.Card).ToList();
+        List<(string Id, IReadOnlyList<BlockerState> Open)> blocked = force ? [] : BulkBlocked(listId);
         if (cards.Count == 0)
         {
             _notice = kind == BulkStart.Kind.Qa ? "Nothing to QA: every card in QA has a QA agent on it"
@@ -1534,14 +1541,14 @@ public sealed partial class ListViewModel(BoardViewModel board, string id, strin
 
     // WOR-0125: ▶ Work All at the top of the backlog and the working column, 🧪 QA Run All at the top of the QA column
     BulkStart.Kind BulkKind => Board.BulkKindOf(Id);
-    int BulkCount => Board.BulkCount(BulkKind);
+    int BulkCount => Board.BulkCount(Id);
     public bool HasBulk => BulkKind != BulkStart.Kind.None;
-    public string BulkText => BulkStart.Label(BulkKind, BulkCount, Board.BulkBlockedCount(BulkKind));
+    public string BulkText => BulkStart.Label(BulkKind, BulkCount, Board.BulkBlockedCount(Id));
     public string BulkTip => BulkKind == BulkStart.Kind.Improve
         ? "Start an improve agent on every thin card (under 3 stars) showing in the backlog with no agent on it: each fills its description out (what's wanted, where, done when). The work itself isn't done. More than " + BulkStart.AskAbove + " asks first."
         : BulkKind == BulkStart.Kind.Qa
         ? "Run QA on every card showing in this column with no QA agent on it, an agent each. More than " + BulkStart.AskAbove + " asks first."
-        : "Start an agent on every card showing in In Progress (and a To Do) with none on it, all at once; each is told which others run beside it, " +
+        : "Start an agent on every card showing in In Progress and a To Do (In Progress's button takes the backlog's too) with none on it, all at once; each is told which others run beside it, " +
           "and cards move to In Progress. A card blocked by one not yet in QA or done is left out (Work on it to start it anyway). " +
           "More than " + BulkStart.AskAbove + " asks first.";
     bool CanBulk() => BulkCount > 0;
@@ -1553,9 +1560,9 @@ public sealed partial class ListViewModel(BoardViewModel board, string id, strin
     void Bulk()
     {
         if (BulkStart.NeedsAsking(BulkCount)) ConfirmingBulk = true;
-        else Board.StartBulk(BulkKind);
+        else Board.StartBulk(Id);
     }
-    [RelayCommand] void ConfirmBulk() { ConfirmingBulk = false; Board.StartBulk(BulkKind); }
+    [RelayCommand] void ConfirmBulk() { ConfirmingBulk = false; Board.StartBulk(Id); }
     [RelayCommand] void CancelBulk() => ConfirmingBulk = false;
     public void BulkChanged()
     {
