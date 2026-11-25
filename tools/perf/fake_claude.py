@@ -88,7 +88,8 @@ seconds = float(os.environ.get("FAKE_SECONDS", "60"))
 size = int(os.environ.get("FAKE_RESULT", "4000"))
 touch = os.environ.get("FAKE_TOUCH") == "1"
 touch_every = float(os.environ.get("FAKE_TOUCH_EVERY", "10"))
-sid = "fake-%d" % os.getpid()
+# --resume <id> carries on that session, as the real CLI does (WOR-0209)
+sid = args[args.index("--resume") + 1] if "--resume" in args else "fake-%d" % os.getpid()
 waiting = {}  # request id -> [event, response]: questions asked of the host, until it answers
 
 def ask(n, image=None):

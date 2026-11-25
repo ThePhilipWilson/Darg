@@ -130,6 +130,10 @@ public sealed class AppSettings
     /// <summary>The header's Optimise tokens toggle (<see cref="TokenSaver"/>).</summary>
     [JsonPropertyName("optimiseTokens")] public bool OptimiseTokens { get; set; }
 
+    /// <summary>Minutes an agent may sit idle before Darg closes its claude process and its MCP servers (it stays listed and
+    /// resumes on the next message, WOR-0209). 0 never closes one.</summary>
+    [JsonPropertyName("idleCloseMinutes")] public int IdleCloseMinutes { get; set; } = IdleClose.DefaultMinutes;
+
     static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
     public static string FilePath(string? instanceFolder = null) => Path.Combine(instanceFolder ?? InstanceConfig.Folder(), "settings.json");

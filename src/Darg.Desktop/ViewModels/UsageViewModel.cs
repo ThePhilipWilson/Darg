@@ -28,6 +28,7 @@ public partial class UsageViewModel : ObservableObject
         Refresh();
         ReadWork();
         TokenSaver.Load();
+        IdleClose.Load();
         OptimiseTokens = TokenSaver.On; // before anyone listens: nothing to switch yet
     }
 

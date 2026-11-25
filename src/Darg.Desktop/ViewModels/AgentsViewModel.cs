@@ -710,6 +710,38 @@ public partial class AgentViewModel : ObservableObject
     public DateTime Created => _created;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou), nameof(Open), nameof(IsDone), nameof(IsFailed))]
     public partial AgentState State { get; set; }
+    /// <summary>Darg closed its idle process to free memory (WOR-0209): listed and resumable, not finished.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText))] public partial bool Resting { get; set; }
+
+    partial void OnStateChanged(AgentState value) => ArmIdle();
+
+    DispatcherTimer? _idleTimer;
+
+    /// <summary>An agent that sits idle gives its claude process (about 0.5 GB, plus its MCP servers) back after
+    /// <see cref="IdleClose.Limit"/> (WOR-0209); a message then resumes the session as one saved by a restart is.</summary>
+    void ArmIdle()
+    {
+        _idleTimer?.Stop();
+        var limit = IdleClose.Limit;
+        if (State != AgentState.Idle || _session is null || limit <= TimeSpan.Zero) return;
+        _idleTimer ??= new DispatcherTimer(DispatcherPriority.Background);
+        _idleTimer.Interval = limit;
+        _idleTimer.Tick -= IdleTick;
+        _idleTimer.Tick += IdleTick;
+        _idleTimer.Start();
+    }
+
+    void IdleTick(object? sender, EventArgs e)
+    {
+        _idleTimer?.Stop();
+        // only a quiet one: no ask pending, not waiting out a usage limit (State is Idle then too), and not while
+        // the person has a message half typed (Fettle's live chat): look again after another interval
+        if (State != AgentState.Idle || _session is null || LimitHit || ContinueAt is not null
+            || Items.OfType<IPending>().Any(p => p.Pending)) return;
+        if (Compose.Length > 0) { ArmIdle(); return; }
+        if (CloseSession("Darg (idle)")) Resting = true;
+    }
+
     /// <summary>The last turn ended in an error: shown as failed rather than done.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(IsDone), nameof(IsFailed))] public partial bool TurnFailed { get; set; }
     /// <summary>Tool calls in the turn under way: the progress shown while it works.</summary>
@@ -824,6 +856,7 @@ public partial class AgentViewModel : ObservableObject
         AgentState.Idle when LimitHit => "out of usage",
         AgentState.Idle => TurnFailed ? "stopped with an error" : "done",
         AgentState.Saved when CardDone && FinishedTurn => "Complete, pending removal",
+        AgentState.Saved when Resting => "resting · send to carry on",
         AgentState.Saved => "saved · send to carry on", _ => "ended",
     };
 
@@ -1070,6 +1103,7 @@ public partial class AgentViewModel : ObservableObject
     void Begin(string message, bool resume)
     {
         if (_shut) { Items.Add(new NoteItem("Not started: its project has closed.", false)); return; }
+        Resting = false;
         using var timing = StallWatch.Shared.Section("Agent.Begin");
         try
         {
