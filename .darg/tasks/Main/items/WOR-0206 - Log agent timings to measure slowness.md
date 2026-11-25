@@ -1,11 +1,12 @@
 # WOR-0206: Log agent timings to measure slowness
 
-- **Status:** Backlog
+- **Status:** Done
 - **Priority:**
 - **Type:** Task
 - **Labels:**
 - **Created:** 2026-11-25
-- **Done:**
+- **Done:** 2026-11-25
+- **Moved:** 2026-11-25 02:56:18
 
 ## Description
 
@@ -24,3 +25,22 @@ Make each agent record how long its startup and turns take (including the model-
 ## Questions
 
 - Should timings show in the UI, or only in the log file? (Default: log file, plus one summary line in the transcript.)
+  **Answer:** the default: `agents.log` beside perf.log, plus the sum on each "Turn done" line (decided by agent, WOR-0206, 2026-11-25)
+
+## Findings (2026-11-25)
+
+Same prompt ("Read README.md and tell me its first heading, in one line.") in this repo, on Haiku both ways (the profile Darg picked was Quick, haiku/low):
+
+| | first tool | turn done |
+|---|---|---|
+| `claude -p --model haiku`, stream-json | 5.9 s | 9.8 s |
+| Darg agent, from the click | 13.7 s | 15.7 s |
+| Darg agent, from its process starting | 4.0 s | 6.0 s |
+
+- **The gap is about 6 s, and its biggest slice is the model pick: 9.65 s** before claude even starts. `Haiku.Ask` runs a whole `claude -p` for one line, so it pays the full start-up: hooks, then every MCP server. Alone, that one-liner takes 7.5 to 7.9 s; with `--strict-mcp-config` (no MCP servers) 4.4 to 4.6 s.
+- Claude's own turn inside Darg is no slower than the CLI (6.0 s against 9.8 s here; init came 2.5 s after the message against 4.3 s for the CLI). The briefings and add-dir folders don't show up as a cost.
+- MCP at start-up: the init line lists unity-mcp and tabby as failed, and four still pending, but init still came 0.8 s after the hooks ended. Failing servers don't hold up the agent's turn. They are part of what makes the pick slow.
+- Permission prompts didn't come up in this run. agents.log now logs each ask and its answer, so a wait on one shows as the gap between them.
+- Plain CLI on the default model, for reference: 11.3 to 11.8 s, init at 4.3 s.
+
+Likely fixes, not done here: run the pick lighter (`--strict-mcp-config`, about 3 s off), start the agent's process while the pick runs, or skip Haiku when a rule matches the job.
