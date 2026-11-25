@@ -343,6 +343,20 @@ public static class QaNotes
         System.IO.File.WriteAllText(file, crlf ? text.Replace("\n", "\r\n") : text, new UTF8Encoding(false));
     }
 
+    /// <summary>The newest dated entry of the card's QA notes (WOR-0216): its date ("2026-11-25 14:11", or "" for text with no
+    /// dated heading) and what was written, as the card holds it; null when the card has no QA notes.</summary>
+    public static (string When, string Text)? Latest(string cardText)
+    {
+        var notes = CardIndex.QaNotesOf(cardText);
+        if (notes.Length == 0) return null;
+        var lines = notes.Replace("\r\n", "\n").Split('\n');
+        int start = -1;
+        for (var i = 0; i < lines.Length; i++) if (lines[i].StartsWith("### ", StringComparison.Ordinal)) start = i;
+        if (start < 0) return ("", notes);
+        var when = lines[start][4..].Trim();
+        return (when, string.Join("\n", lines.Skip(start + 1)).Trim());
+    }
+
     static int Section(string text, string heading) =>
         text.StartsWith(heading + "\n", StringComparison.Ordinal) ? 0 : text.IndexOf("\n" + heading + "\n", StringComparison.Ordinal) is var i and >= 0 ? i + 1 :
         text.EndsWith("\n" + heading, StringComparison.Ordinal) ? text.Length - heading.Length : -1;

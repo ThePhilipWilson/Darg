@@ -631,6 +631,17 @@
                          IsVisible="{Binding DecisionAskedBy, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
             </StackPanel>
           </Border>
+          <!-- WOR-0216: in Needs more work, why it was sent back: the newest QA notes entry -->
+          <Border IsVisible="{Binding ShowSendBack}" BorderBrush="{DynamicResource Warn}" BorderThickness="1" CornerRadius="8"
+                  Background="{DynamicResource Panel2}" Padding="12,10" AutomationProperties.Name="Why it was sent back">
+            <StackPanel Spacing="6">
+              <TextBlock Classes="small" Foreground="{DynamicResource Warn}" Text="{Binding SendBackWhen}"/>
+              <SelectableTextBlock Text="{Binding SendBackText}" TextWrapping="Wrap"/>
+              <Button Content="Full QA notes" Command="{Binding ToggleFullQaNotesCommand}" HorizontalAlignment="Left" Background="Transparent"
+                      AutomationProperties.Name="Full QA notes" ToolTip.Tip="Show or hide every entry of the card's QA notes"/>
+              <SelectableTextBlock Text="{Binding QaNotesFull}" TextWrapping="Wrap" Classes="dim small" IsVisible="{Binding SendBackFullOpen}"/>
+            </StackPanel>
+          </Border>
           <!-- in For Human Attention with nothing to pick: the fallback, Approve or Send back below -->
           <Border IsVisible="{Binding MissingDecision}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8"
                   Background="{DynamicResource Panel2}" Padding="12,10">

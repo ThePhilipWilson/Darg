@@ -1883,6 +1883,28 @@ public partial class CardEditor : ObservableObject
     /// the description while the card is in For Human Attention.</summary>
     public CardDecision? Decision { get; }
     public bool ShowDecision => Decision is not null && InAttention;
+
+    /// <summary>WOR-0216: why a card in Needs more work came back: the newest dated entry of its QA notes, read when the panel
+    /// opened. Null in any other column or when the card has no QA notes.</summary>
+    public (string When, string Text)? SendBackReason { get; }
+    public bool ShowSendBack => SendBackReason is not null;
+    public string SendBackWhen => SendBackReason?.When is { Length: > 0 } w ? "Sent back " + w : "Sent back";
+    const int FoldLines = 8, FoldChars = 700;
+    public string SendBackText
+    {
+        get
+        {
+            var full = SendBackReason?.Text ?? "";
+            var lines = full.Split('\n');
+            if (lines.Length <= FoldLines && full.Length <= FoldChars) return full;
+            var cut = string.Join("\n", lines.Take(FoldLines));
+            return (cut.Length > FoldChars ? cut[..FoldChars] : cut).TrimEnd() + " …";
+        }
+    }
+    /// <summary>The whole of the card's QA notes section, shown once "Full QA notes" is pressed.</summary>
+    public string QaNotesFull { get; } = "";
+    [ObservableProperty] public partial bool SendBackFullOpen { get; set; }
+    [RelayCommand] void ToggleFullQaNotes() => SendBackFullOpen = !SendBackFullOpen;
     /// <summary>In For Human Attention with no decision recorded: the fallback question, and word that Darg is asking for one.</summary>
     public bool MissingDecision => _card is not null && Decision is null && InAttention;
     public string DecisionQuestion => Decision?.Question ?? "";
@@ -1952,6 +1974,16 @@ public partial class CardEditor : ObservableObject
     public CardEditor(BoardViewModel board, CardViewModel? card)
     {
         _board = board; _card = card;
+        if (card is not null && board.InRework(card.Card) && board.Folder is { } rf)
+        {
+            try
+            {
+                var raw = File.ReadAllText(Path.GetFullPath(Path.Combine(rf, "items", card.Card.File)));
+                SendBackReason = QaNotes.Latest(raw);
+                QaNotesFull = CardIndex.QaNotesOf(raw);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
         if (card is not null && board.InAttention(card.Card) && board.Folder is { } folder)
         {
             string text;
