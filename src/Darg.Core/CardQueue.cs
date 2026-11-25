@@ -113,7 +113,7 @@ public static class QueueRun
         waiting = [];
         foreach (var id in q.Cards)
         {
-            if (q.IsStarted(id)) continue;
+            if (q.IsStarted(id) || q.IsReleased(id)) continue; // moved on from: never started again
             if (find(id) is not { } c || c.Done || c.InQa || c.InAttention) continue;
             if (agent(id) is QueueAgent.Working or QueueAgent.Asking)
             {
@@ -134,10 +134,11 @@ public static class QueueRun
     public static void Pause(CardQueue q, string why, string? on = null) { q.Paused = true; q.Why = why; q.PausedOn = on; }
 
     /// <summary>Run it, or carry on after a pause: a card whose failure paused it is moved on from (it stays on its board
-    /// for the person to see to), so the queue goes on to the next.</summary>
+    /// for the person to see to), so the queue goes on to the next. That holds for a card that failed to start as much as
+    /// for one whose agent failed: it is marked started as well as released, so it isn't picked again.</summary>
     public static void Resume(CardQueue q)
     {
-        if (q.PausedOn is { } failed) q.Release(failed);
+        if (q.PausedOn is { } failed) { Started(q, failed); q.Release(failed); }
         q.Paused = false; q.Why = null; q.PausedOn = null;
     }
 

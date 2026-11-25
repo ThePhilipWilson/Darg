@@ -139,6 +139,26 @@ public sealed class CardQueueTests : IDisposable
         Assert.Equal(new QueueStep.Start("A-2"), w.Next(q));
     }
 
+    /// <summary>QA, 2026-11-25: a card that couldn't be started (the app pauses on it with "Couldn't start") was picked
+    /// again on every Resume, since only started cards were passed over. Resume moves on past it as it does a failed one.</summary>
+    [Fact]
+    public void A_card_that_failed_to_start_is_moved_on_from_by_Resume()
+    {
+        var w = new World(C("A-1"), C("A-2"));
+        var q = new CardQueue { Name = "q", Cards = ["A-1", "A-2"] };
+        QueueRun.Resume(q);
+        Assert.Equal(new QueueStep.Start("A-1"), w.Next(q));
+        QueueRun.Pause(q, "Couldn't start A-1: no agent started.", "A-1"); // as QueuesViewModel.Step does
+        Assert.Equal("failed", QueueRun.StateOf(q, "A-1", w.Cards["A-1"], QueueAgent.None));
+
+        QueueRun.Resume(q);
+        Assert.Equal(new QueueStep.Start("A-2"), w.Next(q));
+        Assert.Equal("moved on", QueueRun.StateOf(q, "A-1", w.Cards["A-1"], QueueAgent.None));
+        QueueRun.Started(q, "A-2");
+        w.Move("A-2", "Done");
+        Assert.IsType<QueueStep.Finished>(w.Next(q));
+    }
+
     [Fact]
     public void A_blocked_card_is_passed_over_and_the_queue_says_what_the_rest_wait_on()
     {

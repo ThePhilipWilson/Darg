@@ -79,6 +79,34 @@ public class QueueTests
     }
 
     [AvaloniaFact]
+    public async Task A_card_that_fails_to_start_pauses_the_queue_and_Resume_goes_on_to_the_next()
+    {
+        using var app = DargApp.Make();
+        var first = app.Card("cannot start", "Backlog");
+        var second = app.Card("starts fine", "Backlog");
+        await app.Start();
+        var queues = app.Project.Queues!;
+        var start = queues.Start!;
+        var tried = new List<string>();
+        queues.Start = id => { tried.Add(id); return id == first.Id ? "no agent started" : start(id); };
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await app.Api("queue-new", new { project = "proj", name = "Picks" });
+        // never run: pausing says so rather than ending on an empty colon
+        Assert.Equal("Picks is paused already: it hasn't been run yet.", await app.Api("queue-run", new { project = "proj", queue = "Picks", pause = true }));
+
+        await app.Api("queue-run", new { project = "proj", queue = "Picks" });
+        await app.Until(() => Queue(app).Paused && Queue(app).PausedOn == first.Id, "the queue to pause on the card that couldn't start");
+        Assert.Contains("Couldn't start", Queue(app).Why);
+        Assert.Null(Live(app, second.Id));
+
+        // Resume moves on past it, as its tip says, rather than trying it again
+        await app.Api("queue-run", new { project = "proj", queue = "Picks" });
+        await app.Until(() => Live(app, second.Id) is not null, "Resume to start the next card");
+        Assert.Equal(1, tried.Count(id => id == first.Id));
+        Assert.False(Queue(app).Paused);
+    }
+
+    [AvaloniaFact]
     public async Task Plus_Queue_makes_one_from_the_board_showing_and_the_strip_and_card_menu_show_it()
     {
         using var app = DargApp.Make();

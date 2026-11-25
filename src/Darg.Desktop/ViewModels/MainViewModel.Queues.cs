@@ -55,7 +55,7 @@ public partial class MainViewModel
     {
         var (qs, q) = Queue(a);
         var pause = a.Get("pause") is { } f && (f.Equals("true", StringComparison.OrdinalIgnoreCase) || f is "1" or "yes");
-        if (pause == q.Paused) return pause ? $"{q.Name} is paused already: {q.Why}" : $"{q.Name} is running already.";
+        if (pause == q.Paused) return pause ? $"{q.Name} is paused already: {q.Why ?? "it hasn't been run yet."}" : $"{q.Name} is running already.";
         qs.Toggle(q);
         return pause ? $"Paused {q.Name}: what's at work carries on, nothing new starts." : $"{q.Name} is running.";
     }
