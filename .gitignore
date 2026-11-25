@@ -2,3 +2,8 @@
 bin/
 obj/
 CLAUDE.local.md
+# Darg's own boards and cards travel with the repo (DAR-0003); the rest of .darg stays on this machine.
+# A .gitignore outranks .git/info/exclude, where Darg puts .darg/, so this wins on every clone.
+!.darg/
+.darg/*
+!.darg/tasks/
