@@ -21,7 +21,8 @@ public partial class BoardView : UserControl
             if (DataContext is BoardViewModel { Editor: { } editor } && await PicturePicker.Pick(this) is { } path) editor.AddPicture(path);
         };
         _ = new DragLift(this, Overlay, "card", "list",
-            itemsOf: list => (list as ListViewModel)?.Cards.Cast<object>().ToList() ?? [],
+            // a list, or one of its state sub-columns (WOR-0214), which is a drop target for the list
+            itemsOf: list => (list as ListViewModel)?.Cards.Cast<object>().ToList() ?? (list as StateGroup)?.Cards.Cast<object>().ToList() ?? [],
             // each row is a board: a card dropped on another row's list goes to that board
             drop: (items, list, before) =>
             {

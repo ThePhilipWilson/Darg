@@ -618,6 +618,7 @@ public partial class ProjectViewModel : ObservableObject
         {
             Board.AgentFor = Agents.ForCard;
             Board.QaRunning = Agents.QaRunningFor;
+            Agents.CardAgentChanged += _ => Board.StatesChanged();
             // a card agent shows its card's state: "Complete, pending removal" once the card is done
             Agents.DoneCardIds = Board.DoneCardIds;
             Agents.CardBoards = Board.CardBoards;

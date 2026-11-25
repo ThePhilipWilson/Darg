@@ -87,7 +87,8 @@ public class BoardTabsTests
         var more = More(app);
         Assert.NotNull(more);
         Assert.InRange(row.Count, 1, 13);
-        Assert.Equal($"▾ {14 - row.Count} more", more!.Content);
+        // the All tab (WOR-0214) is in the menu with the boards that don't fit
+        Assert.Equal($"▾ {15 - row.Count} more", more!.Content);
         var width = app.Window.ClientSize.Width;
         Assert.All(row.Append(more), b => Assert.True(b.TranslatePoint(new Avalonia.Point(b.Bounds.Width, 0), app.Window)!.Value.X <= width, "inside the window"));
         foreach (var name in new[] { "+ Card", "Show completed" })
@@ -110,12 +111,13 @@ public class BoardTabsTests
         Avalonia.Headless.HeadlessWindowExtensions.MouseUp(app.Window, centre, Avalonia.Input.MouseButton.Left);
         await DargApp.Settle();
         Assert.True(more.Flyout!.IsOpen, "the list is open");
-        Assert.Equal(14 - row.Count, ((MenuFlyout)more.Flyout).Items.Count);
+        Assert.Equal(15 - row.Count, ((MenuFlyout)more.Flyout).Items.Count);
+        Assert.Equal("All", ((MenuItem)((MenuFlyout)more.Flyout).Items[0]!).Header);
         var popup = ((Avalonia.Controls.Primitives.PopupFlyoutBase)more.Flyout).Popup;
         var presenter = Assert.IsAssignableFrom<ItemsControl>(popup.Child);
-        Assert.Equal(14 - row.Count, presenter.ItemCount);
+        Assert.Equal(15 - row.Count, presenter.ItemCount);
         Assert.All(presenter.GetVisualDescendants().OfType<MenuItem>(), m => Assert.True(m.Bounds.Height > 0));
-        Assert.Equal(14 - row.Count, presenter.GetVisualDescendants().OfType<MenuItem>().Count());
+        Assert.Equal(15 - row.Count, presenter.GetVisualDescendants().OfType<MenuItem>().Count());
         app.Shot("board-tabs-overflow-open");
         more.Flyout.Hide();
 

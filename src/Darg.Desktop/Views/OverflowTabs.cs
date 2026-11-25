@@ -82,7 +82,8 @@ public sealed class OverflowTabsPanel : Panel
 
 /// <summary>The board tabs and, when some don't fit, a ▾ n more button that lists them (WOR-0193). Picking one from
 /// the list is a plain click on its tab, so it then shows (lit) in the row. Keeps <see cref="Reserve"/> free for
-/// whatever sits after it.</summary>
+/// whatever sits after it. A button before the tabs (the All tab, WOR-0214) leads the row; once the row overflows it goes
+/// into the menu with the hidden tabs, unless it is the one showing (its class "all").</summary>
 public sealed class OverflowRow : Panel
 {
     const double Gap = 6;
@@ -90,6 +91,11 @@ public sealed class OverflowRow : Panel
     public double Reserve { get => GetValue(ReserveProperty); set => SetValue(ReserveProperty, value); }
 
     public ItemsControl? Items { get; set; }
+    /// <summary>The button before the tabs, if any: the All tab.</summary>
+    public Button? Lead { get; set; }
+    /// <summary>The lead is in the row (else it is in the menu, or not there at all).</summary>
+    bool _leadIn;
+    bool LeadThere => Lead is { IsVisible: true };
     public OverflowTabsPanel? TabsPanel => Items?.ItemsPanelRoot as OverflowTabsPanel;
     public Button More { get; } = new() { Classes = { "chip" }, Margin = new Thickness(0), Padding = new Thickness(12, 4), FontSize = 13, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
     readonly MenuFlyout _menu = new();
@@ -109,8 +115,11 @@ public sealed class OverflowRow : Panel
     void FillMenu()
     {
         var hidden = TabsPanel?.Hidden ?? [];
-        if (_menu.Items.Count == hidden.Count && _menu.Items.OfType<MenuItem>().Select(m => m.Header as string).SequenceEqual(hidden.Select(t => t.Name))) return;
+        var lead = LeadThere && !_leadIn ? Lead : null;
+        var names = (lead is null ? [] : new[] { lead.Content as string }).Concat(hidden.Select(t => t.Name));
+        if (_menu.Items.OfType<MenuItem>().Select(m => m.Header as string).SequenceEqual(names)) return;
         _menu.Items.Clear();
+        if (lead is not null) _menu.Items.Add(new MenuItem { Header = lead.Content as string, Command = lead.Command });
         foreach (var tab in hidden)
             _menu.Items.Add(new MenuItem { Header = tab.Name, Command = tab.PickCommand });
     }
@@ -118,34 +127,55 @@ public sealed class OverflowRow : Panel
     protected override Size MeasureOverride(Size available)
     {
         Items ??= Children.OfType<ItemsControl>().FirstOrDefault();
+        if (Lead is null && Children.OfType<Button>().FirstOrDefault(b => b != More) is { } lead)
+        {
+            // lit or not decides whether it may go into the menu, and lighting it changes no size: measure again
+            Lead = lead;
+            lead.Classes.CollectionChanged += (_, _) => InvalidateMeasure();
+            lead.PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) InvalidateMeasure(); };
+        }
         if (Items is null) return default;
         var w = double.IsInfinity(available.Width) ? available.Width : Math.Max(0, available.Width - Reserve);
-        Items.Measure(new Size(w, available.Height));
+        Lead?.Measure(new Size(double.PositiveInfinity, available.Height));
+        _leadIn = LeadThere;
+        var lw = _leadIn ? Lead!.DesiredSize.Width + Gap : 0;
+        Items.Measure(new Size(Math.Max(0, w - lw), available.Height));
         var hidden = TabsPanel?.Hidden.Count ?? 0;
-        if (hidden == 0) { More.IsVisible = false; return Items.DesiredSize; }
+        if (hidden == 0) { More.IsVisible = false; return new Size(lw + Items.DesiredSize.Width, Math.Max(Items.DesiredSize.Height, _leadIn ? Lead!.DesiredSize.Height : 0)); }
+        // the row overflows: the lead goes into the menu too, unless it's the board showing
+        if (_leadIn && !Lead!.Classes.Contains("all")) { _leadIn = false; lw = 0; }
+        var extra = LeadThere && !_leadIn ? 1 : 0;
         // the button, as wide as its widest wording, takes its place off the end of the row, then the tabs fit what's left
-        var all = Items.ItemsSource is System.Collections.ICollection c ? c.Count : hidden;
+        var all = (Items.ItemsSource is System.Collections.ICollection c ? c.Count : hidden) + extra;
         More.IsVisible = true;
         More.Content = $"▾ {all} more";
         More.Measure(new Size(double.PositiveInfinity, available.Height));
         var mw = More.DesiredSize.Width;
-        Items.Measure(new Size(Math.Max(0, w - mw - Gap), available.Height));
+        Items.Measure(new Size(Math.Max(0, w - lw - mw - Gap), available.Height));
         hidden = TabsPanel?.Hidden.Count ?? hidden;
-        More.Content = $"▾ {hidden} more";
+        More.Content = $"▾ {hidden + extra} more";
         More.Measure(new Size(double.PositiveInfinity, available.Height));
         FillMenu();
-        return new Size(Items.DesiredSize.Width + Gap + More.DesiredSize.Width, Math.Max(Items.DesiredSize.Height, More.DesiredSize.Height));
+        return new Size(lw + Items.DesiredSize.Width + Gap + More.DesiredSize.Width, Math.Max(Items.DesiredSize.Height, More.DesiredSize.Height));
     }
 
     protected override Size ArrangeOverride(Size finalSize)
     {
         if (Items is null) return finalSize;
+        var x = 0.0;
+        if (Lead is not null)
+        {
+            // in the menu, it is kept off the row, as the panel keeps a hidden tab
+            Lead.IsHitTestVisible = _leadIn;
+            if (_leadIn) { Lead.Arrange(new Rect(0, 0, Lead.DesiredSize.Width, finalSize.Height)); x = Lead.DesiredSize.Width + Gap; }
+            else Lead.Arrange(new Rect(-100000, 0, Lead.DesiredSize.Width, finalSize.Height));
+        }
         var iw = Items.DesiredSize.Width;
-        Items.Arrange(new Rect(0, 0, iw, finalSize.Height));
+        Items.Arrange(new Rect(x, 0, iw, finalSize.Height));
         if (More.IsVisible)
         {
             // the whole height, so its own centring puts it level with the tabs (each is centred in the same height)
-            More.Arrange(new Rect(iw + Gap, 0, More.DesiredSize.Width, finalSize.Height));
+            More.Arrange(new Rect(x + iw + Gap, 0, More.DesiredSize.Width, finalSize.Height));
         }
         else More.Arrange(default);
         return finalSize;

@@ -76,7 +76,102 @@
     <Style Selector="Button.blocklink TextBlock"><Setter Property="Foreground" Value="{DynamicResource Dim}"/></Style>
     <Style Selector="Button.blocklink.open TextBlock"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
     <Style Selector="Button.blocklink:pointerover TextBlock"><Setter Property="TextDecorations" Value="Underline"/></Style>
+    <!-- WOR-0214: a state sub-column's heading, coloured by what it means -->
+    <Style Selector="TextBlock.statehead"><Setter Property="Foreground" Value="{DynamicResource Dim}"/></Style>
+    <Style Selector="TextBlock.statehead.blocked"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></Style>
+    <Style Selector="TextBlock.statehead.working"><Setter Property="Foreground" Value="{DynamicResource Ok}"/></Style>
+    <Style Selector="TextBlock.statehead.needs"><Setter Property="Foreground" Value="{DynamicResource Accent}"/></Style>
+    <Style Selector="TextBlock.statehead.failed"><Setter Property="Foreground" Value="{DynamicResource Bad}"/></Style>
   </UserControl.Styles>
+  <UserControl.Resources>
+    <!-- a card's tile, in a list or in one of its state sub-columns (WOR-0214) -->
+    <DataTemplate x:Key="CardTile" x:DataType="vm:CardViewModel">
+      <Border Classes="card" Classes.picked="{Binding IsPicked}" Cursor="Hand" ToolTip.Tip="{Binding Description}" Tag="{Binding}" Margin="0,0,0,7">
+        <Border.ContextMenu>
+          <ContextMenu ItemsSource="{Binding MoveTargets}">
+            <ContextMenu.Styles>
+              <Style Selector="MenuItem" x:DataType="vm:MoveTarget">
+                <Setter Property="Header" Value="{Binding Label}"/>
+                <Setter Property="Command" Value="{Binding Command}"/>
+              </Style>
+            </ContextMenu.Styles>
+          </ContextMenu>
+        </Border.ContextMenu>
+        <StackPanel Spacing="4">
+          <!-- WOR-0166: the buttons keep their own column; id, star, type and priority wrap in what's left,
+               so at a narrow column nothing is squeezed into its neighbour -->
+          <Grid ColumnDefinitions="*,Auto">
+            <WrapPanel VerticalAlignment="Center">
+              <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}" Margin="0,1,6,1" VerticalAlignment="Center"/>
+              <TextBlock Classes="dim" FontSize="10" Text="{Binding BoardName}" IsVisible="{Binding ShowsBoard}" Margin="0,1,6,1"
+                         VerticalAlignment="Center" ToolTip.Tip="Its board"/>
+              <TextBlock Classes="quality" Classes.zero="{Binding Quality.Zero}" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
+                         FontSize="11" Text="{Binding Quality.Text}" Margin="0,1,8,1" VerticalAlignment="Center"
+                         ToolTip.Tip="{Binding Quality.Tip}" AutomationProperties.Name="{Binding Quality.Tip}"/>
+              <Button Classes="workon" Margin="0,1,6,1" VerticalAlignment="Center" Content="✦ Improve" Command="{Binding ImproveCommand}" IsVisible="{Binding ShowImprove}"
+                      AutomationProperties.Name="Improve card" ToolTip.Tip="An agent fills this thin card out: what's wanted, where, done when"/>
+              <Border IsVisible="{Binding ShowsKind}" Classes="kind" Classes.bug="{Binding IsBug}"
+                      CornerRadius="8" Padding="6,0" Margin="0,1,6,1" VerticalAlignment="Center" ToolTip.Tip="Its type">
+                <TextBlock Text="{Binding Kind}" FontSize="10"/>
+              </Border>
+              <Border IsVisible="{Binding HasPriority}" Background="{DynamicResource AccentSoft}" CornerRadius="8" Padding="6,0"
+                      Margin="0,1,6,1" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Priority}" FontSize="10" Foreground="{DynamicResource Accent}"/>
+              </Border>
+            </WrapPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top" Margin="4,0,0,0">
+              <Button Classes="workon" Content="🧪 Run QA" Command="{Binding RunQaCommand}"
+                      IsVisible="{Binding ShowRunQa}" ToolTip.Tip="An agent checks this card from its How to check section; the card stays in QA"/>
+              <Button Classes="workon" Content="▶ Work on" Command="{Binding WorkOnCommand}"
+                      IsVisible="{Binding CanStart}" ToolTip.Tip="Start an agent on this card"/>
+            </StackPanel>
+          </Grid>
+          <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+          <!-- WOR-0172: a chip per blocker still open (or an unknown id, or a cycle); it goes when the blocker reaches QA or done -->
+          <ItemsControl ItemsSource="{Binding BlockerChips}" IsVisible="{Binding HasBlockers}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="core:BlockerState">
+                <Border Classes="blocker" ToolTip.Tip="{Binding Text, StringFormat='Blocked by {0}'}" AutomationProperties.Name="{Binding Chip}">
+                  <TextBlock Text="{Binding Chip}" FontSize="10" Foreground="{DynamicResource Warn}"/>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <!-- WOR-0173: Work on a blocked card asks first -->
+          <StackPanel Spacing="4" IsVisible="{Binding AskingBlocked}">
+            <TextBlock Text="{Binding BlockedAsk}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Warn}"/>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Button Classes="workon" Content="Start anyway" Command="{Binding StartAnywayCommand}"
+                      ToolTip.Tip="Start an agent on it now; it is told what it waits on and where those cards' reports are"/>
+              <Button Classes="workon" Content="Cancel" Command="{Binding CancelBlockedCommand}"/>
+            </StackPanel>
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding Labels}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <Border Classes="label"><TextBlock Text="{Binding}" FontSize="10" Foreground="{DynamicResource LabelInk}"/></Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Button IsVisible="{Binding HasAgent}" Command="{Binding OpenAgentCommand}" Classes="agentline"
+                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" ToolTip.Tip="Open this card's agent">
+            <StackPanel Spacing="1" Classes="agentstate" Classes.working="{Binding Agent.Working, FallbackValue=False}"
+                        Classes.needs="{Binding Agent.NeedsYou, FallbackValue=False}" Classes.done="{Binding Agent.IsDone, FallbackValue=False}"
+                        Classes.failed="{Binding Agent.IsFailed, FallbackValue=False}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Ellipse Width="7" Height="7" Classes="dot" VerticalAlignment="Center"/>
+                <TextBlock Classes="state" FontSize="11" Text="{Binding Agent.StateText, StringFormat='agent {0}', FallbackValue=''}"/>
+              </StackPanel>
+              <TextBlock Classes="dim" FontSize="10" Text="{Binding Agent.Activity, FallbackValue=''}" TextTrimming="CharacterEllipsis"
+                         IsVisible="{Binding Agent.Working, FallbackValue=False}"/>
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+  </UserControl.Resources>
   <Panel>
   <Grid ColumnDefinitions="*,Auto">
   <Grid RowDefinitions="Auto,Auto,*">
@@ -111,6 +206,10 @@
                   ToolTip.Tip="Pick every card showing (Ctrl+A). A column's own Pick all picks just that column; Ctrl- or Shift-click picks one at a time."/>
         </StackPanel>
         <views:OverflowRow DockPanel.Dock="Left" x:Name="BoardTabRow" Reserve="200" Margin="0,0,12,0">
+        <!-- WOR-0214: every card of the project on one board; leads the row, into the menu when the row overflows -->
+        <Button Classes="chip boardtab" Classes.all="{Binding ShowingAll}" Content="All" Command="{Binding PickAllBoardCommand}"
+                IsVisible="{Binding HasAllTab}" Margin="0" Padding="12,4" FontSize="13" AutomationProperties.Name="All boards"
+                ToolTip.Tip="Every card of the project on one board, its columns every board's merged by name; each card stays on its own board"/>
         <ItemsControl x:Name="BoardTabs" ItemsSource="{Binding Tabs}">
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><views:OverflowTabsPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
@@ -127,6 +226,11 @@
     </Border>
 
     <Border Grid.Row="1" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8,14,3">
+      <DockPanel>
+      <!-- WOR-0214: the board's columns split by state; here, beside the label chips, the tabs keep the header's room -->
+      <CheckBox DockPanel.Dock="Right" Content="By state" IsChecked="{Binding ActiveSplit}" IsVisible="{Binding ShowsSectionSplit}" Margin="12,-4,0,0"
+                VerticalAlignment="Top" AutomationProperties.Name="Split by state"
+                ToolTip.Tip="Split each column into narrow columns by state: blocked, ready, agent working, running QA, needs you, agent failed. Kept for this board."/>
       <ItemsControl ItemsSource="{Binding Labels}">
         <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
@@ -136,11 +240,12 @@
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
+      </DockPanel>
     </Border>
 
     <!-- the boards on screen, a row each (WOR-0087): the picked one, then any shown with it; taller than the space, they scroll -->
     <ScrollViewer Grid.Row="2" x:Name="RowsScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-      <ItemsControl ItemsSource="{Binding Rows}">
+      <ItemsControl ItemsSource="{Binding ShownRows}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:BoardViewModel">
     <DockPanel Height="{Binding RowHeight}">
@@ -151,6 +256,8 @@
           <Button DockPanel.Dock="Right" Classes="head" Opacity="1" Content="✕" Command="{Binding HideRowCommand}" IsVisible="{Binding IsExtraRow}"
                   ToolTip.Tip="Stop showing this board here" AutomationProperties.Name="{Binding SelectedBoard, StringFormat='Hide {0}'}"/>
           <TextBlock Classes="dim small" Text="{Binding CountText}" VerticalAlignment="Center" Margin="10,0" TextTrimming="CharacterEllipsis" DockPanel.Dock="Right"/>
+          <CheckBox DockPanel.Dock="Right" Content="By state" IsChecked="{Binding SplitByState}" FontSize="12" Margin="10,0,0,0"
+                    ToolTip.Tip="Split this board's columns into narrow columns by state: blocked, ready, agent working, running QA, needs you, agent failed. Kept for this board."/>
           <TextBlock Text="{Binding SelectedBoard}" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center"/>
         </DockPanel>
       </Border>
@@ -181,7 +288,7 @@
                 </DockPanel>
               </Button>
             </Border>
-            <Border Width="290" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8"
+            <Border Width="{Binding Width}" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="1" CornerRadius="8"
                     Tag="{Binding Key}" Classes="list" IsVisible="{Binding IsOpen}">
               <DockPanel>
                 <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="10,6">
@@ -200,12 +307,12 @@
                             <MenuItem Header="{Binding ReverseText}" Command="{Binding ReverseSortCommand}" IsVisible="{Binding IsSorted}"/>
                             <Separator/>
                             <MenuItem Header="Rename" Command="{Binding StartRenameCommand}" IsVisible="{Binding IsColumn}"/>
-                            <MenuItem Header="Minimize" Command="{Binding ToggleMinimizedCommand}"/>
+                            <MenuItem Header="Minimize" Command="{Binding ToggleMinimizedCommand}" IsVisible="{Binding CanMinimize}"/>
                             <MenuItem Header="Remove column…" Command="{Binding AskRemoveCommand}" IsVisible="{Binding IsColumn}"/>
                           </MenuFlyout>
                         </Button.Flyout>
                       </Button>
-                      <Button DockPanel.Dock="Right" Classes="head" Content="–" Command="{Binding ToggleMinimizedCommand}" ToolTip.Tip="Minimize to a strip"
+                      <Button DockPanel.Dock="Right" Classes="head" Content="–" Command="{Binding ToggleMinimizedCommand}" ToolTip.Tip="Minimize to a strip" IsVisible="{Binding CanMinimize}"
                               AutomationProperties.Name="{Binding Name, StringFormat='Minimize {0}'}"/>
                       <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding Count}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                       <Button DockPanel.Dock="Right" Classes="workon colpick" Classes.on="{Binding AllPicked}" Content="{Binding PickText}"
@@ -245,7 +352,7 @@
                   </StackPanel>
                 </Border>
                 <!-- WOR-0195: virtualized, so a big column makes and draws the cards on screen, not all of them -->
-                  <ItemsControl ItemsSource="{Binding Cards}">
+                  <ItemsControl ItemsSource="{Binding Cards}" ItemTemplate="{StaticResource CardTile}" IsVisible="{Binding Unsplit}">
                     <ItemsControl.Template>
                       <ControlTemplate>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -254,100 +361,43 @@
                       </ControlTemplate>
                     </ItemsControl.Template>
                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:CardViewModel">
-                        <Border Classes="card" Classes.picked="{Binding IsPicked}" Cursor="Hand" ToolTip.Tip="{Binding Description}" Tag="{Binding}" Margin="0,0,0,7">
-                          <Border.ContextMenu>
-                            <ContextMenu ItemsSource="{Binding MoveTargets}">
-                              <ContextMenu.Styles>
-                                <Style Selector="MenuItem" x:DataType="vm:MoveTarget">
-                                  <Setter Property="Header" Value="{Binding Label}"/>
-                                  <Setter Property="Command" Value="{Binding Command}"/>
-                                </Style>
-                              </ContextMenu.Styles>
-                            </ContextMenu>
-                          </Border.ContextMenu>
-                          <StackPanel Spacing="4">
-                            <!-- WOR-0166: the buttons keep their own column; id, star, type and priority wrap in what's left,
-                                 so at a narrow column nothing is squeezed into its neighbour -->
-                            <Grid ColumnDefinitions="*,Auto">
-                              <WrapPanel VerticalAlignment="Center">
-                                <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}" Margin="0,1,6,1" VerticalAlignment="Center"/>
-                                <TextBlock Classes="quality" Classes.zero="{Binding Quality.Zero}" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
-                                           FontSize="11" Text="{Binding Quality.Text}" Margin="0,1,8,1" VerticalAlignment="Center"
-                                           ToolTip.Tip="{Binding Quality.Tip}" AutomationProperties.Name="{Binding Quality.Tip}"/>
-                                <Button Classes="workon" Margin="0,1,6,1" VerticalAlignment="Center" Content="✦ Improve" Command="{Binding ImproveCommand}" IsVisible="{Binding ShowImprove}"
-                                        AutomationProperties.Name="Improve card" ToolTip.Tip="An agent fills this thin card out: what's wanted, where, done when"/>
-                                <Border IsVisible="{Binding ShowsKind}" Classes="kind" Classes.bug="{Binding IsBug}"
-                                        CornerRadius="8" Padding="6,0" Margin="0,1,6,1" VerticalAlignment="Center" ToolTip.Tip="Its type">
-                                  <TextBlock Text="{Binding Kind}" FontSize="10"/>
-                                </Border>
-                                <Border IsVisible="{Binding HasPriority}" Background="{DynamicResource AccentSoft}" CornerRadius="8" Padding="6,0"
-                                        Margin="0,1,6,1" VerticalAlignment="Center">
-                                  <TextBlock Text="{Binding Priority}" FontSize="10" Foreground="{DynamicResource Accent}"/>
-                                </Border>
-                              </WrapPanel>
-                              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top" Margin="4,0,0,0">
-                                <Button Classes="workon" Content="🧪 Run QA" Command="{Binding RunQaCommand}"
-                                        IsVisible="{Binding ShowRunQa}" ToolTip.Tip="An agent checks this card from its How to check section; the card stays in QA"/>
-                                <Button Classes="workon" Content="▶ Work on" Command="{Binding WorkOnCommand}"
-                                        IsVisible="{Binding CanStart}" ToolTip.Tip="Start an agent on this card"/>
-                              </StackPanel>
-                            </Grid>
-                            <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
-                            <!-- WOR-0172: a chip per blocker still open (or an unknown id, or a cycle); it goes when the blocker reaches QA or done -->
-                            <ItemsControl ItemsSource="{Binding BlockerChips}" IsVisible="{Binding HasBlockers}">
-                              <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                              <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="core:BlockerState">
-                                  <Border Classes="blocker" ToolTip.Tip="{Binding Text, StringFormat='Blocked by {0}'}" AutomationProperties.Name="{Binding Chip}">
-                                    <TextBlock Text="{Binding Chip}" FontSize="10" Foreground="{DynamicResource Warn}"/>
-                                  </Border>
-                                </DataTemplate>
-                              </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <!-- WOR-0173: Work on a blocked card asks first -->
-                            <StackPanel Spacing="4" IsVisible="{Binding AskingBlocked}">
-                              <TextBlock Text="{Binding BlockedAsk}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Warn}"/>
-                              <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Classes="workon" Content="Start anyway" Command="{Binding StartAnywayCommand}"
-                                        ToolTip.Tip="Start an agent on it now; it is told what it waits on and where those cards' reports are"/>
-                                <Button Classes="workon" Content="Cancel" Command="{Binding CancelBlockedCommand}"/>
-                              </StackPanel>
-                            </StackPanel>
-                            <ItemsControl ItemsSource="{Binding Labels}">
-                              <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                              <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="x:String">
-                                  <Border Classes="label"><TextBlock Text="{Binding}" FontSize="10" Foreground="{DynamicResource LabelInk}"/></Border>
-                                </DataTemplate>
-                              </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <Button IsVisible="{Binding HasAgent}" Command="{Binding OpenAgentCommand}" Classes="agentline"
-                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" ToolTip.Tip="Open this card's agent">
-                              <StackPanel Spacing="1" Classes="agentstate" Classes.working="{Binding Agent.Working, FallbackValue=False}"
-                                          Classes.needs="{Binding Agent.NeedsYou, FallbackValue=False}" Classes.done="{Binding Agent.IsDone, FallbackValue=False}"
-                                          Classes.failed="{Binding Agent.IsFailed, FallbackValue=False}">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                  <Ellipse Width="7" Height="7" Classes="dot" VerticalAlignment="Center"/>
-                                  <TextBlock Classes="state" FontSize="11" Text="{Binding Agent.StateText, StringFormat='agent {0}', FallbackValue=''}"/>
-                                </StackPanel>
-                                <TextBlock Classes="dim" FontSize="10" Text="{Binding Agent.Activity, FallbackValue=''}" TextTrimming="CharacterEllipsis"
-                                           IsVisible="{Binding Agent.Working, FallbackValue=False}"/>
-                              </StackPanel>
-                            </Button>
-                          </StackPanel>
-                        </Border>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
                   </ItemsControl>
+                <!-- WOR-0214: split by state, a narrow sub-column per state its cards are in; a card dropped on one goes to this list -->
+                <ItemsControl ItemsSource="{Binding Groups}" IsVisible="{Binding IsSplit}" Margin="6,6,6,0">
+                  <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:StateGroup">
+                      <Border Width="214" Classes="list" Tag="{Binding Key}" Background="{DynamicResource Panel2}" CornerRadius="6"
+                              AutomationProperties.Name="{Binding Name}">
+                        <DockPanel>
+                          <DockPanel DockPanel.Dock="Top" Margin="8,6,8,0">
+                            <TextBlock DockPanel.Dock="Right" Classes="dim small" Text="{Binding Count}" VerticalAlignment="Center"/>
+                            <TextBlock Classes="statehead" Classes.blocked="{Binding IsBlocked}" Classes.working="{Binding IsWorking}"
+                                       Classes.needs="{Binding IsNeeds}" Classes.failed="{Binding IsFailed}"
+                                       Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                          </DockPanel>
+                          <ItemsControl ItemsSource="{Binding Cards}" ItemTemplate="{StaticResource CardTile}">
+                            <ItemsControl.Template>
+                              <ControlTemplate>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                  <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" Margin="6"/>
+                                </ScrollViewer>
+                              </ControlTemplate>
+                            </ItemsControl.Template>
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                          </ItemsControl>
+                        </DockPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
               </DockPanel>
             </Border>
             </Panel>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-      <Button VerticalAlignment="Top" Content="+ Column" Command="{Binding AddColumnCommand}" Margin="0,10,10,10"
+      <Button VerticalAlignment="Top" Content="+ Column" Command="{Binding AddColumnCommand}" Margin="0,10,10,10" IsVisible="{Binding !IsAll}"
               ToolTip.Tip="Add a column before the last (done) column, and name it"/>
       </StackPanel>
     </ScrollViewer>

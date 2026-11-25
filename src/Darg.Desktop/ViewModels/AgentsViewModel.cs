@@ -335,6 +335,7 @@ public partial class AgentsViewModel : ObservableObject
         {
             if (e.PropertyName == nameof(AgentViewModel.CanContinueAfterReset)) AnyOutOfUsage = Agents.Any(a => a.CanContinueAfterReset);
             if (e.PropertyName is nameof(AgentViewModel.State) or nameof(AgentViewModel.TurnFailed) && SortByStatus) Resort();
+            if (e.PropertyName is nameof(AgentViewModel.State) or nameof(AgentViewModel.TurnFailed) && agent.CardId is not null) CardAgentChanged?.Invoke(agent);
             if (e.PropertyName != nameof(AgentViewModel.State)) return;
             // it filed a report, or its card reached done, and its turn has now ended well: it goes (after this change has been handled)
             if (_goWhenFinished.Contains(agent.Id) && Finished(agent) || TaskOver(agent)) Dispatcher.UIThread.Post(() => { if (Agents.Contains(agent) && (Finished(agent) && _goWhenFinished.Contains(agent.Id) || TaskOver(agent))) Forget(agent); });
@@ -393,6 +394,8 @@ public partial class AgentsViewModel : ObservableObject
     /// see <see cref="Decisions"/>): (agent, what happened, detail).</summary>
     public event Action<AgentViewModel, string, string>? Notify;
     public event Action<AgentViewModel>? AsksSettled;
+    /// <summary>A card's agent changed state (WOR-0214: the board's split by state regroups its card).</summary>
+    public event Action<AgentViewModel>? CardAgentChanged;
     public AgentViewModel? Find(string id) => Agents.FirstOrDefault(a => a.Id == id);
     /// <summary>The newest agent started on a card that hasn't ended.</summary>
     public AgentViewModel? ForCard(string cardId) =>
