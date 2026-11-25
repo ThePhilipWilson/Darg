@@ -223,8 +223,28 @@ public static class QueueOrder
     public static List<string> Add(CardQueue q, IEnumerable<string> ids, IReadOnlyDictionary<string, BoardCard> index)
     {
         var added = WithBlockers(ids, index).Where(id => !q.Has(id)).ToList();
+        foreach (var id in added) Forget(q, id); // anything left from an earlier time in the queue
         q.Cards.AddRange(added);
         return added;
+    }
+
+    /// <summary>Take a card out of a queue, and everything the queue knew of it (started, moved on from, its QA check,
+    /// the pause on it), so a card added back runs as a new one. Says whether it was there.</summary>
+    public static bool Remove(CardQueue q, string id)
+    {
+        var gone = q.Cards.RemoveAll(c => c.Equals(id, StringComparison.OrdinalIgnoreCase)) > 0;
+        Forget(q, id);
+        return gone;
+    }
+
+    static void Forget(CardQueue q, string id)
+    {
+        q.Started.RemoveAll(c => c.Equals(id, StringComparison.OrdinalIgnoreCase));
+        q.Released.RemoveAll(c => c.Equals(id, StringComparison.OrdinalIgnoreCase));
+        q.Gates.Remove(id);
+        foreach (var k in q.Gates.Where(g => g.Value.Next.Equals(id, StringComparison.OrdinalIgnoreCase)).Select(g => g.Key).ToList())
+            q.Gates.Remove(k); // a check about this card as the next: asked again if it comes back
+        if (q.PausedOn?.Equals(id, StringComparison.OrdinalIgnoreCase) == true) q.PausedOn = null;
     }
 
     /// <summary>Move a card up (-1) or down (+1) one place.</summary>
@@ -265,21 +285,26 @@ public static class QueueCheck
 
     static string Cut(string text) => text.Length <= 6000 ? text : text[..6000] + "\n…";
 
-    static readonly Regex Answer = new(@"^(?<verdict>not[\s\-_]*blocking|non[\s\-_]*blocking|blocking)\b\s*(?:[:\-–—.,]\s*)?(?<why>.*)$",
+    // the marks a model wraps words in: markdown bold, italic, code, headings and quotes, and quotation marks
+    const string Marks = @"[\s*_`""'“”‘’#>]";
+
+    static readonly Regex Answer = new($@"^(?<verdict>not[\s\-_]*blocking|non[\s\-_]*blocking|blocking)\b{Marks}*(?:[:\-–—.,]{Marks}*)?(?<why>.*)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>The verdict and why, or null when the reply isn't one: then the caller treats it as blocking. Takes the
-    /// shapes a model drifts into: markdown bold or code, quotes, a leading "Answer:", a full stop, any case, "non-blocking".</summary>
+    /// shapes a model drifts into: markdown bold or code, quotes, a leading "Answer:", a full stop, any case, "non-blocking".
+    /// Marks are taken off only around the verdict and the reason, so an apostrophe inside the reason ("AGE-0003's") stays.</summary>
     public static (bool Blocking, string Why)? Parse(string? reply)
     {
         if (string.IsNullOrWhiteSpace(reply)) return null;
         var line = reply.Replace("\r", "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? "";
-        line = Regex.Replace(line, @"[*_`""'“”‘’#>]", "").Trim();
-        line = Regex.Replace(line, @"^(answer|verdict|reply)\s*:\s*", "", RegexOptions.IgnoreCase).Trim();
+        line = Regex.Replace(line, $"^{Marks}+", "");
+        line = Regex.Replace(line, $@"^(answer|verdict|reply){Marks}*:{Marks}*", "", RegexOptions.IgnoreCase);
         var m = Answer.Match(line);
         if (!m.Success) return null;
         var verdict = m.Groups["verdict"].Value.ToLowerInvariant();
-        var why = m.Groups["why"].Value.Trim().TrimEnd('.').Trim();
+        var why = Regex.Replace(m.Groups["why"].Value, $@"({Marks}|\.)+$", "");
+        why = Regex.Replace(why, @"\*\*|`", ""); // bold or code inside the reason
         return (verdict.StartsWith("blocking", StringComparison.Ordinal), why.Length > 0 ? why : "no reason given");
     }
 }

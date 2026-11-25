@@ -159,6 +159,50 @@ public sealed class CardQueueTests : IDisposable
         Assert.IsType<QueueStep.Finished>(w.Next(q));
     }
 
+    /// <summary>QA round 2, 2026-11-25: a card the queue had moved on from stayed "moved on" for good, even taken out (✕)
+    /// and added back, since Remove left it in Started and Released. Taking a card out forgets it; added back, it runs.</summary>
+    [Theory]
+    [InlineData(true)]  // its start failed
+    [InlineData(false)] // its agent failed
+    public void A_card_moved_on_from_runs_again_once_taken_out_and_added_back(bool startFailed)
+    {
+        var w = new World(C("A-1"), C("A-2"));
+        var q = new CardQueue { Name = "q", Cards = ["A-1", "A-2"] };
+        QueueRun.Resume(q);
+        Assert.Equal(new QueueStep.Start("A-1"), w.Next(q));
+        if (!startFailed) { QueueRun.Started(q, "A-1"); w.Move("A-1", "In Progress"); w.Agents["A-1"] = QueueAgent.Failed; }
+        q.Gates["A-1"] = new QaGate(true, "A-2", "stale");
+        QueueRun.Pause(q, "A-1 failed.", "A-1");
+        QueueRun.Resume(q);
+        Assert.Equal(new QueueStep.Start("A-2"), w.Next(q));
+        QueueRun.Started(q, "A-2");
+        w.Move("A-2", "Done");
+        Assert.IsType<QueueStep.Finished>(w.Next(q));
+        Assert.Equal("moved on", QueueRun.StateOf(q, "A-1", w.Cards["A-1"], QueueAgent.None));
+
+        // seen to by hand, then taken out and added back
+        w.Agents.Remove("A-1"); w.Move("A-1", "Backlog");
+        Assert.True(QueueOrder.Remove(q, "A-1"));
+        Assert.DoesNotContain("A-1", q.Started);
+        Assert.DoesNotContain("A-1", q.Released);
+        Assert.False(q.Gates.ContainsKey("A-1"));
+        Assert.Equal(["A-1"], QueueOrder.Add(q, ["A-1"], w.Cards));
+        Assert.Equal("queued", QueueRun.StateOf(q, "A-1", w.Cards["A-1"], QueueAgent.None));
+        Assert.Equal(new QueueStep.Start("A-1"), w.Next(q));
+    }
+
+    [Fact]
+    public void Taking_out_the_card_a_queue_is_paused_on_leaves_it_paused_on_nothing()
+    {
+        var q = new CardQueue { Name = "q", Cards = ["A-1", "A-2"] };
+        QueueRun.Resume(q);
+        QueueRun.Pause(q, "Couldn't start A-1.", "A-1");
+        Assert.True(QueueOrder.Remove(q, "A-1"));
+        Assert.Null(q.PausedOn);
+        Assert.True(q.Paused);
+        Assert.False(QueueOrder.Remove(q, "A-1"));
+    }
+
     [Fact]
     public void A_blocked_card_is_passed_over_and_the_queue_says_what_the_rest_wait_on()
     {
@@ -191,6 +235,11 @@ public sealed class CardQueueTests : IDisposable
     [InlineData("`non-blocking`", false, "no reason given")]
     [InlineData("Answer: blocking — same test", true, "same test")]
     [InlineData("\n\n  \"Not Blocking: unrelated\"\nmore words", false, "unrelated")]
+    // QA round 2: apostrophes inside the reason stay (real Haiku replies lost them)
+    [InlineData("BLOCKING: AGE-0003's saved-agent folder move", true, "AGE-0003's saved-agent folder move")]
+    [InlineData("**NOT BLOCKING**: WOR-0215’s Backlog Work All button.", false, "WOR-0215’s Backlog Work All button")]
+    [InlineData("'Blocking': it's the same view'", true, "it's the same view")]
+    [InlineData("BLOCKING: edits `QueueRun.Next` and **the strip**", true, "edits QueueRun.Next and the strip")]
     public void The_QA_check_takes_the_shapes_a_model_drifts_into(string reply, bool blocking, string why) =>
         Assert.Equal((blocking, why), QueueCheck.Parse(reply));
 

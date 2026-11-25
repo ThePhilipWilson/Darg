@@ -104,7 +104,7 @@ public partial class QueuesViewModel : ObservableObject
 
     public bool Remove(CardQueue q, string id)
     {
-        var gone = q.Cards.RemoveAll(c => c.Equals(id, StringComparison.OrdinalIgnoreCase)) > 0;
+        var gone = QueueOrder.Remove(q, id);
         if (gone) Saved();
         return gone;
     }

@@ -106,6 +106,33 @@ public class QueueTests
         Assert.False(Queue(app).Paused);
     }
 
+    /// <summary>QA round 2: a card the queue had moved on from stayed "moved on" even once taken out and added back, so
+    /// it could never be run again. Taking it out forgets it; added back, the queue starts it.</summary>
+    [AvaloniaFact]
+    public async Task A_card_moved_on_from_runs_once_taken_out_and_added_back()
+    {
+        using var app = DargApp.Make();
+        var card = app.Card("cannot start yet", "Backlog");
+        await app.Start();
+        var queues = app.Project.Queues!;
+        var start = queues.Start!;
+        var fixedUp = false;
+        queues.Start = id => fixedUp ? start(id) : "no agent started";
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await app.Api("queue-new", new { project = "proj", name = "Picks" });
+        await app.Api("queue-run", new { project = "proj", queue = "Picks" });
+        await app.Until(() => Queue(app).Paused && Queue(app).PausedOn == card.Id, "the queue to pause on the card that couldn't start");
+        await app.Api("queue-run", new { project = "proj", queue = "Picks" });
+        await app.Until(() => queues.Queues[0].Doing.StartsWith("Finished", StringComparison.Ordinal), "the queue to finish, having moved on");
+        Assert.Equal("moved on", queues.Queues[0].Cards.Single().State);
+
+        fixedUp = true;
+        await app.Api("queue-remove", new { project = "proj", queue = "Picks", cards = card.Id });
+        await app.Api("queue-add", new { project = "proj", queue = "Picks", cards = card.Id });
+        await app.Until(() => Live(app, card.Id) is not null, "the card added back to be started");
+        app.Shot("started-again");
+    }
+
     [AvaloniaFact]
     public async Task Plus_Queue_makes_one_from_the_board_showing_and_the_strip_and_card_menu_show_it()
     {
