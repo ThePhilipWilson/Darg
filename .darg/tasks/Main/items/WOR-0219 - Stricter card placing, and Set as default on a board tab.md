@@ -1,11 +1,12 @@
 # WOR-0219: Stricter card placing, and Set as default on a board tab
 
-- **Status:** Backlog
+- **Status:** QA Ready
 - **Priority:**
 - **Type:** Bug
 - **Labels:**
 - **Created:** 2026-11-25
 - **Done:**
+- **Moved:** 2026-11-25 15:11:51
 
 ## Description
 
@@ -33,3 +34,21 @@ Every new card (from Fettle's new-card, a note's ticket, or + Card on the inbox)
 - `pwsh -File tools/test.ps1` passes.
 
 **Questions left:** none.
+
+## How to check
+
+**What changed** (commit 5f86956 on `android`, pushed):
+- Right-click a board tab: a menu with **Set as default**, with a ✓ by it on the board that's the default now. Picking it keeps the board in `default-board` beside `shown-boards` in the project's `.darg/`. New cards (Fettle's new-card, a note's ticket, + Card on All) land there. With none set, or once that board is gone or renamed, it goes back to Main by name.
+- Haiku's placing prompt is strict. A card moves off the default board only when it is plainly part of one story; a shared word, a near fit or "not sure" means it stays. Each board's name now sits on its own `Board:` line. With the old layout Haiku sometimes answered with a card's title, so an obvious card like "Three-way merge of board.json" was never placed.
+
+**Reproducing it first:** on today's boards, WOR-0218, WOR-0216 and WOR-0217 all came back "none" from the old prompt too (3 tries each), so I couldn't reproduce the miss. Fettle's transcript shows WOR-0218 went in through new-card with no `board`, so Haiku placed it, but nothing records where it went. The default board and the stricter prompt guard against it either way.
+
+![the tab's menu, Art set as default](D:/GitHub/ThePhilipWilson/Darg/.shots/wor-0219/board-tab-menu-default.png)
+
+**To try it** (after ⟳ Update):
+1. On Darg's Board, right-click the **Merge-safe boards** tab. The menu says Set as default, with no ✓. Right-click **Main**: it has the ✓.
+2. Pick Set as default on Merge-safe boards. The line under the tabs says it's the default. Ask Fettle for any card: it lands on Merge-safe boards, and Haiku may move it to Main or another story. Restart Darg: the ✓ is still on Merge-safe boards.
+3. Set Main back as the default.
+4. Live Haiku check: `$env:DARG_LIVE='1'; dotnet test tests/Darg.Core.Tests --filter A_live_model_moves`. Five real-shaped cards: three stay ("none"), the merge card goes to Merge-safe boards and the phone swipe card goes to Android, 3 tries out of 3 each.
+
+**Look for:** whether the menu reads right on the real window (I've only seen it in the headless screenshot), and whether the strictness feels right as cards come in: too many staying on Main means it's too strict.
