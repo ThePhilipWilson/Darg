@@ -118,6 +118,7 @@ public partial class MainViewModel
         Add("fettle-chats", "for the phone app, not Fettle: a project's Fettle chats, newest first: {project}. Each: id, name, updated.", FettleChats);
         RegisterPhoneApi(api);
         RegisterNeedsYouApi(api);
+        RegisterQueueApi(api);
         Add("terminal", "read what a console in a project's Terminal section shows now: {project, lines?: how many of the last lines (default 50, up to 2000), console?: its tab name or number (default the selected one)}. " +
                         "Use it when Philip asks what's in, or has gone wrong in, his terminal.", ReadTerminal);
     }

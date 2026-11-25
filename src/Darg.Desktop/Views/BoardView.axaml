@@ -127,6 +127,17 @@
             </StackPanel>
           </Grid>
           <TextBlock Text="{Binding Title}" TextWrapping="Wrap"/>
+          <!-- WOR-0212: a chip per queue it's in, with its place -->
+          <ItemsControl ItemsSource="{Binding QueueChips}" IsVisible="{Binding InQueue}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="{DynamicResource AccentSoft}" CornerRadius="8" Padding="6,0" Margin="0,0,4,2" ToolTip.Tip="In this queue, at this place">
+                  <TextBlock Text="{Binding}" FontSize="10" Foreground="{DynamicResource Accent}"/>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
           <!-- WOR-0172: a chip per blocker still open (or an unknown id, or a cycle); it goes when the blocker reaches QA or done -->
           <ItemsControl ItemsSource="{Binding BlockerChips}" IsVisible="{Binding HasBlockers}">
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -174,7 +185,7 @@
   </UserControl.Resources>
   <Panel>
   <Grid ColumnDefinitions="*,Auto">
-  <Grid RowDefinitions="Auto,Auto,*">
+  <Grid RowDefinitions="Auto,Auto,Auto,*">
     <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,8">
       <DockPanel>
         <!-- what just happened, whole and wrapped (WOR-0173 QA: cut off in the header, it lost which cards were left out) -->
@@ -243,8 +254,69 @@
       </DockPanel>
     </Border>
 
+    <!-- WOR-0212: the project's queues, a line each: name, progress, what it's doing, Run / Pause; opened, its cards in order -->
+    <Border Grid.Row="2" DataContext="{Binding Queues}" x:DataType="vm:QueuesViewModel" IsVisible="{Binding ShowsStrip, FallbackValue=False}"
+            BorderBrush="{DynamicResource Line}" BorderThickness="0,0,0,1" Padding="14,6" Background="{DynamicResource Panel}">
+      <StackPanel Spacing="4">
+        <DockPanel IsVisible="{Binding IsMaking}" LastChildFill="True">
+          <TextBlock DockPanel.Dock="Left" Text="New queue" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <Button DockPanel.Dock="Right" Content="Cancel" Command="{Binding CancelNewCommand}" Margin="6,0,0,0"/>
+          <Button DockPanel.Dock="Right" Classes="primary" Content="Make" Command="{Binding MakeNewCommand}" Margin="6,0,0,0" AutomationProperties.Name="Make queue"/>
+          <TextBox DockPanel.Dock="Left" Text="{Binding NewName}" PlaceholderText="Queue name" Width="220"
+                   views:EnterSends.Command="{Binding MakeNewCommand}" AutomationProperties.Name="Queue name"/>
+          <TextBlock Classes="dim" Text="{Binding MakeHint}" VerticalAlignment="Center" Margin="10,0,0,0" TextTrimming="CharacterEllipsis"/>
+        </DockPanel>
+        <TextBlock Classes="bad" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        <ItemsControl ItemsSource="{Binding Queues}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:QueueViewModel">
+              <StackPanel Spacing="2" Margin="0,1">
+                <DockPanel>
+                  <Button DockPanel.Dock="Left" Classes="head" Opacity="1" Content="{Binding Arrow}" Command="{Binding OpenCommand}"
+                          AutomationProperties.Name="{Binding Name, StringFormat='Show queue {0}'}" ToolTip.Tip="Show or hide its cards"/>
+                  <TextBlock DockPanel.Dock="Left" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                  <TextBlock DockPanel.Dock="Left" Classes="dim" Text="{Binding Summary}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                  <Button DockPanel.Dock="Right" Content="{Binding RunText}" Command="{Binding ToggleCommand}" Classes.primary="{Binding IsPaused}" Margin="8,0,0,0"
+                          ToolTip.Tip="{Binding RunTip}" AutomationProperties.Name="{Binding Name, StringFormat='Run or pause queue {0}'}"/>
+                  <TextBlock Classes="dim" Classes.bad="{Binding Failed}" Text="{Binding Doing}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Doing}"/>
+                </DockPanel>
+                <StackPanel IsVisible="{Binding IsOpen}" Margin="26,2,0,4" Spacing="2">
+                  <ItemsControl ItemsSource="{Binding Cards}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:QueueCardViewModel">
+                        <DockPanel Margin="0,1">
+                          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="2">
+                            <Button Classes="head" Opacity="1" Content="↑" Command="{Binding UpCommand}" ToolTip.Tip="Earlier in the queue" AutomationProperties.Name="{Binding Id, StringFormat='Move {0} up'}"/>
+                            <Button Classes="head" Opacity="1" Content="↓" Command="{Binding DownCommand}" ToolTip.Tip="Later in the queue" AutomationProperties.Name="{Binding Id, StringFormat='Move {0} down'}"/>
+                            <Button Classes="head" Opacity="1" Content="✕" Command="{Binding RemoveCommand}" ToolTip.Tip="Take it out of the queue (it stays on its board)" AutomationProperties.Name="{Binding Id, StringFormat='Take {0} out'}"/>
+                          </StackPanel>
+                          <TextBlock DockPanel.Dock="Right" Classes="dim" Classes.bad="{Binding IsFailed}" Text="{Binding State}" FontSize="11" VerticalAlignment="Center" Margin="10,0"/>
+                          <TextBlock Text="{Binding Line}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Opacity="{Binding Fade}"/>
+                        </DockPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <DockPanel Margin="0,4,0,0">
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="6,0,0,0">
+                      <Button Content="Delete queue…" Command="{Binding AskDeleteCommand}" IsVisible="{Binding !ConfirmingDelete}"/>
+                      <TextBlock Text="Delete it? Cards stay on their boards." VerticalAlignment="Center" IsVisible="{Binding ConfirmingDelete}"/>
+                      <Button Content="Delete" Command="{Binding DeleteCommand}" IsVisible="{Binding ConfirmingDelete}" AutomationProperties.Name="{Binding Name, StringFormat='Delete queue {0}'}"/>
+                      <Button Content="Keep" Command="{Binding CancelDeleteCommand}" IsVisible="{Binding ConfirmingDelete}"/>
+                    </StackPanel>
+                    <Button DockPanel.Dock="Left" Content="Add" Command="{Binding AddCardsCommand}" Margin="0,0,6,0"/>
+                    <TextBox Text="{Binding AddText}" PlaceholderText="Add cards by id (their open blockers come too)" MaxWidth="420" HorizontalAlignment="Left"
+                             views:EnterSends.Command="{Binding AddCardsCommand}" AutomationProperties.Name="{Binding Name, StringFormat='Add cards to {0}'}"/>
+                  </DockPanel>
+                </StackPanel>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
     <!-- the boards on screen, a row each (WOR-0087): the picked one, then any shown with it; taller than the space, they scroll -->
-    <ScrollViewer Grid.Row="2" x:Name="RowsScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <ScrollViewer Grid.Row="3" x:Name="RowsScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
       <ItemsControl ItemsSource="{Binding ShownRows}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:BoardViewModel">

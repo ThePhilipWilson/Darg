@@ -523,6 +523,8 @@ public partial class ProjectViewModel : ObservableObject
     public ContextViewModel Context { get; }
     /// <summary>Where a project opens: its README and what's going on (every project has one).</summary>
     public HomeViewModel Home { get; }
+    /// <summary>The project's card queues (WOR-0212; there with a board and agents).</summary>
+    public QueuesViewModel? Queues { get; }
     /// <summary>What card agents filed when they finished (there with the agents feature).</summary>
     public ReportsViewModel? Reports { get; }
     public bool UsesTerminal => Consoles is not null;
@@ -878,6 +880,10 @@ public partial class ProjectViewModel : ObservableObject
                 improver.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State)) Board.ReloadAll(); };
                 Board.ReloadAll(); // the lock shows at once, not when the agent's state next changes
             };
+            // WOR-0212: named queues of cards, worked one at a time; the next starts as the one before finishes
+            Queues = new QueuesViewModel(config, Agents) { Start = Board.StartQueued, Changed = Board.ReloadAll };
+            Board.Queues = Queues;
+            Board.Reloaded += Queues.Look;
             Board.Flows = () => Agents.Flows;
             Board.RunFlow = (card, file, flow) =>
             {

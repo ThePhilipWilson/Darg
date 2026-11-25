@@ -990,7 +990,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             var agent = AgentFor?.Invoke(c.Id);
             var blockers = BlockersFor(c); // WOR-0172: a blocker clearing on any board changes the tile, the card unchanged
             var vm = oldCards.TryGetValue(c.Id, out var old) && old.Agent == agent && old.QaWasRunning == (QaRunning?.Invoke(c.Id) == true) && old.Card.SameAs(c)
-                     && old.BlockersKey == CardViewModel.KeyOf(blockers) && used.Add(old)
+                     && old.BlockersKey == CardViewModel.KeyOf(blockers) && old.QueueKey == string.Join(",", QueueChipsFor(c.Id)) && used.Add(old)
                 ? old : new CardViewModel(c, targets, this, agent, OtherBoards, blockers);
             vm.IsPicked = _picked.Contains(c.Id);
             vm.ShowsBoard = root.ShowingAll;
@@ -1673,6 +1673,7 @@ public sealed partial class CardViewModel : ObservableObject
                 new MoveTarget("↩ Send back with notes…", new RelayCommand(() => board.Open(this)))] : Array.Empty<MoveTarget>(),
             .. agent is null && !InDone ? [new MoveTarget("✦ Improve this card (an agent fills it out)", ImproveCommand)] : Array.Empty<MoveTarget>(),
             .. (agent is null && !InDone ? board.FlowList() : []).Select(f => new MoveTarget("Run flow: " + f.Name, new RelayCommand(() => board.StartFlow(this, f)))),
+            .. board.QueueTargets(this), // WOR-0212: add to or take out of a queue
             .. lists.Select(l => new MoveTarget("Move to " + l.Name, new RelayCommand(() => board.Move(this, l.Id)))),
             // a card with a live agent stays put: the agent holds its file's path
             .. agent is null ? (otherBoards ?? []).Select(b => new MoveTarget("Move to board " + b, new RelayCommand(() => board.MoveToBoard(this, b)))) : [],
