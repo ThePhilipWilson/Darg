@@ -1,6 +1,7 @@
 ---
 kind: project
-status: draft
+status: agreed
+planner: b5cc7f0a-806c-4380-bbf9-e407aec63837
 ---
 # Seamless machine switching
 
@@ -31,12 +32,16 @@ Close Darg on the PC, open it on the Mac (or the other way round) and the projec
 
 **Context:** WOR-0197 made `ThePhilipWilson/Darg` public on 2026-11-24, after the `darg` branch was decided. The 2026-11-24 name leak came from a branch push.
 
+**Answer:** To a private repo of its own, made by Darg (Philip, 2026-11-24)
+
 ### Two machines make a card while apart and both hand out WOR-0200. What happens?
 - **Sync right before and after making a card, and renumber a clash found after a pull** (recommended): the card not yet pushed gets the next free id, and its references (Blocked by, card links, reports, plan rows) are rewritten. The status line names both ids.
 - **A machine letter in new ids** (WOR-0200 on the PC, WOR-M0200 on the Mac): never clashes, but ids look different depending on where they were made, and every id parser changes.
 - **Sync around making a card only, and never renumber**: simplest, but a card made offline on both machines leaves two cards with one id until someone fixes it by hand.
 
 **Context:** next id is already worked out as the highest card file plus one (`BoardStore.HighestUsed`), so only cards made on both sides between syncs can clash.
+
+**Answer:** Sync right before and after making a card, and renumber a clash found after a pull (Philip, 2026-11-24)
 
 ### Where does a card's place in its column live, so that two machines' reorders merge?
 - **A rank line in each card file** (recommended): moving a card edits only that card, so two machines moving different cards never conflict. Ranks are fractional, so one move never renumbers the rest.
@@ -45,12 +50,16 @@ Close Darg on the PC, open it on the Mac (or the other way round) and the projec
 
 **Context:** your line said order should come from the card files. A card's column already comes from its Status line, and only the order and next id are in board.json now.
 
+**Answer:** A rank line in each card file (Philip, 2026-11-24)
+
 ### When both machines changed the same thing, how is the conflict shown?
 - **Both sides kept and listed in a Sync panel** (recommended): the file takes the other machine's version, and this machine's version sits beside it as `<name>.mine.md`. The footer says "1 conflict" until he picks one or merges by hand. Nothing is lost and nothing blocks syncing.
 - **Newest edit wins, the other kept in git history only**: no prompts, but an edit can disappear from sight without anyone noticing.
 - **Syncing stops until it's resolved**: safest for the file, but one conflict holds every other change on that machine back.
 
 **Context:** with ranks in card files, real conflicts come down to the same card, note or report edited on both machines between syncs.
+
+**Answer:** Both sides kept and listed in a Sync panel (Philip, 2026-11-24)
 
 ### How much of an agent travels to the other machine?
 - **Its record and its Claude conversation, for every saved agent** (recommended): Carry on works on either machine. Only saved agents' sessions are copied, and finished card agents are already forgotten (WOR-0183), so it stays small.
@@ -59,12 +68,16 @@ Close Darg on the PC, open it on the Mac (or the other way round) and the projec
 
 **Context:** Darg's main checkout alone has 800 MB of Claude conversations in `~/.claude/projects`, most of them for agents Darg no longer lists. Resuming from a copied conversation is unproven until the spike runs.
 
+**Answer:** Its record and its Claude conversation, for every saved agent (Philip, 2026-11-24)
+
 ### What happens to an agent's unmerged work in its worktree when he switches?
 - **Darg pushes the card branch when the agent's turn ends, and Carry on elsewhere checks it out into a worktree there** (recommended): the conversation and the work arrive together.
 - **Only the conversation travels**: the agent carries on, but without its uncommitted or unpushed work, which stays on the first machine.
 - **Agents with unmerged work stay on their machine**: shown on the other machine as "on the PC, work not pushed", with no Carry on.
 
 **Context:** card agents work on a branch per card in their own worktree and fast-forward into main only when done (`CardBranch`).
+
+**Answer:** Darg pushes the card branch when the agent's turn ends, and Carry on elsewhere checks it out into a worktree there (Philip, 2026-11-24)
 
 ### How do per-user settings (theme, profiles, shared flows, push topic) get to the other machine?
 - **A private settings repo that Darg syncs the same way as `darg` branches** (recommended): one code path, history included, works anywhere git does.
@@ -73,17 +86,23 @@ Close Darg on the PC, open it on the Mac (or the other way round) and the projec
 
 **Context:** these live in the instance folder today (`settings.json`, `profiles.md`, `flows/`, instance.json's `push`) and never leave the machine.
 
+**Answer:** A private settings repo that Darg syncs the same way as `darg` branches (Philip, 2026-11-24)
+
 ### Projects whose boards are in the vault (Alpha, Beta, Gamma, Site): do their boards move into the repo?
 - **They stay in the vault, synced however the vault is** (recommended): the vault path goes in each machine's instance.json, and the third-party board app keeps reading them.
 - **They move into their repos' `.darg`**: one way for every project, but the vault and the third-party board app lose them.
 
 **Context:** only projects that Setup made keep their boards in `.darg/tasks`. Those four keep theirs in the Obsidian vault.
 
+**Answer:** They move into their repos' `.darg` (Philip, 2026-11-24)
+
 ### What if Darg is open on both machines at once?
 - **Both sync: pull every few minutes and when the window gets focus, push shortly after a change** (recommended): leaving one open costs nothing, and renumbering and the Sync panel catch what overlaps.
 - **One machine at a time**: opening a project on one machine takes a lock in the `darg` branch, and the other shows it read-only until he takes over. No overlap, but a machine left on at home locks him out.
 
 **Context:** switching usually means one machine at a time, but nothing stops both being on.
+
+**Answer:** Both sync: pull every few minutes and when the window gets focus, push shortly after a change (Philip, 2026-11-24)
 
 ## Design
 
@@ -143,11 +162,11 @@ These sync through what Questions settle: theme and Optimise tokens (`settings.j
 - **Two Darg processes, one repo.** The live copy, debug copies and the installed copy share a `.darg` on one machine. Sync takes a lock file in `.darg` so only one of them commits at a time.
 
 ## Features
-- **.darg on its own branch**: each repo's `.darg` becomes a worktree on a `darg` branch. Today's folders on the PC and the Mac merge into it without losing a file, DAR-0003's force-add comes off main, and a Sync now button pulls and pushes.
-- **Merge-safe boards**: next id comes from the card files, order is a rank in each card, and an id clash found after a pull is settled without a duplicate card.
-- **Project settings in the repo**: `.darg/project.json` carries the id, commands, commit rules, preview, GitHub account and features. instance.json keeps only where things are on this machine, and adding a folder keeps its id.
-- **Auto-sync**: pull on open, on switching and on a timer, commit and push after changes and on close, a sync line in the footer, and a Sync panel where conflicts show with both sides kept.
-- **Resume spike**: proves (or disproves) that an agent carries on from its conversation copied to the other machine under another path, and writes down what has to be copied.
-- **Agents and Fettle chats travel**: saved agents, project Fettle chats and their preview images in `.darg` with repo-relative paths, their conversations carried across, "running on the PC" shown on the other machine, and a fresh-with-transcript fallback when resume fails.
-- **Per-user settings sync**: theme, Optimise tokens, profiles, shared flows, push topic, the project list with remotes (offering to clone what's missing), chats with no project, and the project open last.
-- **Leaving check**: on close, or from a button, says what won't reach the other machine (uncommitted or unpushed code, a live agent, `.darg` changes not pushed) and pushes what it can.
+- **[.darg on its own branch](darg-on-its-own-branch.md)**: each repo's `.darg` becomes a worktree on a `darg` branch. Today's folders on the PC and the Mac merge into it without losing a file, DAR-0003's force-add comes off main, and a Sync now button pulls and pushes.
+- **[Merge-safe boards](merge-safe-boards.md)**: next id comes from the card files, order is a rank in each card, and an id clash found after a pull is settled without a duplicate card.
+- **[Project settings in the repo](project-settings-in-the-repo.md)**: `.darg/project.json` carries the id, commands, commit rules, preview, GitHub account and features. instance.json keeps only where things are on this machine, and adding a folder keeps its id.
+- **[Auto-sync](auto-sync.md)**: pull on open, on switching and on a timer, commit and push after changes and on close, a sync line in the footer, and a Sync panel where conflicts show with both sides kept.
+- **[Resume spike](resume-spike.md)**: proves (or disproves) that an agent carries on from its conversation copied to the other machine under another path, and writes down what has to be copied.
+- **[Agents and Fettle chats travel](agents-and-fettle-chats-travel.md)**: saved agents, project Fettle chats and their preview images in `.darg` with repo-relative paths, their conversations carried across, "running on the PC" shown on the other machine, and a fresh-with-transcript fallback when resume fails.
+- **[Per-user settings sync](per-user-settings-sync.md)**: theme, Optimise tokens, profiles, shared flows, push topic, the project list with remotes (offering to clone what's missing), chats with no project, and the project open last.
+- **[Leaving check](leaving-check.md)**: on close, or from a button, says what won't reach the other machine (uncommitted or unpushed code, a live agent, `.darg` changes not pushed) and pushes what it can.
