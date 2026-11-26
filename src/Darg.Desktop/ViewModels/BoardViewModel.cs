@@ -546,7 +546,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.BoardJson"); Dispatcher.UIThread.Post(() => { t.Stop(); t.Start(); }); }
         _watchBoards.Created += Poke; _watchBoards.Deleted += Poke; _watchBoards.Renamed += (s, e) => Poke(s, e);
         // WOR-0172: a card moved on any board may clear (or reopen) a blocker shown on another
-        _watchBoards.Changed += (_, _) => Dispatcher.UIThread.Post(BoardJsonChanged);
+        _watchBoards.Changed += (_, e) => Dispatcher.UIThread.Post(() => BoardJsonChanged(e.FullPath));
     }
 
     partial void OnSelectedBoardChanged(string? value)
@@ -654,7 +654,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             .Where(p => p.Cards.Count > 0).ToList();
         if (picked.Count == 0) return;
         // a picked card with an open blocker is left out and named (WOR-0173); Work on alone on it asks instead
-        BlockersStale();
+        BlockersFresh();
         var split = picked.Select(p => { var (free, blocked) = p.Row.SplitBlocked(p.Cards, force: false); return (p.Row, Free: free, Blocked: blocked); }).ToList();
         var all = split.SelectMany(p => p.Free).Select(c => c.Id).ToList();
         foreach (var (row, free, blocked) in split)
@@ -713,7 +713,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         if (Root._board is null) return "No board is showing.";
         var byRow = Root.CardsByRow(ids);
         if (byRow.Count == 0) return "None of those cards is on the board without an agent and outside Done (a card in Done must be moved out first).";
-        BlockersStale(); // as things are now, not as of the last reload
+        BlockersFresh(); // as things are now, not as of the last reload
         var split = byRow.Select(p => { var (free, blocked) = p.Row.SplitBlocked(p.Cards, force); return (p.Row, Free: free, Blocked: blocked); }).ToList();
         if (split.All(p => p.Free.Count == 0))
             throw new ApiError("Started nothing: " + string.Join(" ", split.SelectMany(p => p.Blocked).Select(b => BlockedStart.Refusal(b.Id, b.Open))));
@@ -804,7 +804,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public string StartBulk(string listId, bool force = false)
     {
         var kind = BulkKindOf(listId);
-        BlockersStale(); // as things are now: a blocker may have reached QA on a board this one hasn't reloaded for
+        BlockersFresh(); // as things are now: a blocker may have reached QA on a board this one hasn't reloaded for
         var cards = (force ? BulkCandidates(listId) : BulkCards(listId)).Select(c => c.Card).ToList();
         List<(string Id, IReadOnlyList<BlockerState> Open)> blocked = force ? [] : BulkBlocked(listId);
         if (cards.Count == 0)
@@ -930,7 +930,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
                 _board = ReadBoard(Folder);
             }
             catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
-            BlockersStale();
+            BlockersRead();
             NoticeAttention();
             if (Root.SyncLabels()) ApplyAll(); else { Apply(); RedrawBlockedRows(); }
             Root.Editor?.RefreshSendBack();
@@ -1112,12 +1112,12 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>The card's blockers still holding it up (WOR-0173): on any of the project's boards and not yet in QA or done.
-    /// <paramref name="fresh"/> reads the boards again now (before starting anything), rather than the kept lookup
-    /// (<see cref="BlockIndex"/>, which a board changing makes stale only after a short wait).</summary>
+    /// <paramref name="fresh"/> first reads again any board changed on disk since it was read (before starting anything),
+    /// rather than trust the kept lookup (<see cref="BlockIndex"/>, which a board changing updates only after a short wait).</summary>
     public IReadOnlyList<BlockerState> OpenBlockers(Card card, bool fresh = false)
     {
         if (card.BlockedBy.Count == 0) return [];
-        if (fresh) BlockersStale();
+        if (fresh) BlockersFresh();
         return Blockers.Open(card, BlockIndex());
     }
 

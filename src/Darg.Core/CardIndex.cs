@@ -22,14 +22,23 @@ public static partial class CardIndex
             Board board;
             try { board = BoardStore.Load(Path.Combine(boardsFolder, name)); }
             catch (Exception e) when (e is IOException or System.Text.Json.JsonException or UnauthorizedAccessException) { continue; }
-            var qa = BoardColumns.Qa(board.Columns) is { } q ? BoardStore.PlaceOf(q, board.Columns) : null;
-            var attention = AttentionColumn.Find(board.Columns) is { } a ? BoardStore.PlaceOf(a, board.Columns) : null;
-            var last = board.Columns.LastOrDefault()?.Id;
-            foreach (var (listId, listName) in board.ListOrder())
-                foreach (var card in board.Lists.GetValueOrDefault(listId) ?? [])
-                    all.Add(new BoardCard(card, name, listName, Path.GetFullPath(Path.Combine(board.Folder, "items", card.File)),
-                        listId == qa, listId == attention, listId == Board.Completed || listId == last));
+            all.AddRange(Cards(name, board));
         }
+        return all;
+    }
+
+    /// <summary>The cards of one board already read, as <see cref="Read"/> gives them (WOR-0229: a board on screen is
+    /// indexed from what it read, without opening its card files again).</summary>
+    public static List<BoardCard> Cards(string name, Board board)
+    {
+        var all = new List<BoardCard>();
+        var qa = BoardColumns.Qa(board.Columns) is { } q ? BoardStore.PlaceOf(q, board.Columns) : null;
+        var attention = AttentionColumn.Find(board.Columns) is { } a ? BoardStore.PlaceOf(a, board.Columns) : null;
+        var last = board.Columns.LastOrDefault()?.Id;
+        foreach (var (listId, listName) in board.ListOrder())
+            foreach (var card in board.Lists.GetValueOrDefault(listId) ?? [])
+                all.Add(new BoardCard(card, name, listName, Path.GetFullPath(Path.Combine(board.Folder, "items", card.File)),
+                    listId == qa, listId == attention, listId == Board.Completed || listId == last));
         return all;
     }
 

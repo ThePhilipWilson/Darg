@@ -77,6 +77,44 @@ public class BlockedByTests
         await app.Until(() => Chips(app, waits.Id).Count == 0, "the chip to go when the blocker on Phone is done");
     }
 
+    /// <summary>WOR-0229: reloading a board took the lookup from every board's card files, read again on the UI thread each
+    /// time. Now Main's reload indexes what Main read and opens none of the other boards' files on the UI thread: Phone
+    /// changed on disk and Main reloaded straight after (before the pass reading the rest off the UI thread is let land),
+    /// the lookup still has Phone as it was. The pass then brings Phone in, and Work on's check catches up with a change
+    /// at once, reading only the board whose board.json changed.</summary>
+    [AvaloniaFact]
+    public async Task Reloading_one_board_leaves_the_other_boards_card_files_alone()
+    {
+        using var app = DargApp.Make();
+        var phone = BoardStore.CreateBoard(app.Boards, "Phone", DargApp.Columns, "T");
+        var scaffold = BoardStore.Create(phone, "scaffold");
+        var toDo = BoardStore.Load(phone).Columns.First(c => c.Name == "To Do").Id;
+        BoardStore.Move(phone, scaffold.Id, toDo);
+        var waits = app.Card("board view", "To Do");
+        BoardStore.SetBlockedBy(app.BoardFolder, waits.Id, [scaffold.Id]);
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        app.Board.SelectedBoard = "Main";
+        await app.Until(() => Chips(app, waits.Id).Select(t => t.Text).SequenceEqual([$"waits on {scaffold.Id}"]), "the chip naming the blocker on Phone");
+
+        // Phone's blocker is done; Main reloads with no chance for the pass to land: Phone's card files weren't read
+        BoardStore.Move(phone, scaffold.Id, Board.Completed);
+        app.Board.Reload();
+        app.Board.Reload();
+        Assert.False(app.Board.BlockIndex()[scaffold.Id].Done, "Main's reload read Phone's card files again");
+        Assert.Equal([$"waits on {scaffold.Id}"], Chips(app, waits.Id).Select(t => t.Text));
+
+        // the pass reads Phone off the UI thread: the chip goes
+        await app.Until(() => Chips(app, waits.Id).Count == 0, "the chip to go when the blocker on Phone is done");
+        Assert.True(app.Board.BlockIndex()[scaffold.Id].Done);
+
+        // back to To Do on Phone: Work on's check (fresh) reads the board whose board.json changed, before the watchers do
+        BoardStore.Move(phone, scaffold.Id, toDo);
+        Assert.True(app.Board.BlockIndex()[scaffold.Id].Done);
+        Assert.Single(app.Board.OpenBlockers(app.Read(waits.Id), fresh: true));
+        Assert.False(app.Board.BlockIndex()[scaffold.Id].Done);
+    }
+
     [AvaloniaFact]
     public async Task The_panel_lists_both_ways_as_links_and_edits_Blocked_by()
     {

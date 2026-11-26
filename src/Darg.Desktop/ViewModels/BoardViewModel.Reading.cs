@@ -41,8 +41,9 @@ public partial class BoardViewModel
         root._readAgain = false;
         var rows = root.Rows.Where(r => r.Folder is not null).Select(r => new RowRead(r, r.Folder!, r._gen)).ToList();
         var boards = _project.Boards;
-        _ = Task.Run(() => Read(rows, boards))
-            .ContinueWith(t => Dispatcher.UIThread.Post(() => root.Landed(rows, t)), TaskScheduler.Default);
+        var stamps = new Dictionary<string, (DateTime, long)>(StringComparer.OrdinalIgnoreCase);
+        _ = Task.Run(() => Read(rows, boards, stamps))
+            .ContinueWith(t => Dispatcher.UIThread.Post(() => root.Landed(rows, t, stamps)), TaskScheduler.Default);
     }
 
     sealed class RowRead(BoardViewModel row, string folder, int gen)
@@ -55,10 +56,12 @@ public partial class BoardViewModel
     }
 
     /// <summary>The pass's reading, on a pool thread: each row's board as <see cref="Reload"/> reads it (its attention column
-    /// made, column changes stamped Moved), then every other board.</summary>
-    static ProjectBoards Read(List<RowRead> rows, string? boards)
+    /// made, column changes stamped Moved), then every other board. Each board.json's stamp is taken first, before any is
+    /// read, for the blocker lookup (WOR-0229: a board changed after its stamp is read again before work starts).</summary>
+    static ProjectBoards Read(List<RowRead> rows, string? boards, Dictionary<string, (DateTime, long)> stamps)
     {
         // no StallWatch section here: its sections are the UI thread's, and one on a pool thread would be blamed for a stall
+        foreach (var name in BoardStore.List(boards)) stamps[name] = StampOf(Path.Combine(boards!, name));
         var loaded = new Dictionary<string, Board>();
         foreach (var r in rows)
         {
@@ -81,7 +84,7 @@ public partial class BoardViewModel
 
     /// <summary>The pass has read: on the UI thread, every row still showing the board it read takes it, the lists are
     /// drawn, and <see cref="Reloaded"/> is raised once.</summary>
-    void Landed(List<RowRead> rows, Task<ProjectBoards> read)
+    void Landed(List<RowRead> rows, Task<ProjectBoards> read, IReadOnlyDictionary<string, (DateTime, long)> stamps)
     {
         _reading = false;
         if (_disposed) return;
@@ -97,7 +100,8 @@ public partial class BoardViewModel
                 r.Row._board = r.Board;
                 r.Row.NoticeAttention();
             }
-            BlockersStale();
+            // the blocker lookup takes the pass's boards, but a row read by a click since keeps that newer read (WOR-0229)
+            if (!read.IsFaulted) BlockersLanded(read.Result, stamps, rows.Where(r => r.Row._gen != r.Gen).Select(r => Path.GetFileName(r.Folder)));
             SyncLabels();
             ApplyAll();
             Passes++;

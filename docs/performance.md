@@ -123,3 +123,9 @@ The board's reloads that anything but the person's own click asks for (the board
 - after: stalls of 113 and 252 ms, almost all of it "in no section" (layout and rendering), 17 ms in `Board.Apply`, and no `Board.Reload > Agents.RefreshCards > Board.Reload` line.
 
 `BoardReloadTests` checks it with four QA agents finishing at once (a QA agent's state change reloads the board, so on the old code it re-entered every time) and four work agents (whether the old code re-entered there depends on timing: it did on one of two runs). `Board.BlockIndex` still reads every board on the UI thread inside `Board.Apply` after each pass (44 ms in the run above): that is hotspot 3, WOR-0229.
+
+### Hotspot 3, fixed (WOR-0229, 26 Nov)
+
+`Board.BlockIndex` no longer reads anything. The blocker lookup is kept per board and built from boards already in memory (`CardIndex.Cards`): when a reload pass lands it takes every board the pass read off the UI thread, and when a click reads one row's board it takes that board, leaving the others as they were. A `board.json` changing on a board no row shows asks for a pass (500 ms after the changes settle), so a blocker moving there still updates the tile. Starting work (Work on, Work All, the API's `work-on`, the card panel's Blocks list) still checks blockers as they are now, but reads again only a board whose `board.json` write time or length differs from the one the pass recorded before reading it, which in the usual case is none.
+
+`pwsh -File tools/perf/load.ps1 -Cards 6 -StallMs 100` on a copy of this repo's boards (10 boards), after WOR-0227: one stall, 723 ms in `Agents.Start` (not this), and no `Board.BlockIndex` or `Board.BlockersFresh` in it. At `-StallMs 20`: 708 stalls, none with either in it. `BlockedByTests.Reloading_one_board_leaves_the_other_boards_card_files_alone` fails if a reload reads another board's card files on the UI thread.
