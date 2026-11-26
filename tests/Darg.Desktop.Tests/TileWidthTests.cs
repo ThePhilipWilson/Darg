@@ -72,7 +72,9 @@ public class TileWidthTests
         var pill = tile.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("kind"));
         var improve = tile.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "✦ Improve");
         app.Shot("bug-header");
-        Assert.True(Box(pill).Top < Box(id).Bottom, $"the Bug pill {Box(pill)} is on a line under the id {Box(id)}");
+        string Parts() => $"tile {tile.Bounds.Width:0.#}, head {head.Bounds}, left {head.Children[0].Bounds}, right {head.Children[1].Bounds}; "
+            + string.Join(" | ", ((Panel)head.Children[0]).Children.Where(c => c.IsVisible).Select(c => $"{c.GetType().Name} {Box(c)} wants {c.DesiredSize.Width:0.#}"));
+        Assert.True(Box(pill).Top < Box(id).Bottom, $"the Bug pill {Box(pill)} is on a line under the id {Box(id)}: {Parts()}");
         Assert.True(Box(pill).Left > Box(improve).Right, $"the Bug pill {Box(pill)} comes after ✦ Improve {Box(improve)}");
         Assert.Equal("", app.Crashes());
     }
