@@ -313,6 +313,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         FitRows();
         SyncLabels();
         ApplyAll();
+        Queues?.ShowingChanged();
     }
 
     /// <summary>A list on any row, by its <see cref="ListViewModel.Key"/>.</summary>

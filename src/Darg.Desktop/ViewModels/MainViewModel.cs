@@ -933,6 +933,8 @@ public partial class ProjectViewModel : ObservableObject
                 TileFor = Board.LaneTile, OpenCard = id => Board.OpenById(id),
             };
             Board.Queues = Queues;
+            Queues.Showing = () => Board.ShowingAll ? null : Board.Rows.Select(r => r.SelectedBoard).OfType<string>().ToList();
+            Queues.ShowingChanged();
             Board.Reloaded += Queues.Look;
             Board.Flows = () => Agents.Flows;
             Board.RunFlow = (card, file, flow) =>

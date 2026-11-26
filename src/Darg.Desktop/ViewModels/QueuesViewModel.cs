@@ -35,7 +35,26 @@ public partial class QueuesViewModel : ObservableObject
 
     public ObservableCollection<QueueViewModel> Queues { get; } = [];
     public bool HasQueues => Queues.Count > 0;
-    public bool ShowsStrip => HasQueues || IsMaking;
+    public bool ShowsStrip => Queues.Any(q => q.IsShown) || IsMaking;
+
+    /// <summary>The boards on screen (WOR-0239): null while the All board shows (every queue shows), else the names of the
+    /// boards drawn. A queue shows only when one of its cards is on a board showing (an empty one, or one whose cards no
+    /// board has, shows everywhere: nothing ties it to a board).</summary>
+    public Func<IReadOnlyCollection<string>?>? Showing { get; set; }
+
+    internal bool ShowsQueue(CardQueue q)
+    {
+        if (Showing?.Invoke() is not { } boards || q.Cards.Count == 0) return true;
+        var homes = q.Cards.Select(id => Card(id)?.Board).ToList();
+        return homes.Any(b => b is null) || homes.Any(b => boards.Contains(b!, StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>The boards showing changed: each lane shows or hides.</summary>
+    public void ShowingChanged()
+    {
+        foreach (var r in Queues) r.RefreshShown();
+        OnPropertyChanged(nameof(ShowsStrip));
+    }
 
     /// <summary>The + Queue form: a name, filled from <see cref="MakeFrom"/>'s open cards.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(ShowsStrip))] public partial bool IsMaking { get; set; }
@@ -151,7 +170,7 @@ public partial class QueuesViewModel : ObservableObject
     public void Move(int from, int to) { if (QueueStore.Move(_queues, from, to)) Saved(); }
 
     /// <summary>The board has built its tiles again: each lane takes the new ones.</summary>
-    public void TilesChanged() { foreach (var row in Queues) row.Refresh(); }
+    public void TilesChanged() { foreach (var row in Queues) row.Refresh(); OnPropertyChanged(nameof(ShowsStrip)); }
 
     /// <summary>Run, Resume or Pause.</summary>
     public void Toggle(CardQueue q)
@@ -216,6 +235,7 @@ public partial class QueuesViewModel : ObservableObject
             Changed?.Invoke();
         }
         foreach (var row in Queues) row.Refresh();
+        OnPropertyChanged(nameof(ShowsStrip));
         // a running queue is looked at every few seconds as well (a card can move on a board that isn't showing)
         if (_queues.Any(q => !q.Paused)) { if (!_timer.IsEnabled) _timer.Start(); }
         else _timer.Stop();
@@ -351,8 +371,13 @@ public partial class QueueViewModel(QueuesViewModel owner, CardQueue queue) : Ob
         _ => "",
     };
 
+    /// <summary>Whether this lane shows: its queue has a card on a board that is showing, or the All board does (WOR-0239).</summary>
+    [ObservableProperty] public partial bool IsShown { get; set; } = true;
+    public void RefreshShown() => IsShown = owner.ShowsQueue(Queue);
+
     public void Refresh()
     {
+        RefreshShown();
         var states = Queue.Cards.Select(id => (Id: id, Card: owner.Card(id), State: QueueRun.StateOf(Queue, id, owner.Card(id), owner.AgentOf(id)))).ToList();
         var done = states.Count(s => s.State == "done");
         Summary = $"{done} of {Queue.Cards.Count} done";

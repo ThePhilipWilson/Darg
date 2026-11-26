@@ -295,7 +295,7 @@
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:QueueViewModel">
-              <Border Classes="queuelane list" Tag="{Binding Key}" BorderBrush="{DynamicResource Accent}" BorderThickness="2" CornerRadius="10" Padding="8,6"
+              <Border Classes="queuelane list" Tag="{Binding Key}" IsVisible="{Binding IsShown}" BorderBrush="{DynamicResource Accent}" BorderThickness="2" CornerRadius="10" Padding="8,6"
                       Background="{DynamicResource Bg}" AutomationProperties.Name="{Binding Name, StringFormat='Queue {0}'}">
                 <StackPanel Spacing="4">
                   <DockPanel>

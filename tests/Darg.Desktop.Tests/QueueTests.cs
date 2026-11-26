@@ -28,6 +28,33 @@ public class QueueTests
     static AgentViewModel? Live(DargApp app, string id) => app.Agents.ForCard(id);
     static CardQueue Queue(DargApp app) => app.Project.Queues!.All.Single();
 
+    /// <summary>WOR-0239: a queue's lane shows only while a board holding one of its cards is showing, or the All board is.</summary>
+    [AvaloniaFact]
+    public async Task A_queue_shows_only_when_its_board_or_the_All_board_is_showing()
+    {
+        using var app = DargApp.Make();
+        var android = BoardStore.CreateBoard(app.Boards, "Android", ["To Do", "In Progress", "Done"], "A");
+        var main = app.Card("a main card", "Backlog");
+        var other = BoardStore.Create(android, "an android card", "");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await app.Api("queue-new", new { project = "proj", name = "Travel", cards = new[] { other.Id } });
+        var qs = app.Project.Queues!;
+        var lane = qs.Queues.Single();
+        var board = app.Board;
+
+        board.Tabs.Single(t => t.Name == "Main").PickCommand.Execute(null);
+        await app.Until(() => !lane.IsShown, "the Android queue to hide while Main shows");
+        Assert.False(qs.ShowsStrip);
+        board.Tabs.Single(t => t.Name == "Android").PickCommand.Execute(null);
+        await app.Until(() => lane.IsShown && qs.ShowsStrip, "the queue to show on its own board");
+        board.Tabs.Single(t => t.Name == "Main").PickCommand.Execute(null);
+        await app.Until(() => !lane.IsShown, "it hides again");
+        board.PickAllBoardCommand.Execute(null);
+        await app.Until(() => lane.IsShown && qs.ShowsStrip, "the queue to show on the All board");
+        Assert.Equal("", app.Crashes());
+    }
+
     [AvaloniaFact]
     public async Task A_queue_runs_its_cards_in_dependency_order_one_at_a_time_and_pauses_on_a_card_left_unfinished()
     {
