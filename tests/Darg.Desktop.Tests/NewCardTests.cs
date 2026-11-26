@@ -100,5 +100,8 @@ public class NewCardTests
         var args = app.ClaudeCalls().First(c => (string?)c["kind"] == "ask")["args"]!.AsArray().Select(a => (string)a!).ToList();
         Assert.Contains("--strict-mcp-config", args);
         Assert.DoesNotContain("--mcp-config", args);
+        // WOR-0224: none of the person's settings (hooks, plugins, CLAUDE.md), and the answer read from json
+        Assert.Equal("", args[args.IndexOf("--setting-sources") + 1]);
+        Assert.Equal("json", args[args.IndexOf("--output-format") + 1]);
     }
 }

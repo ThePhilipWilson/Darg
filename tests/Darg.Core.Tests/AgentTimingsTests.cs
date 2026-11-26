@@ -99,4 +99,100 @@ public sealed class AgentTimingsTests
             Assert.StartsWith("turn end (", steps[9]);
         }
     }
+
+    /// <summary>WOR-0224: Claude Code folds a message sent mid-turn into the turn running (one result for both), so the
+    /// queued message's "turn" ran from that result to whatever the person sent next: a Fettle reply of 8.7 s logged as
+    /// 238 s, and the next message logged as sent mid-turn.</summary>
+    [Fact]
+    public void A_message_folded_into_the_turn_running_gets_no_turn_of_its_own()
+    {
+        var (clock, lines) = Clock();
+        clock.Sent();
+        clock.Sent(); // mid-turn: Claude Code reads it into this turn
+        clock.Saw(J("""{"type":"result","is_error":false,"result":"both answered"}"""));
+        clock.Saw(J("""{"type":"rate_limit_event","rate_limit_info":{}}""")); // between turns: not a turn starting
+        Thread.Sleep(30);
+        clock.Sent(); // the person's next message, a while later
+        clock.Saw(J("""{"type":"system","subtype":"init"}"""));
+        clock.Saw(J("""{"type":"result","is_error":false,"result":"x"}"""));
+
+        var steps = Steps(lines);
+        Assert.Equal(["message sent", "message sent mid-turn"], steps[..2]);
+        Assert.StartsWith("turn end (", steps[2]);
+        Assert.Equal(["message sent", "init"], steps[3..5]); // a turn of its own, not "sent mid-turn"
+        Assert.DoesNotContain("next message's turn", steps);
+        Assert.Contains(" turn 2 +0.00 s · message sent", lines[3]); // counted from its own message, not the last result
+    }
+
+    [Fact]
+    public void Thinking_is_one_line_a_turn_and_the_kind_resume_and_claudes_own_split_are_logged()
+    {
+        var (clock, lines) = Clock();
+        clock.ProcessStarted(TimeSpan.FromMilliseconds(5), 12, resume: true);
+        clock.Sent();
+        clock.Describe("fettle");
+        clock.Describe("chat"); // once only
+        for (var i = 0; i < 5; i++) clock.Saw(J("""{"type":"system","subtype":"thinking_tokens","tokens":10}"""));
+        clock.Saw(J("""{"type":"system","subtype":"task_started"}""")); // other system lines stay
+        clock.Saw(J("""{"type":"result","is_error":false,"result":"x","duration_ms":4000,"duration_api_ms":3000,"time_to_request_ms":350,"ttft_ms":1840}"""));
+        clock.Sent();
+        clock.Saw(J("""{"type":"system","subtype":"thinking_tokens","tokens":10}"""));
+        clock.Saw(J("""{"type":"system","subtype":"thinking_tokens","tokens":20}"""));
+        clock.Saw(J("""{"type":"result","is_error":false,"result":"x"}"""));
+
+        var steps = Steps(lines);
+        Assert.Equal("process start (spawn 5 ms, 12 args, resume)", steps[0]);
+        Assert.Equal(["message sent", "agent fettle", "thinking", "system task_started"], steps[1..5]);
+        Assert.StartsWith("turn end (", steps[5]);
+        Assert.EndsWith(" · Claude Code says 4.00 s, API 3.00 s, request at 0.35 s, first token at 1.84 s", steps[5]);
+        Assert.Equal(["message sent", "thinking"], steps[6..8]); // a new turn's thinking is logged again
+        Assert.StartsWith("turn end (", steps[8]);
+        Assert.Equal(9, steps.Count);
+    }
+
+    [Fact]
+    public void The_transcript_showing_what_was_read_logs_its_first_text_and_the_turns_longest_wait()
+    {
+        var (clock, lines) = Clock();
+        clock.Sent();
+        clock.Shown(new SessionStarted("s", "m", "c"), TimeSpan.FromMilliseconds(30));
+        clock.Shown(new AssistantText("one"), TimeSpan.FromMilliseconds(12));
+        clock.Shown(new AssistantText("two"), TimeSpan.FromMilliseconds(400)); // not a first
+        clock.Saw(J("""{"type":"result","is_error":false,"result":"x"}"""));
+        clock.Shown(new TurnFinished(false, "done", null), TimeSpan.FromMilliseconds(8));
+        clock.Sent();
+        clock.Shown(new AssistantText("three"), TimeSpan.FromMilliseconds(3));
+        clock.Saw(J("""{"type":"result","is_error":false,"result":"x"}"""));
+        clock.Shown(new TurnFinished(false, "done", null), TimeSpan.FromMilliseconds(2));
+
+        var steps = Steps(lines).Where(s => !s.StartsWith("turn end (", StringComparison.Ordinal)).ToList();
+        Assert.Equal(
+        [
+            "message sent", "first text shown (12 ms after it was read)", "turn 1 shown (8 ms after it was read, the turn's longest wait 400 ms)",
+            "message sent", "first text shown (3 ms after it was read)", "turn 2 shown (2 ms after it was read, the turn's longest wait 3 ms)",
+        ], steps);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"result","subtype":"success","is_error":false,"result":"Deep | open questions","duration_ms":1352}""", true, "Deep | open questions")]
+    [InlineData("""{"type":"result","subtype":"error_during_execution","is_error":true,"result":"API Error"}""", false, "API Error")]
+    public void Haikus_json_answer_is_read_from_its_result_line(string line, bool ok, string text) =>
+        Assert.Equal((ok, text), Haiku.Result(line));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Deep | open questions")]
+    [InlineData("""{"type":"system","subtype":"init"}""")]
+    [InlineData("{not json")]
+    public void Any_other_line_is_not_haikus_answer(string line) => Assert.Null(Haiku.Result(line));
+
+    [Fact]
+    public void Haiku_reads_none_of_the_persons_settings_and_answers_in_json()
+    {
+        // WOR-0224: the person's hooks, plugins and CLAUDE.md files doubled every model pick for a self-contained prompt
+        var args = Haiku.Args.ToList();
+        Assert.Equal("", args[args.IndexOf("--setting-sources") + 1]);
+        Assert.Equal("json", args[args.IndexOf("--output-format") + 1]);
+        Assert.Contains("--strict-mcp-config", args);
+    }
 }

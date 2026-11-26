@@ -323,7 +323,7 @@ public sealed class AgentSession : IAsyncDisposable
         var s = new AgentSession(proc, psi.WorkingDirectory) { Timings = timings };
         var spawn = Stopwatch.StartNew();
         proc.Start();
-        timings?.ProcessStarted(spawn.Elapsed, psi.ArgumentList.Count);
+        timings?.ProcessStarted(spawn.Elapsed, psi.ArgumentList.Count, psi.ArgumentList.Contains("--resume"));
         s._group = ChildProcesses.Leftovers(proc, LeftBehind);
         proc.StandardInput.AutoFlush = true;
         s._writer = Task.Run(s.WriteLoop);

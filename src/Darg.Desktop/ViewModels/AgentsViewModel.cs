@@ -1126,7 +1126,16 @@ public partial class AgentViewModel : ObservableObject
             _session = session;
             (_runModel, _runEffort) = (runModel, runEffort);
             // a session closed on request still reports its last events and its exit: they're not news
-            session.Event += e => Dispatcher.UIThread.Post(() => { if (_session == session) On(e); });
+            session.Event += e =>
+            {
+                var read = System.Diagnostics.Stopwatch.GetTimestamp(); // on the reading thread: how long the transcript takes to show it goes to agents.log (WOR-0224)
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_session != session) return;
+                    On(e);
+                    clock.Shown(e, System.Diagnostics.Stopwatch.GetElapsedTime(read));
+                });
+            };
             session.Send(message); // queued: it never waits for claude to read (WOR-0076)
             TurnBegins("Starting…");
             State = AgentState.Starting;
@@ -1189,6 +1198,8 @@ public partial class AgentViewModel : ObservableObject
         switch (e)
         {
             case SessionStarted s:
+                // what it is, for agents.log's summary (WOR-0224): a chat with Wrap set is one of Fettle's
+                _session?.Timings?.Describe(Purpose ?? (Wrap is not null ? "fettle" : AgentPurposes.Chat));
                 Model = s.Model;
                 if (_model is null && _runModel is null && !_args.Contains("--model")) NameDefaultModel(s.Model); // on the default: this is what it is
                 SessionId = s.SessionId;

@@ -35,10 +35,31 @@ public class AgentTimingsTests
             at = i;
         }
         Assert.Contains(lines, l => l.Contains(" · turn end (") && l.Contains(", first tool at ") && l.Contains("Claude Code says"));
+        // WOR-0224: what it is, and how long the transcript took to show what was read
+        Assert.Contains(lines, l => l.EndsWith(" · agent chat", StringComparison.Ordinal));
+        Assert.Contains(lines, l => System.Text.RegularExpressions.Regex.IsMatch(l, @" · first text shown \(\d+ ms after it was read\)$"));
+        Assert.Contains(lines, l => System.Text.RegularExpressions.Regex.IsMatch(l, @" · turn 1 shown \(\d+ ms after it was read, the turn's longest wait \d+ ms\)$"));
 
         // the transcript says it too, without opening the log
         var done = agent.Items.OfType<NoteItem>().Last(n => n.Text.StartsWith("Turn done", StringComparison.Ordinal));
         Assert.Matches(@"^Turn done · \d+\.\d\d s \(model pick \d+\.\d\d s · init at \d+\.\d\d s · first tool at \d+\.\d\d s\)$", done.Text);
         Assert.True(agent.FinishedTurn, "a timed Turn done line still reads as a finished turn");
+    }
+
+    /// <summary>WOR-0224: tools/perf/agents.ps1 tells Fettle's replies from card agents' by this line.</summary>
+    [AvaloniaFact]
+    public async Task A_fettle_chat_names_itself_in_agents_log()
+    {
+        using var app = DargApp.Make();
+        await app.Start();
+
+        Assert.True(app.Main.Mascot.Ask("look at the board", "look at the board"));
+        var chat = app.Main.Mascot.Agent!;
+        await app.Until(() => chat.State == AgentState.Idle, "Fettle's turn to end");
+        await AgentTimings.Writer.Flush();
+
+        var lines = File.ReadAllLines(Path.Combine(app.Home, "agents.log")).Where(l => l.Contains($" {chat.Id} +")).ToList();
+        Assert.Contains(lines, l => l.EndsWith(" · agent fettle", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, l => l.EndsWith(" · agent chat", StringComparison.Ordinal));
     }
 }

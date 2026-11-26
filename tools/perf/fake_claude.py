@@ -75,10 +75,14 @@ def emit(o):
         sys.stdout.write(json.dumps(o) + "\n")
         sys.stdout.flush()
 
-if "--output-format" in args and args[args.index("--output-format") + 1] == "text":
+if "--output-format" in args and args[args.index("--output-format") + 1] in ("text", "json"):
     question = sys.stdin.read()  # a Haiku question (model pick, chat title)
     log("ask", args=args, text=question)
-    print("Standard | ordinary work")
+    answer = "Standard | ordinary work"
+    if args[args.index("--output-format") + 1] == "json":  # as claude -p prints it: the result object on one line
+        print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": answer, "duration_ms": 10}))
+    else:
+        print(answer)
     sys.exit(0)
 
 log("start", args=args, cwd=os.getcwd(), darg_api=os.environ.get("DARG_API"))
