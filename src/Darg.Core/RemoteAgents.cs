@@ -50,8 +50,9 @@ public sealed record TranscriptEntry(int Index, string Kind, string Text, string
     /// means a screenful per entry, the rest a tap away.</summary>
     public const int FoldLines = 12;
 
-    /// <summary>A step still running or an ask still waiting: its entry will change, so a refresh reads it again.</summary>
-    public bool Settled => Kind switch { "tool" => Done, "permission" or "question" => !Pending, _ => true };
+    /// <summary>A step still running, an ask still waiting or a reply still being written (WOR-0234): its entry will change,
+    /// so a refresh reads it again.</summary>
+    public bool Settled => Kind switch { "tool" or "agent" => Done, "permission" or "question" => !Pending, _ => true };
 
     /// <summary>A step as one line: a tick, cross or dots, the tool and what it ran on.</summary>
     public string StepLine => Kind == "tool" ? $"{(!Done ? "…" : Error ? "✗" : "✓")} {Tool}: {Text}" : Text;

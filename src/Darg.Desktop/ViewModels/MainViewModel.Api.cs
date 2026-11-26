@@ -335,7 +335,7 @@ public partial class MainViewModel
     static JsonObject Entry(int i, TranscriptItem item) => item switch
     {
         UserItem u => new JsonObject { ["i"] = i, ["kind"] = "user", ["text"] = u.Text },
-        TextItem t => new JsonObject { ["i"] = i, ["kind"] = "agent", ["text"] = t.Text },
+        TextItem t => new JsonObject { ["i"] = i, ["kind"] = "agent", ["text"] = t.Text, ["done"] = !t.Partial }, // still being written: read again (WOR-0234)
         NoteItem note => new JsonObject { ["i"] = i, ["kind"] = "note", ["text"] = note.Text, ["error"] = note.Bad },
         ToolItem tool => new JsonObject
         {
@@ -662,7 +662,7 @@ public partial class MainViewModel
     static FettleEntry FettleEntryFor(TranscriptItem item, int i) => item switch
     {
         UserItem u => new(i, "user", u.Text, null, false, []),
-        TextItem t => new(i, "fettle", t.Text, null, false, []),
+        TextItem t => new(i, "fettle", t.Text, null, false, []) { Writing = t.Partial },
         NoteItem n => new(i, "note", n.Text, null, false, []),
         ToolItem t => new(i, "tool", t.Name, t.Summary, false, []),
         QuestionItem q => new(i, "question", string.Join(" / ", q.Questions.Select(g => g.Question)), null, q.Pending,

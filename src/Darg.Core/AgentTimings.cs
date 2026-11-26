@@ -39,7 +39,7 @@ public sealed class AgentTimings
     int _queued;               // messages sent mid-turn, each its own turn after this one, or folded into it
     TimeSpan? _queuedAt;       // a turn ended with a message queued: when, until a line says its turn started
     TimeSpan _turnAt;          // when the turn's message was sent
-    TimeSpan? _pickStart, _pickTook, _initAt, _reply, _tool, _result;
+    TimeSpan? _pickStart, _pickTook, _initAt, _reply, _streamed, _tool, _result;
     string? _toolName;
     bool _described, _thinking;
     // the transcript's side (on the UI thread, a little behind the reading): turns shown, the first text of the one
@@ -100,7 +100,7 @@ public sealed class AgentTimings
         if (lag > _lagMax) _lagMax = lag;
         switch (e)
         {
-            case AssistantText when !_textShown:
+            case AssistantText or AssistantDelta when !_textShown:
                 _textShown = true;
                 Mark($"first text shown ({lag.TotalMilliseconds:0} ms after it was read)");
                 break;
@@ -134,7 +134,7 @@ public sealed class AgentTimings
         _turn++;
         _inTurn = true;
         _turnAt = at ?? Now;
-        _reply = _tool = _result = null;
+        _reply = _streamed = _tool = _result = null;
         _toolName = null;
         _thinking = false;
         Mark(what);
@@ -194,6 +194,12 @@ public sealed class AgentTimings
                                  && (m["message"]?["content"] as JsonArray ?? []).Any(c => Str(c?["type"]) == "tool_result"):
                     _result = Now - _turnAt;
                     Mark($"first tool result ({S(_result.Value - _tool.Value)} after the call)");
+                    break;
+                // WOR-0234: the first piece of text streamed, before the whole message ("first reply") lands
+                case "stream_event" when _streamed is null && Str(m["event"]?["type"]) == "content_block_delta"
+                                         && Str(m["event"]?["delta"]?["type"]) == "text_delta" && Str(m["parent_tool_use_id"]) is null:
+                    _streamed = Now - _turnAt;
+                    Mark("first text streamed");
                     break;
                 case "control_request" when Str(m["request"]?["subtype"]) == "can_use_tool":
                     Mark($"permission asked {Str(m["request"]?["tool_name"])} ({Str(m["request_id"])})");

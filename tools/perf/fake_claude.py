@@ -7,6 +7,10 @@ FAKE_HOLD     a file: a turn goes on while it exists (up to FAKE_SECONDS) and en
               a turn that starts with the file gone ends after one step
 FAKE_RESULT   characters in each tool result (default 4000)
 FAKE_TOUCH    1: rewrite the agent's card file every FAKE_TOUCH_EVERY seconds (default 10), as agents edit cards
+FAKE_STREAM_CHUNK  characters in each streamed piece of text (default 12) when started with --include-partial-messages,
+              which streams each reply's text as stream_event deltas before the whole message, as the CLI does (WOR-0234);
+              FAKE_STREAM_OFF=1 streams nothing, as before, so a load test can compare the two
+FAKE_REPLY    how long each step's text is: "looking at the code " this many times (default 15), for long replies
 FAKE_LOG      a file: each start (its args and folder), each message it is sent and each one-shot question is
               appended to it as a JSON line, for the integration tests (WOR-0127) to check what an agent was given
 
@@ -23,6 +27,8 @@ FAKE_PLAN     writes a small plan to the message's "Plan file: <path>" line, as 
               in its Goals and its Design, and the prompt's "parent: <plan>" line in its properties if it has one (WOR-0179)
 FAKE_REWRITE  replaces FAKE_OLD with FAKE_NEW all through the message's plan file, as a planner asked to change one
               part might tidy the rest too
+FAKE_STREAM <file>  streams "Streaming reply, part one." as deltas, waits (up to 60 s) for the file to exist, then
+              streams " Part two." and sends the whole message (WOR-0234), so a test can see the reply half-written
 FAKE_REWORD   rewords an option in the plan file's Questions ("the slow one." to "the slow one, reworded."), as a
               planner asked about another part might touch the part the person is answering in
 """
@@ -77,6 +83,44 @@ def emit(o):
     with lock:
         sys.stdout.write(json.dumps(o) + "\n")
         sys.stdout.flush()
+
+partial = "--include-partial-messages" in args and os.environ.get("FAKE_STREAM_OFF") != "1"  # off: as before WOR-0234, to compare
+chunk = int(os.environ.get("FAKE_STREAM_CHUNK", "12"))
+reply = int(os.environ.get("FAKE_REPLY", "15"))  # each step's text: "looking at the code " this many times
+said = 0
+
+def stream(mid, text, spread=0.0):
+    """text as the CLI streams it: content_block_delta lines of a few characters, spread over `spread` seconds"""
+    pieces = [text[i:i + chunk] for i in range(0, len(text), chunk)]
+    for p in pieces:
+        emit({"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": p}},
+              "session_id": sid, "parent_tool_use_id": None, "api_message_id": mid})
+        if spread: time.sleep(spread / len(pieces))
+
+def say(text, spread=0.0, hold=None):
+    """a reply: streamed first when started with --include-partial-messages, then the whole message, as the CLI sends it.
+    hold: a file to wait for halfway, at the | in text (FAKE_STREAM)"""
+    global said
+    said += 1
+    mid = "msg_fake_%d_%d" % (os.getpid(), said)
+    if partial:
+        emit({"type": "stream_event", "event": {"type": "message_start", "message": {"id": mid, "role": "assistant", "content": []}},
+              "session_id": sid, "parent_tool_use_id": None, "api_message_id": mid})
+        emit({"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
+              "session_id": sid, "parent_tool_use_id": None, "api_message_id": mid})
+        if hold:
+            first, rest = text.split("|", 1)
+            stream(mid, first, spread)
+            for _ in range(600):
+                if os.path.exists(hold): break
+                time.sleep(0.1)
+            stream(mid, rest, spread)
+        else:
+            stream(mid, text, spread)
+    emit({"type": "assistant", "message": {"id": mid, "role": "assistant", "content": [{"type": "text", "text": text.replace("|", "")}]}})
+    if partial:
+        emit({"type": "stream_event", "event": {"type": "content_block_stop", "index": 0}, "session_id": sid, "parent_tool_use_id": None, "api_message_id": mid})
+        emit({"type": "stream_event", "event": {"type": "message_stop"}, "session_id": sid, "parent_tool_use_id": None, "api_message_id": mid})
 
 if "--output-format" in args and args[args.index("--output-format") + 1] in ("text", "json"):
     question = sys.stdin.read()  # a Haiku question (model pick, chat title)
@@ -175,6 +219,9 @@ def work(text):
     emit({"type": "system", "subtype": "init", "session_id": sid, "model": "fake", "cwd": os.getcwd(),
           "apiKeySource": "none", "permissionMode": "auto",
           "mcp_servers": [{"name": "fake-mcp", "status": "connected"}, {"name": "down-mcp", "status": "failed"}]})
+    held = re.search(r"FAKE_STREAM (\S+)", text)
+    if held:
+        say("Streaming reply, part one.| Part two.", hold=held.group(1))
     if "FAKE_ASK" in text:
         asks += 1
         img = re.search(r"FAKE_ASK_IMAGE (\S+)", text)
@@ -223,7 +270,7 @@ def work(text):
         if hold and n > 0 and not os.path.exists(hold):
             break
         n += 1
-        emit({"type": "assistant", "message": {"content": [{"type": "text", "text": f"Step {n}: " + "looking at the code " * 15}]}})
+        say(f"Step {n}: " + "looking at the code " * reply, spread=0.5 / rate)
         emit({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": f"t{n}", "name": "Read",
                                                              "input": {"file_path": f"src/File{n}.cs"}}]}})
         emit({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": f"t{n}", "content": "x" * size}]}})
@@ -234,7 +281,7 @@ def work(text):
                 with open(card, "w", encoding="utf-8") as f: f.write(body)
             except OSError:
                 pass
-        time.sleep(1 / rate)
+        time.sleep((0.5 if partial else 1) / rate)  # streamed, half the step went on writing its text
     emit({"type": "result", "is_error": False, "result": "done", "total_cost_usd": 0.0,
           "duration_ms": int((time.time() - started) * 1000), "duration_api_ms": 0})
 

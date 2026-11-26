@@ -1206,17 +1206,20 @@ public partial class AgentViewModel : ObservableObject
             using (StallWatch.Shared.Section("AgentSession.Start")) session = AgentSession.Start(Cwd, extraArgs: args, apiUrl: ArtifactHost.Server?.ApiUrl, timings: clock);
             _session = session;
             (_runModel, _runEffort) = (runModel, runEffort);
-            // a session closed on request still reports its last events and its exit: they're not news
-            session.Event += e =>
+            // a session closed on request still reports its last events and its exit: they're not news. Streamed text comes
+            // in batches, a post every few frames rather than per token (WOR-0234); each event keeps when it was read, on the
+            // reading thread, so how long the transcript takes to show it goes to agents.log (WOR-0224)
+            var inbox = new StreamInbox(a => Dispatcher.UIThread.Post(a), events =>
             {
-                var read = System.Diagnostics.Stopwatch.GetTimestamp(); // on the reading thread: how long the transcript takes to show it goes to agents.log (WOR-0224)
-                Dispatcher.UIThread.Post(() =>
+                foreach (var (e, read) in events)
                 {
                     if (_session != session) return;
                     On(e);
                     clock.Shown(e, System.Diagnostics.Stopwatch.GetElapsedTime(read));
-                });
-            };
+                }
+            });
+            inbox.Pace = () => StreamInbox.PaceFor(Volatile.Read(ref _streamedLength)); // asked on the reading thread
+            session.Event += inbox.Add;
             session.Send(message); // queued: it never waits for claude to read (WOR-0076)
             TurnBegins("Starting…");
             State = AgentState.Starting;
@@ -1254,6 +1257,7 @@ public partial class AgentViewModel : ObservableObject
     static ItemRecord? ToRecord(TranscriptItem i) => i switch
     {
         UserItem u => new() { Kind = "user", Text = u.Text },
+        TextItem { Partial: true } => null, // only whole messages are kept (WOR-0234)
         TextItem t => new() { Kind = "text", Text = t.Text },
         NoteItem n => new() { Kind = "note", Text = n.Text, Bad = n.Bad },
         ToolItem t => new() { Kind = "tool", Name = t.Name, Summary = t.Summary, ImagePath = t.ImagePath, Removed = t.Removed, Added = t.Added, Preview = t.Preview, Result = t.Result, Bad = t.IsError,
@@ -1301,8 +1305,27 @@ public partial class AgentViewModel : ObservableObject
             case ControlFailed cf:
                 Items.Add(new NoteItem($"Couldn't change that: {cf.Error}", true));
                 break;
+            case AssistantDelta d:
+                // the reply as it's written (WOR-0234): grow the text of its message's block, or start one. Found by its
+                // block, not as "the one being written": two streams mixed (turns overlapping) still grow a reply each
+                var growing = Streamed(i => i.Block == (d.MessageId, d.Index));
+                if (growing is null) Items.Add(growing = new TextItem(d.Text) { Partial = true, Block = (d.MessageId, d.Index) });
+                else
+                {
+                    growing.Text += d.Text;
+                    growing.Partial = true;
+                }
+                Volatile.Write(ref _streamedLength, growing.Text.Length);
+                if (Working) Activity = OneLine(growing.Text);
+                break;
             case AssistantText t:
-                Items.Add(new TextItem(t.Text));
+                // the whole message replaces the text streamed for it, so it shows once
+                if (Streamed(i => Whole(i, t)) is { } partial)
+                {
+                    partial.Text = t.Text;
+                    partial.Partial = false;
+                }
+                else Items.Add(new TextItem(t.Text) { Block = (t.MessageId ?? "", -1) });
                 if (Working) Activity = OneLine(t.Text);
                 break;
             case ToolCall c:
@@ -1333,10 +1356,12 @@ public partial class AgentViewModel : ObservableObject
                 _rejected = u;
                 break;
             case TurnFinished f when IsLimit(f):
+                SettleStreamed(); // a reply cut off mid-stream stays as it was shown
                 _autoResumed = false; // the turn it was resumed for has ended: a later cut-off resumes again
                 OutOfUsage(f);
                 break;
             case TurnFinished f:
+                SettleStreamed(); // a reply cut off mid-stream (an interrupt) stays as it was shown
                 _autoResumed = false;
                 if (f.IsError) Items.Add(new NoteItem(f.Text, true));
                 // Claude Code reports a cost on every turn, priced as if on the API; on a subscription
@@ -1359,12 +1384,44 @@ public partial class AgentViewModel : ObservableObject
                 // a session we closed ourselves (resume later) isn't news; one that died is
                 if (x.ExitCode != 0) Items.Add(new NoteItem($"Session ended ({x.ExitCode}) {Last(x.Stderr)}", true));
                 _session = null;
+                SettleStreamed();
                 if (x.ExitCode != 0) Activity = OneLine($"Session ended ({x.ExitCode}) {Last(x.Stderr)}");
                 State = SessionId is not null && x.ExitCode == 0 ? AgentState.Saved : AgentState.Exited;
                 Save();
                 TurnEnded?.Invoke(true);
                 break;
         }
+    }
+
+    /// <summary>How long the reply streaming now is, so a long one is drawn in fewer, bigger batches (<see cref="StreamInbox.PaceFor"/>).</summary>
+    int _streamedLength;
+
+    /// <summary>Whether a whole message is the one a reply was streaming: the same message, and still being written or
+    /// what streamed starts it (a message with two text blocks has a whole line for each, and a reply settled when an
+    /// overlapping turn ended still gets its whole); a stream that names no message, a partial reply it starts with.</summary>
+    static bool Whole(TextItem streamed, AssistantText t)
+    {
+        var starts = t.Text.StartsWith(streamed.Text.Trim(), StringComparison.Ordinal);
+        return t.MessageId is { Length: > 0 } id && streamed.Block.MessageId is { Length: > 0 } was
+            ? id == was && (streamed.Partial || starts)
+            : streamed.Partial && starts;
+    }
+
+    /// <summary>The newest streamed reply among the transcript's last few items that matches (WOR-0234), without scanning a
+    /// long transcript; null when none does.</summary>
+    TextItem? Streamed(Func<TextItem, bool> match)
+    {
+        for (var i = Items.Count - 1; i >= 0 && i >= Items.Count - 20; i--)
+            if (Items[i] is TextItem { Block.MessageId: not null } t && match(t)) return t;
+        return null;
+    }
+
+    /// <summary>The turn ended: a reply still being written (cut off by an interrupt, its whole never sent) is as whole as
+    /// it will get, so it settles as it stands: kept, saved and no longer read again by the phone.</summary>
+    void SettleStreamed()
+    {
+        for (var i = Items.Count - 1; i >= 0 && i >= Items.Count - 20; i--)
+            if (Items[i] is TextItem { Partial: true } t) t.Partial = false;
     }
 
     /// <summary>Whether a turn stopped because the usage limit was hit (the error text says so, or it failed after
@@ -1621,7 +1678,16 @@ public abstract class TranscriptItem : ObservableObject;
 public interface IPending { bool Pending { get; } }
 
 public sealed class UserItem(string text) : TranscriptItem { public string Text { get; } = text; }
-public sealed class TextItem(string text) : TranscriptItem { public string Text { get; } = text; }
+/// <summary>A reply of the agent's. While it is being written (WOR-0234) it is <see cref="Partial"/>: its text grows as
+/// it streams, and the whole message replaces it when that lands; a partial one is never saved.</summary>
+public sealed partial class TextItem(string text) : TranscriptItem
+{
+    [ObservableProperty] string _text = text;
+    /// <summary>Still being written: what has streamed so far, not the whole message.</summary>
+    public bool Partial { get; set; }
+    /// <summary>The stream's message and content block this is the text of, while it is partial.</summary>
+    internal (string? MessageId, int Index) Block { get; set; }
+}
 public sealed class NoteItem(string text, bool bad) : TranscriptItem
 {
     public string Text { get; } = text;

@@ -121,7 +121,13 @@ public static class AgentChoices
         list.FirstOrDefault(c => string.Equals(c.Value, value, StringComparison.OrdinalIgnoreCase))
         ?? (string.IsNullOrEmpty(value) || value == "manual" ? list[0] : new AgentChoice(value, value));
 }
-public sealed record AssistantText(string Text) : AgentEvent;
+/// <param name="MessageId">The API message it belongs to (the stream's message id), so the text streamed for it is replaced
+/// by this, the whole of it; null when the line didn't say.</param>
+public sealed record AssistantText(string Text, string? MessageId = null) : AgentEvent;
+/// <summary>Text the agent is writing, as Claude Code streams it with --include-partial-messages (WOR-0234): the next
+/// piece of content block <paramref name="Index"/> of message <paramref name="MessageId"/>. The whole message follows as an
+/// <see cref="AssistantText"/>, which replaces what was streamed. Only the session's own replies: a subagent's are left out.</summary>
+public sealed record AssistantDelta(string MessageId, int Index, string Text) : AgentEvent;
 public sealed record ToolCall(string Id, string Name, JsonObject Input) : AgentEvent;
 /// <param name="Images">Images the tool returned in its result (an MCP tool's image content), as file bytes.</param>
 public sealed record ToolResult(string ToolUseId, string Text, bool IsError, IReadOnlyList<byte[]>? Images = null) : AgentEvent;
@@ -175,7 +181,7 @@ public static class StreamParser
                     switch ((string?)c?["type"])
                     {
                         case "text" when !string.IsNullOrWhiteSpace((string?)c["text"]):
-                            yield return new AssistantText(((string?)c["text"])!.Trim());
+                            yield return new AssistantText(((string?)c["text"])!.Trim(), Str(m["message"]?["id"]));
                             break;
                         case "tool_use":
                             yield return new ToolCall((string?)c["id"] ?? "", (string?)c["name"] ?? "",
@@ -201,6 +207,13 @@ public static class StreamParser
                     if (w is JsonObject win && Number(win["utilization"]) is { } used)
                         windows.Add(new UsageWindow(kind, used, Epoch(win["resetsAt"]), Str(win["status"]) ?? ""));
                 yield return new UsageLimited(Str(info["status"]) ?? "", Epoch(info["resetsAt"]), Str(info["rateLimitType"])) { Windows = windows };
+                break;
+            // WOR-0234: a reply as it is written; the whole message comes as an assistant line once it's done
+            case "stream_event" when Str(m["parent_tool_use_id"]) is null
+                                     && m["event"] is JsonObject ev && Str(ev["type"]) == "content_block_delta"
+                                     && ev["delta"] is JsonObject delta && Str(delta["type"]) == "text_delta"
+                                     && Str(delta["text"]) is { Length: > 0 } piece:
+                yield return new AssistantDelta(Str(m["api_message_id"]) ?? "", Number(ev["index"]) is { } at ? (int)at : 0, piece);
                 break;
             case "result":
                 yield return new TurnFinished((bool?)m["is_error"] ?? false, (string?)m["result"] ?? "", (double?)m["total_cost_usd"]);
@@ -296,7 +309,7 @@ public sealed class AgentSession : IAsyncDisposable
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
         };
         foreach (var a in new[] { "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-                                  "--permission-prompt-tool", "stdio" })
+                                  "--include-partial-messages", "--permission-prompt-tool", "stdio" })
             psi.ArgumentList.Add(a);
         if (model is not null) { psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model); }
         foreach (var a in extraArgs ?? []) psi.ArgumentList.Add(a);

@@ -33,7 +33,7 @@ public static class PhoneFettle
 /// in full (a question still waiting changes when answered), which <see cref="NextFrom"/> says.</summary>
 public sealed record FettleChat(string Id, string Name, string Project, string State, bool Busy, bool NeedsYou, int Count, int From, IReadOnlyList<FettleEntry> Items)
 {
-    public int NextFrom => Items.FirstOrDefault(i => i.Pending)?.Index ?? Count;
+    public int NextFrom => Items.FirstOrDefault(i => i.Pending || i.Writing)?.Index ?? Count;
     public FettleEntry? Waiting => Items.LastOrDefault(i => i.Pending);
 
     public static FettleChat Parse(string json)
@@ -49,13 +49,17 @@ public sealed record FettleChat(string Id, string Name, string Project, string S
 /// <see cref="Questions"/>; a permission its tool in <see cref="Text"/> and what it wants in <see cref="Detail"/>.</summary>
 public sealed record FettleEntry(int Index, string Kind, string Text, string? Detail, bool Pending, IReadOnlyList<FettleQuestion> Questions)
 {
+    /// <summary>A reply still being written (WOR-0234): its text grows, so the phone reads it again.</summary>
+    public bool Writing { get; init; }
+
     public static FettleEntry Parse(JsonObject o) => new(
         (int?)o["index"] ?? 0, (string?)o["kind"] ?? "", (string?)o["text"] ?? "", (string?)o["detail"], (bool?)o["pending"] == true,
-        (o["questions"] as JsonArray ?? []).Select(q => FettleQuestion.Parse(q!.AsObject())).ToList());
+        (o["questions"] as JsonArray ?? []).Select(q => FettleQuestion.Parse(q!.AsObject())).ToList()) { Writing = (bool?)o["writing"] == true };
 
     public JsonObject ToJson()
     {
         var o = new JsonObject { ["index"] = Index, ["kind"] = Kind, ["text"] = Text };
+        if (Writing) o["writing"] = true;
         if (Detail is not null) o["detail"] = Detail;
         if (Kind is "question" or "permission") o["pending"] = Pending;
         if (Questions.Count > 0) o["questions"] = new JsonArray(Questions.Select(q => (JsonNode)q.ToJson()).ToArray());
