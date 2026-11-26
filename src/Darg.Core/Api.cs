@@ -65,6 +65,9 @@ public sealed class DargApi
     public void Add(string name, string usage, Func<ApiArgs, Task<string>> run) => _commands[name] = new ApiCommand(name, usage, run);
     public void Add(string name, string usage, Func<ApiArgs, string> run) => Add(name, usage, a => Task.FromResult(run(a)));
 
+    /// <summary>Forget every command: the window that registered them has closed (WOR-0226).</summary>
+    public void Clear() => _commands.Clear();
+
     /// <summary>The commands as text: one per line, name then usage.</summary>
     public string Help()
     {

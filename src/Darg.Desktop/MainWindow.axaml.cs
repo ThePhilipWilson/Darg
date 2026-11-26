@@ -33,7 +33,15 @@ public partial class MainWindow : Window
             Topmost = true; Topmost = false; // Windows won't always let a background app take focus; this at least raises it
         };
         Closing += (_, _) => vm.SaveAll();
-        Closed += (_, _) => Notifier.Clear();
+        Closed += (_, _) =>
+        {
+            Notifier.Clear();
+            // nothing static keeps this window once it's closed (WOR-0226)
+            vm.Unhook();
+            if (Views.MarkdownView.OpenCard?.Target == vm) Views.MarkdownView.OpenCard = null;
+            if (Views.MarkdownView.OpenDoc?.Target == vm) Views.MarkdownView.OpenDoc = null;
+            if (Views.MarkdownView.IsCardPrefix?.Target == vm) Views.MarkdownView.IsCardPrefix = null;
+        };
         // the maximize button shows "restore" while maximized
         PropertyChanged += (_, e) =>
         {

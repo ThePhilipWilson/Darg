@@ -75,6 +75,16 @@ public partial class QueuesViewModel : ObservableObject
         Look();
     }
 
+    bool _closed;
+
+    /// <summary>The project is closing: no more steps, so a running queue starts nothing on a closed project, and the
+    /// timer (held by the dispatcher) lets go of this and the project (WOR-0226).</summary>
+    public void Close()
+    {
+        _closed = true;
+        _timer.Stop();
+    }
+
     public IReadOnlyList<CardQueue> All => _queues;
     /// <summary>Whether any queue holds the card: then it shows in that queue's lane, not in its board's list.</summary>
     public bool Has(string id) => _queues.Any(q => q.Has(id));
@@ -191,7 +201,7 @@ public partial class QueuesViewModel : ObservableObject
     /// <summary>Look at the queues again: read the boards in the background, then take each running queue's next step.</summary>
     public void Look()
     {
-        if (_queues.Count == 0) { _timer.Stop(); return; }
+        if (_closed || _queues.Count == 0) { _timer.Stop(); return; }
         if (_reading) { _again = true; return; }
         _reading = true;
         var boards = _config.Boards;
@@ -199,6 +209,7 @@ public partial class QueuesViewModel : ObservableObject
             .ContinueWith(t => Dispatcher.UIThread.Post(() =>
             {
                 _reading = false;
+                if (_closed) return;
                 Step(t.Result);
                 if (_again) { _again = false; Look(); }
             }), TaskScheduler.Default);

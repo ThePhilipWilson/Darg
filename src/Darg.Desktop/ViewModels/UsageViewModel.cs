@@ -20,7 +20,8 @@ public partial class UsageViewModel : ObservableObject
     public UsageViewModel(UsageMeter? meter = null)
     {
         _meter = meter ?? UsageMeter.Shared;
-        _meter.Changed += () => Dispatcher.UIThread.Post(Refresh);
+        _meterChanged = () => Dispatcher.UIThread.Post(Refresh);
+        _meter.Changed += _meterChanged;
         _meter.Attach();
         _tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
         _tick.Tick += (_, _) => { Refresh(); ReadWork(); };
@@ -30,6 +31,15 @@ public partial class UsageViewModel : ObservableObject
         TokenSaver.Load();
         IdleClose.Load();
         OptimiseTokens = TokenSaver.On; // before anyone listens: nothing to switch yet
+    }
+
+    readonly Action _meterChanged;
+
+    /// <summary>The window has closed: the shared meter and the timer let go of this (WOR-0226).</summary>
+    public void Stop()
+    {
+        _meter.Changed -= _meterChanged;
+        _tick.Stop();
     }
 
     /// <summary>The Optimise tokens toggle beside the bar (WOR-0159, <see cref="TokenSaver"/>).</summary>

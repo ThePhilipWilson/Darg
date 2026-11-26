@@ -45,11 +45,13 @@ public partial class MainViewModel : ObservableObject
             }
         };
         Mascot.AsksSettled += agent => Settle(MascotId, agent.Id);
-        Notifier.Opened += (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
+        _opened = (project, agent) => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenAgent(project, agent));
+        Notifier.Opened += _opened;
         Selected = LastProject.Pick(Projects, p => p.Config.Id); // the project that was open last time
         if (ArtifactHost.Server is { } artifacts)
         {
-            artifacts.Reply += r => Avalonia.Threading.Dispatcher.UIThread.Post(() => FromArtifact(r));
+            _reply = r => Avalonia.Threading.Dispatcher.UIThread.Post(() => FromArtifact(r));
+            artifacts.Reply += _reply;
             artifacts.ListAgents = () => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ListAgents()).GetTask();
             artifacts.CloseAgents = ids => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => CloseAgents(ids)).GetTask();
             artifacts.FindPlugin = FindPlugin;
@@ -57,10 +59,36 @@ public partial class MainViewModel : ObservableObject
             RegisterApi(artifacts.Api);
             StartRemote(config, artifacts.Api);
         }
-        ArtifactHost.OpenRequested += file => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenArtifact(file));
+        _openArtifact = file => Avalonia.Threading.Dispatcher.UIThread.Post(() => OpenArtifact(file));
+        ArtifactHost.OpenRequested += _openArtifact;
         Restart = new RestartViewModel(BusyAgents, SaveAll);
         StartPush(config.Push); // AND-0006: phone notifications, when the instance has a topic
         DevHooks();
+    }
+
+    readonly Action<string, string> _opened;
+    readonly Action<string> _openArtifact;
+    readonly Action<ArtifactReply>? _reply;
+
+    /// <summary>The window has closed: let go of everything static that points back here (the notifier's and the
+    /// artifact server's events, the API's commands, the phone notification stream), so this and every view bound to
+    /// it can be collected. The app's own window closes as it exits; the integration tests open and close one per
+    /// test in one process, and each closed one stayed alive, restyled by every later theme switch (WOR-0226).</summary>
+    public void Unhook()
+    {
+        Notifier.Opened -= _opened;
+        ArtifactHost.OpenRequested -= _openArtifact;
+        if (ArtifactHost.Server is { } artifacts)
+        {
+            artifacts.Reply -= _reply;
+            if (artifacts.ListAgents?.Target == this) artifacts.ListAgents = null;
+            if (artifacts.CloseAgents?.Target == this) artifacts.CloseAgents = null;
+            if (artifacts.FindPlugin?.Target == this) artifacts.FindPlugin = null;
+            artifacts.Api.Clear();
+        }
+        _push?.Dispose();
+        _push = null;
+        Usage.Stop();
     }
 
     /// <summary>The header's ⟳ menu: restart, or update from the repo and restart.</summary>
@@ -1006,6 +1034,8 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>The project is leaving the app (removed or changed in Setup): stop its agents and its watcher.</summary>
     public void Close()
     {
+        Home.Stop();
+        Queues?.Close();
         Agents?.Close();
         Board?.Dispose();
         Mistakes?.Dispose();

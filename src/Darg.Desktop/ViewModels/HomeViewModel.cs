@@ -66,6 +66,10 @@ public partial class HomeViewModel : ObservableObject
 
     bool Shown => _project.IsActive && _project.OnHome;
 
+    /// <summary>The project is closing: stop looking. A running timer is held by the dispatcher, and with it this,
+    /// its project and every view bound to them (WOR-0226).</summary>
+    public void Stop() => _tick.Stop();
+
     /// <summary>Read everything again: the README and commits off the UI thread, the rest from what the app holds.</summary>
     [RelayCommand]
     public async Task Load()
