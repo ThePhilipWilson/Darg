@@ -186,7 +186,7 @@ public class QueueTests
 
     /// <summary>The ids of the card tiles drawn in the board's lists (and their state sub-columns).</summary>
     static HashSet<string> ListIds(DargApp app) => app.Window.GetVisualDescendants().OfType<Border>()
-        .Where(b => b.Classes.Contains("list") && b.IsEffectivelyVisible)
+        .Where(b => b.Classes.Contains("list") && !b.Classes.Contains("queuelane") && b.IsEffectivelyVisible)
         .SelectMany(l => l.GetVisualDescendants().OfType<Border>()).Where(b => b.Classes.Contains("card") && b.IsEffectivelyVisible && b.Tag is CardViewModel)
         .Select(b => ((CardViewModel)b.Tag!).Id).ToHashSet();
 
@@ -391,6 +391,7 @@ public class QueueTests
         // Ctrl+click two cards, right-click a third picked one: all three go in
         foreach (var t in new[] { a, b, c }) { var tile = InLists(app, t.Id)!; tile.Board.Click(tile, Avalonia.Input.KeyModifiers.Control); }
         Assert.Equal("3 picked", board.PickedText);
+        await app.Until(() => InLists(app, b.Id)?.MoveTargets.Any(m => m.Label == "⏵ Add to queue Q") == true, "the menu's add entry");
         InLists(app, b.Id)!.MoveTargets.First(m => m.Label == "⏵ Add to queue Q").Command.Execute(null);
         Assert.Equal([seed.Id, a.Id, b.Id, c.Id], Queue(app).Cards.OrderBy(x => x == seed.Id ? 0 : 1).ThenBy(x => x).ToList());
         Assert.DoesNotContain(d.Id, Queue(app).Cards);

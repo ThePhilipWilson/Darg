@@ -43,6 +43,9 @@ public partial class BoardViewModel
         return AgentFor?.Invoke(id) is null ? "no agent started" : null;
     }
 
+    /// <summary>What a tile's queue chips and menu entries were made from: its chips and the queues' names (a new queue adds an entry to every menu, WOR-0241).</summary>
+    internal string QueueKeyFor(string id) => string.Join(",", QueueChipsFor(id)) + "|" + string.Join(",", Queues?.Queues.Select(q => q.Name) ?? []);
+
     /// <summary>The tile's queue chips for a card: "⏵ Travel 3" per queue it's in.</summary>
     internal IReadOnlyList<string> QueueChipsFor(string id) => Queues?.ChipsFor(id) ?? [];
 
@@ -57,5 +60,6 @@ public sealed partial class CardViewModel
     IReadOnlyList<string>? _queueChips;
     public bool InQueue => QueueChips.Count > 0;
     /// <summary>What the chips were made from, so a tile is made again when the card joins, leaves or moves in a queue.</summary>
-    public string QueueKey => string.Join(",", QueueChips);
+    public string QueueKey => _queueKey ??= Board.QueueKeyFor(Id);
+    string? _queueKey;
 }

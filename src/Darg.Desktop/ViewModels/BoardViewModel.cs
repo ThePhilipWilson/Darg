@@ -1047,7 +1047,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             var agent = AgentFor?.Invoke(c.Id);
             var blockers = BlockersFor(c); // WOR-0172: a blocker clearing on any board changes the tile, the card unchanged
             var vm = oldCards.TryGetValue(c.Id, out var old) && old.Agent == agent && old.QaWasRunning == (QaRunning?.Invoke(c.Id) == true) && old.Card.SameAs(c)
-                     && old.BlockersKey == CardViewModel.KeyOf(blockers) && old.QueueKey == string.Join(",", QueueChipsFor(c.Id)) && used.Add(old)
+                     && old.BlockersKey == CardViewModel.KeyOf(blockers) && old.QueueKey == QueueKeyFor(c.Id) && used.Add(old)
                 ? old : new CardViewModel(c, targets, this, agent, OtherBoards, blockers);
             vm.IsPicked = _picked.Contains(c.Id);
             vm.ShowsBoard = root.ShowingAll;
@@ -1766,6 +1766,7 @@ public sealed partial class CardViewModel : ObservableObject
         InDone = board.IsDone(card.Id);
         var inQa = board.InQa(card);
         ShowRunQa = inQa && !QaWasRunning && !InDone;
+        _ = QueueKey; // what the menu's queue entries are made from, kept as built
         MoveTargets = [
             .. InDone && agent is null ? Array.Empty<MoveTarget>() : [new MoveTarget(agent is not null ? "Open its agent" : inQa ? "▶ Get it running for me to try" : "Work on this with an agent", agent is null ? WorkOnCommand : OpenAgentCommand)],
             .. inQa && !InDone && !QaWasRunning ? [new MoveTarget("🧪 Run QA (an agent checks it)", RunQaCommand)] : Array.Empty<MoveTarget>(),
