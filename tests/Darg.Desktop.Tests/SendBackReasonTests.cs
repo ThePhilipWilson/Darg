@@ -61,6 +61,40 @@ public class SendBackReasonTests
         Assert.Equal("", CardIndex.QaNotesOf("## QA notes for later\n\nnot it\n"));
     }
 
+    /// <summary>Send back on a card whose QA notes an agent headed with a date adds to that section, not a second one the box
+    /// would never read, and the box shows the new entry.</summary>
+    [AvaloniaFact]
+    public async Task Send_back_adds_to_an_agents_dated_qa_notes_and_the_box_shows_it()
+    {
+        using var app = DargApp.Make();
+        var card = app.Card("dated heading", "QA Ready", "Desc.");
+        var file = Path.Combine(app.BoardFolder, "items", card.File);
+        File.AppendAllText(file, "\n\n## QA notes (2026-11-18)\n\n### 2026-11-18 round 1 (QA agent)\n\n- old agent finding\n\n## Later\n\nkept after\n");
+        await app.Start();
+        await app.Api("send-back", new { project = "proj", card = card.Id, notes = "NEW person finding" });
+        var text = File.ReadAllText(Path.Combine(app.BoardFolder, "items", app.Read(card.Id).File)).Replace("\r\n", "\n");
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(text, "## QA notes"));
+        Assert.True(text.IndexOf("NEW person finding") < text.IndexOf("## Later"));
+
+        await app.Api("move-card", new { project = "proj", card = card.Id, column = "needs more work" });
+        await app.Api("show", new { project = "proj", section = "Board", card = card.Id });
+        var editor = app.Board.Editor!;
+        Assert.Contains("NEW person finding", editor.SendBackText);
+        Assert.DoesNotContain("old agent finding", editor.SendBackText);
+        Assert.Contains("old agent finding", editor.QaNotesFull);
+        Assert.Equal("Full QA notes", editor.SendBackFullLabel);
+        editor.ToggleFullQaNotesCommand.Execute(null);
+        Assert.Equal("Hide QA notes", editor.SendBackFullLabel);
+    }
+
+    [Fact]
+    public void Qa_notes_in_two_sections_are_read_together()
+    {
+        var text = "# T\n\n## Description\n\nd\n\n## QA notes (2026-11-18)\n\n### 2026-11-18 10:00\n\nfirst\n\n## QA notes\n\n### 2026-11-20 09:00\n\nsecond\n";
+        Assert.Equal("### 2026-11-18 10:00\n\nfirst\n\n### 2026-11-20 09:00\n\nsecond", CardIndex.QaNotesOf(text));
+        Assert.Equal("second", QaNotes.Latest(text)!.Value.Text);
+    }
+
     [AvaloniaFact]
     public async Task The_box_appears_when_the_card_moves_in_with_its_panel_open()
     {

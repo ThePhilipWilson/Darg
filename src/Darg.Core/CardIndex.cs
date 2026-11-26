@@ -60,15 +60,27 @@ public static partial class CardIndex
             && (string.IsNullOrWhiteSpace(text) || new[] { c.Card.Id, c.Card.Title, c.Card.Description }.Any(s => s.Contains(text.Trim(), StringComparison.OrdinalIgnoreCase))));
 
     /// <summary>The card's <c>## QA notes</c> section (<see cref="QaNotes"/>), without its heading; "" when it has none. The heading is
-    /// read as agents write it: any case, a colon or dated tail (<c>## QA notes (2026-11-18)</c>), trailing spaces.</summary>
+    /// read as agents write it: any case, a colon or dated tail (<c>## QA notes (2026-11-18)</c>), trailing spaces. A card holding
+    /// more than one such section (an agent's dated one, then Send back's) gives them all, in file order.</summary>
     public static string QaNotesOf(string cardText)
     {
-        var text = "\n" + cardText.Replace("\r\n", "\n");
-        var m = QaHeadingRx().Match(text);
-        if (!m.Success) return "";
-        var start = m.Index + m.Length;
-        var next = text.IndexOf("\n## ", start, StringComparison.Ordinal);
-        return (next >= 0 ? text[start..next] : text[start..]).Trim();
+        var text = cardText.Replace("\r\n", "\n");
+        return string.Join("\n\n", QaNotesSections(text).Select(s => text[s.Start..s.End].Trim()).Where(s => s.Length > 0));
+    }
+
+    /// <summary>Each QA notes section of <paramref name="text"/> (\n line ends): where its heading line starts, where what is under
+    /// it starts, and where it ends (the next <c>## </c> heading, or the end).</summary>
+    public static List<(int Heading, int Start, int End)> QaNotesSections(string text)
+    {
+        var padded = "\n" + text;
+        var found = new List<(int, int, int)>();
+        foreach (System.Text.RegularExpressions.Match m in QaHeadingRx().Matches(padded))
+        {
+            var start = m.Index + m.Length;
+            var next = padded.IndexOf("\n## ", start, StringComparison.Ordinal);
+            found.Add((m.Index, start - 1, (next >= 0 ? next : padded.Length) - 1));
+        }
+        return found;
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(@"\n##[ \t]+QA[ \t]+notes(?:[ \t]*[:(\-–—][^\n]*|[ \t]*)(?=\n|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]

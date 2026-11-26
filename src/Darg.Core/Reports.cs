@@ -331,6 +331,14 @@ public static class QaNotes
         var crlf = raw.Contains("\r\n");
         var text = raw.Replace("\r\n", "\n").TrimEnd('\n');
         var entry = $"### {when:yyyy-MM-dd HH:mm}\n\n{notes.Replace("\r\n", "\n").Trim()}";
+        if (heading == Heading && CardIndex.QaNotesSections(text) is { Count: > 0 } qa)
+        {
+            // into the last QA notes section however an agent headed it (## QA notes (2026-11-18)), never a second one
+            var end = qa[^1].End;
+            text = text[..end].TrimEnd('\n') + $"\n\n{entry}\n" + (end < text.Length ? "\n" + text[(end + 1)..] + "\n" : "");
+            System.IO.File.WriteAllText(file, crlf ? text.Replace("\n", "\r\n") : text, new UTF8Encoding(false));
+            return;
+        }
         var at = Section(text, heading);
         if (at < 0) text += $"\n\n{heading}\n\n{entry}\n";
         else
