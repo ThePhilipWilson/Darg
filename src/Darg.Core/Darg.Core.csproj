@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Review.html" LogicalName="Darg.Core.Review.html" />
+    <InternalsVisibleTo Include="Darg.Core.Tests" />
   </ItemGroup>
 
 </Project>

@@ -72,5 +72,97 @@ public sealed class AgentStoreTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_dir, "gone.json")));
     }
 
+    [Fact]
+    public void List_doesnt_wait_on_a_writer_kept_busy_and_has_the_newest_records()
+    {
+        // WOR-0232: List waited for the background writer, which never finishes while agents keep saving, so it
+        // held the UI thread for its full 10 s timeout.
+        var items = Enumerable.Range(0, 50).Select(i => new ItemRecord { Kind = "tool", Result = new string('x', 2000) }).ToList();
+        // each write slow, as a long transcript's is: the writer never catches up with the saves
+        AgentStore.BeforeWrite = path => { if (path.StartsWith(_dir)) Thread.Sleep(30); };
+        var stop = false;
+        var saved = -1;
+        var saver = Task.Run(() =>
+        {
+            for (var i = 0; !Volatile.Read(ref stop); i++)
+            {
+                AgentStore.SaveLater(_dir, new AgentRecord { Id = "busy", Name = i.ToString(), Items = items });
+                AgentStore.SaveLater(_dir, new AgentRecord { Id = $"other{i % 3}", Items = items });
+                Volatile.Write(ref saved, i);
+                Thread.Sleep(5);
+            }
+        });
+        try
+        {
+            while (Volatile.Read(ref saved) < 20) Thread.Yield(); // the writer is at it
+            AgentStore.List(_dir); // compiled, so the clock times the wait, not the JIT
+            AgentStore.SaveLater(_dir, new AgentRecord { Id = "fresh", Name = "newest" });
+            var before = Volatile.Read(ref saved);
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var list = AgentStore.List(_dir);
+            clock.Stop();
+            Assert.True(clock.ElapsedMilliseconds < 100, $"List took {clock.ElapsedMilliseconds} ms");
+            Assert.Equal("newest", list.Single(r => r.Id == "fresh").Name);
+            Assert.True(int.Parse(list.Single(r => r.Id == "busy").Name) >= before, "busy's newest save is listed");
+            // the folder written another way lists each agent once all the same
+            Assert.Single(AgentStore.List(_dir + Path.DirectorySeparatorChar), r => r.Id == "busy");
+        }
+        finally
+        {
+            Volatile.Write(ref stop, true);
+            saver.Wait();
+            AgentStore.BeforeWrite = null;
+            AgentStore.Flush();
+        }
+    }
+
+    [Fact]
+    public void Delete_doesnt_wait_for_the_save_being_written_and_that_save_cant_bring_it_back()
+    {
+        using var writing = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var gone = Path.Combine(_dir, "gone.json");
+        AgentStore.BeforeWrite = path => { if (path == gone) { writing.Set(); release.Wait(TimeSpan.FromSeconds(30)); } };
+        try
+        {
+            AgentStore.Save(_dir, new AgentRecord { Id = "gone", Name = "on disk" });
+            AgentStore.SaveLater(_dir, new AgentRecord { Id = "gone", Name = "being written" });
+            Assert.True(writing.Wait(TimeSpan.FromSeconds(10)), "the writer took it");
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            AgentStore.Delete(_dir, "gone");
+            clock.Stop();
+            Assert.True(clock.ElapsedMilliseconds < 100, $"Delete took {clock.ElapsedMilliseconds} ms");
+            Assert.DoesNotContain(AgentStore.List(_dir), r => r.Id == "gone");
+        }
+        finally { release.Set(); }
+        AgentStore.Flush();
+        AgentStore.BeforeWrite = null;
+        Assert.False(File.Exists(gone), "the save in hand wrote it back");
+        Assert.DoesNotContain(AgentStore.List(_dir), r => r.Id == "gone");
+    }
+
+    [Fact]
+    public void Save_now_doesnt_wait_for_the_save_being_written_and_wins_over_it()
+    {
+        using var writing = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var path = Path.Combine(_dir, "a.json");
+        AgentStore.BeforeWrite = p => { if (p == path) { writing.Set(); release.Wait(TimeSpan.FromSeconds(30)); } };
+        try
+        {
+            AgentStore.SaveLater(_dir, new AgentRecord { Id = "a", Name = "older" });
+            Assert.True(writing.Wait(TimeSpan.FromSeconds(10)), "the writer took it");
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            AgentStore.Save(_dir, new AgentRecord { Id = "a", Name = "newer" });
+            clock.Stop();
+            Assert.True(clock.ElapsedMilliseconds < 100, $"Save took {clock.ElapsedMilliseconds} ms");
+            Assert.Equal("newer", AgentStore.List(_dir).Single(r => r.Id == "a").Name);
+        }
+        finally { release.Set(); }
+        AgentStore.Flush();
+        AgentStore.BeforeWrite = null;
+        Assert.Equal("newer", AgentStore.List(_dir).Single(r => r.Id == "a").Name);
+    }
+
     public void Dispose() => Directory.Delete(_dir, true);
 }
