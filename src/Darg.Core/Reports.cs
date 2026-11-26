@@ -350,11 +350,25 @@ public static class QaNotes
         var notes = CardIndex.QaNotesOf(cardText);
         if (notes.Length == 0) return null;
         var lines = notes.Replace("\r\n", "\n").Split('\n');
-        int start = -1;
-        for (var i = 0; i < lines.Length; i++) if (lines[i].StartsWith("### ", StringComparison.Ordinal)) start = i;
-        if (start < 0) return ("", notes);
-        var when = lines[start][4..].Trim();
-        return (when, string.Join("\n", lines.Skip(start + 1)).Trim());
+        var starts = new List<int>();
+        for (var i = 0; i < lines.Length; i++) if (lines[i].StartsWith("### ", StringComparison.Ordinal)) starts.Add(i);
+        if (starts.Count == 0) return ("", notes);
+        // Send back appends (newest last) but QA agents write rounds newest first: pick by the date, time and round in the
+        // heading; on a tie, the end the order says is newest (keys falling down the file: the first; else the last)
+        var keys = starts.Select(s => EntryKey(lines[s])).ToList();
+        var best = keys.Max();
+        var tied = Enumerable.Range(0, keys.Count).Where(k => keys[k] == best).ToList();
+        var pick = keys.Count > 1 && keys[0].CompareTo(keys[^1]) > 0 ? tied[0] : tied[^1];
+        var end = pick + 1 < starts.Count ? starts[pick + 1] : lines.Length;
+        return (lines[starts[pick]][4..].Trim(), string.Join("\n", lines[(starts[pick] + 1)..end]).Trim());
+    }
+
+    static (string Date, int Round) EntryKey(string heading)
+    {
+        var d = Regex.Match(heading, @"(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}):(\d{2}))?");
+        var r = Regex.Match(heading, @"round\s*(\d+)", RegexOptions.IgnoreCase);
+        var date = !d.Success ? "" : d.Groups[1].Value + " " + (d.Groups[2].Success ? d.Groups[2].Value.PadLeft(2, '0') + ":" + d.Groups[3].Value : "00:00");
+        return (date, r.Success && int.TryParse(r.Groups[1].Value, out var n) ? n : 0);
     }
 
     static int Section(string text, string heading) =>

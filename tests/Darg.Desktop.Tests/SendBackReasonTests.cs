@@ -34,6 +34,46 @@ public class SendBackReasonTests
         Assert.Contains("still jagged", editor.QaNotesFull);
     }
 
+    /// <summary>QA agents write their rounds newest first (the class: order of entries differs by writer).</summary>
+    [AvaloniaFact]
+    public async Task Newest_first_agent_notes_show_the_newest_round()
+    {
+        using var app = DargApp.Make();
+        var card = app.Card("agent notes newest first", "needs more work", "Desc.");
+        File.AppendAllText(Path.Combine(app.BoardFolder, "items", card.File),
+            "\n\n## QA notes\n\n### 2026-11-25 round 2 (QA agent)\n\n- ROUND TWO finding\n\n### 2026-11-25 (QA agent)\n\n- round one finding\n");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board", card = card.Id });
+        Assert.Contains("ROUND TWO", app.Board.Editor!.SendBackText);
+        Assert.DoesNotContain("round one", app.Board.Editor!.SendBackText);
+    }
+
+    [Theory]
+    [InlineData("## QA notes (2026-11-18)")]
+    [InlineData("## QA Notes")]
+    [InlineData("## QA notes:")]
+    [InlineData("## QA notes   ")]
+    public void Heading_shapes_agents_write_are_all_read(string heading)
+    {
+        var text = $"# T\n\n## Description\n\nd\n\n{heading}\n\n### 2026-11-25 10:00\n\nthe finding\n\n## Other\n\nelsewhere\n";
+        Assert.Equal("### 2026-11-25 10:00\n\nthe finding", CardIndex.QaNotesOf(text));
+        Assert.Equal("the finding", QaNotes.Latest(text)!.Value.Text);
+        Assert.Equal("", CardIndex.QaNotesOf("## QA notes for later\n\nnot it\n"));
+    }
+
+    [AvaloniaFact]
+    public async Task The_box_appears_when_the_card_moves_in_with_its_panel_open()
+    {
+        using var app = DargApp.Make();
+        var card = app.Card("moves while open", "QA Ready", "Desc.");
+        QaNotes.Add(Path.Combine(app.BoardFolder, "items", card.File), "the reason", DateTime.Now);
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board", card = card.Id });
+        Assert.False(app.Board.Editor!.ShowSendBack);
+        await app.Api("move-card", new { project = "proj", card = card.Id, column = "needs more work" });
+        await app.Until(() => app.Board.Editor?.ShowSendBack == true, "box after the move, panel open");
+    }
+
     [AvaloniaFact]
     public async Task No_box_in_another_column_or_with_no_qa_notes()
     {

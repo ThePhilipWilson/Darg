@@ -637,7 +637,7 @@
             <StackPanel Spacing="6">
               <TextBlock Classes="small" Foreground="{DynamicResource Warn}" Text="{Binding SendBackWhen}"/>
               <SelectableTextBlock Text="{Binding SendBackText}" TextWrapping="Wrap"/>
-              <Button Content="Full QA notes" Command="{Binding ToggleFullQaNotesCommand}" HorizontalAlignment="Left" Background="Transparent"
+              <Button Content="Full QA notes" Command="{Binding ToggleFullQaNotesCommand}" HorizontalAlignment="Left"
                       AutomationProperties.Name="Full QA notes" ToolTip.Tip="Show or hide every entry of the card's QA notes"/>
               <SelectableTextBlock Text="{Binding QaNotesFull}" TextWrapping="Wrap" Classes="dim small" IsVisible="{Binding SendBackFullOpen}"/>
             </StackPanel>

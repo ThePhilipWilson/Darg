@@ -931,6 +931,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         NoticeAttention();
         if (Root.SyncLabels()) ApplyAll(); else { Apply(); RedrawBlockedRows(); }
         Root.Reloaded?.Invoke();
+        Root.Editor?.RefreshSendBack();
     }
 
     /// <summary>The label chips, one per label on any row's cards; false when they were already those (the chips stay).</summary>
@@ -1888,7 +1889,7 @@ public partial class CardEditor : ObservableObject
 
     /// <summary>WOR-0216: why a card in Needs more work came back: the newest dated entry of its QA notes, read when the panel
     /// opened. Null in any other column or when the card has no QA notes.</summary>
-    public (string When, string Text)? SendBackReason { get; }
+    public (string When, string Text)? SendBackReason { get; private set; }
     public bool ShowSendBack => SendBackReason is not null;
     public string SendBackWhen => SendBackReason?.When is { Length: > 0 } w ? "Sent back " + w : "Sent back";
     const int FoldLines = 8, FoldChars = 700;
@@ -1904,7 +1905,29 @@ public partial class CardEditor : ObservableObject
         }
     }
     /// <summary>The whole of the card's QA notes section, shown once "Full QA notes" is pressed.</summary>
-    public string QaNotesFull { get; } = "";
+    public string QaNotesFull { get; private set; } = "";
+
+    /// <summary>Read the reason again (the board was read): the card may have moved into or out of Needs more work, or its notes
+    /// changed, while the panel stayed open.</summary>
+    public void RefreshSendBack()
+    {
+        (string When, string Text)? reason = null;
+        var full = "";
+        if (_card is not null && _board.InRework(_card.Card) && _board.Folder is { } rf)
+        {
+            try
+            {
+                var raw = File.ReadAllText(Path.GetFullPath(Path.Combine(rf, "items", _card.Card.File)));
+                reason = QaNotes.Latest(raw);
+                full = CardIndex.QaNotesOf(raw);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; }
+        }
+        if (reason == SendBackReason && full == QaNotesFull) return;
+        SendBackReason = reason; QaNotesFull = full;
+        OnPropertyChanged(nameof(SendBackReason)); OnPropertyChanged(nameof(ShowSendBack)); OnPropertyChanged(nameof(SendBackWhen));
+        OnPropertyChanged(nameof(SendBackText)); OnPropertyChanged(nameof(QaNotesFull));
+    }
     [ObservableProperty] public partial bool SendBackFullOpen { get; set; }
     [RelayCommand] void ToggleFullQaNotes() => SendBackFullOpen = !SendBackFullOpen;
     /// <summary>In For Human Attention with no decision recorded: the fallback question, and word that Darg is asking for one.</summary>

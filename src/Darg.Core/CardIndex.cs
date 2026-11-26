@@ -6,7 +6,7 @@ public sealed record BoardCard(Card Card, string Board, string Column, string Fi
 
 /// <summary>Every card on a project's boards, for the API's <c>cards</c> and <c>card</c> commands (WOR-0140), so a
 /// question about the board ("which QA cards have no agent?") is one read instead of grepping card files.</summary>
-public static class CardIndex
+public static partial class CardIndex
 {
     /// <summary>The words <c>column</c> takes besides a column's name: the board's QA, attention and done lists,
     /// whatever each board calls them (done is the last column and Completed).</summary>
@@ -59,16 +59,20 @@ public static class CardIndex
             && (string.IsNullOrWhiteSpace(label) || c.Card.Labels.Any(l => l.Equals(label.Trim(), StringComparison.OrdinalIgnoreCase)))
             && (string.IsNullOrWhiteSpace(text) || new[] { c.Card.Id, c.Card.Title, c.Card.Description }.Any(s => s.Contains(text.Trim(), StringComparison.OrdinalIgnoreCase))));
 
-    /// <summary>The card's <c>## QA notes</c> section (<see cref="QaNotes"/>), without its heading; "" when it has none.</summary>
+    /// <summary>The card's <c>## QA notes</c> section (<see cref="QaNotes"/>), without its heading; "" when it has none. The heading is
+    /// read as agents write it: any case, a colon or dated tail (<c>## QA notes (2026-11-18)</c>), trailing spaces.</summary>
     public static string QaNotesOf(string cardText)
     {
         var text = "\n" + cardText.Replace("\r\n", "\n");
-        var at = text.IndexOf("\n" + QaNotes.Heading + "\n", StringComparison.Ordinal);
-        if (at < 0) return "";
-        var start = at + QaNotes.Heading.Length + 2;
+        var m = QaHeadingRx().Match(text);
+        if (!m.Success) return "";
+        var start = m.Index + m.Length;
         var next = text.IndexOf("\n## ", start, StringComparison.Ordinal);
         return (next >= 0 ? text[start..next] : text[start..]).Trim();
     }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\n##[ \t]+QA[ \t]+notes(?:[ \t]*[:(\-–—][^\n]*|[ \t]*)(?=\n|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex QaHeadingRx();
 
     /// <summary>The reports filed for the card, newest first: the reports folder's, then its archive's (top level and each story's).</summary>
     public static List<AgentReport> ReportsFor(string reportsFolder, string cardId)
