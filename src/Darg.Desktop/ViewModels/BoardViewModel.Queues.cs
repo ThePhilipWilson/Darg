@@ -50,7 +50,7 @@ public partial class BoardViewModel
     internal IReadOnlyList<string> QueueChipsFor(string id) => Queues?.ChipsFor(id) ?? [];
 
     /// <summary>The card's menu entries for queues: add it to each queue it isn't in, take it out of each it is.</summary>
-    internal IEnumerable<MoveTarget> QueueTargets(CardViewModel card) => Queues is not { } queues || card.InDone ? [] : queues.TargetsFor(card.Id, () => Carried(card).Select(c => c.Id).ToList());
+    internal IEnumerable<MoveTarget> QueueTargets(CardViewModel card) => Queues is not { } queues ? [] : queues.TargetsFor(card.Id, () => Carried(card).Select(c => c.Id).ToList(), takeOutOnly: card.InDone);
 }
 
 public sealed partial class CardViewModel

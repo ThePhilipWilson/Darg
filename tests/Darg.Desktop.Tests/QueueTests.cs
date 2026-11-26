@@ -428,4 +428,38 @@ public class QueueTests
         app.Project.Queues!.DropOnKey("queue:Q", [d.Id]);
         Assert.Contains(d.Id, Queue(app).Cards);
     }
+
+    /// <summary>WOR-0241: cards leave a queue the way they joined: Ctrl+picked lane tiles and a right-click take every picked one out,
+    /// and a drop of them on a board's list (what DragLift calls: TakeOut) does too; a done card in a queue has the entry as well.</summary>
+    [AvaloniaFact]
+    public async Task Picked_cards_leave_a_queue_from_the_menu_or_a_drag_out_of_the_lane()
+    {
+        using var app = DargApp.Make();
+        var a = app.Card("alpha", "Backlog");
+        var b = app.Card("beta", "Backlog");
+        var c = app.Card("gamma", "Backlog");
+        var done = app.Card("finished", "Done");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await app.Api("queue-new", new { project = "proj", name = "Q", cards = $"{a.Id},{b.Id},{c.Id},{done.Id}" });
+        var board = app.Board;
+        await app.Until(() => new[] { a, b, c, done }.All(x => board.LaneTile(x.Id) is not null), "lane tiles");
+        await DargApp.Settle(200);
+
+        // a done card's menu still has Take out, and no Add
+        Assert.Contains(board.LaneTile(done.Id)!.MoveTargets, m => m.Label == "⏵ Take out of queue Q");
+        Assert.DoesNotContain(board.LaneTile(done.Id)!.MoveTargets, m => m.Label.StartsWith("⏵ Add to queue", StringComparison.Ordinal));
+
+        // pick two lane tiles, right-click one: both go
+        foreach (var t in new[] { a, b }) { var tile = board.LaneTile(t.Id)!; tile.Board.Click(tile, Avalonia.Input.KeyModifiers.Control); }
+        await app.Until(() => board.LaneTile(b.Id)!.MoveTargets.Any(m => m.Label == "⏵ Take out of queue Q"), "the take-out entry");
+        board.LaneTile(b.Id)!.MoveTargets.First(m => m.Label == "⏵ Take out of queue Q").Command.Execute(null);
+        Assert.DoesNotContain(a.Id, Queue(app).Cards);
+        Assert.DoesNotContain(b.Id, Queue(app).Cards);
+        Assert.Contains(c.Id, Queue(app).Cards);
+
+        // dragged out of the lane onto a list
+        app.Project.Queues!.TakeOut([c.Id, done.Id]);
+        Assert.Empty(Queue(app).Cards);
+    }
 }

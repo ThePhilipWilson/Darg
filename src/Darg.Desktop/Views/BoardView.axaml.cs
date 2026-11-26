@@ -29,7 +29,11 @@ public partial class BoardView : UserControl
                 if (list.StartsWith("queue:") && DataContext is BoardViewModel qb)
                     qb.Queues?.DropOnKey(list, items.OfType<CardViewModel>().Select(c => c.Id).ToList());
                 else if (DataContext is BoardViewModel board && board.ListByKey(list) is { } l)
+                {
+                    // queued cards dragged out of a lane leave their queue (WOR-0241)
+                    board.Queues?.TakeOut(items.OfType<CardViewModel>().Select(c => c.Id).ToList());
                     l.Board.Drop(items.OfType<CardViewModel>().ToList(), l, (before as CardViewModel)?.Id);
+                }
             },
             click: (item, keys) => { if (item is CardViewModel card) card.Board.Click(card, keys); },
             carried: item => item is CardViewModel card ? card.Board.Carried(card) : [item]);

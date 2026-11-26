@@ -275,13 +275,15 @@ public partial class QueuesViewModel : ObservableObject
 
     /// <summary>A card's menu entries: add to each queue it isn't in, take out of each it is, or a new queue from it.</summary>
     /// <param name="carried">The cards the menu acts on, read when an entry is chosen: the card, or every picked card when it is one of them (WOR-0241).</param>
-    public IEnumerable<MoveTarget> TargetsFor(string id, Func<IReadOnlyList<string>>? carried = null)
+    public IEnumerable<MoveTarget> TargetsFor(string id, Func<IReadOnlyList<string>>? carried = null, bool takeOutOnly = false)
     {
         IReadOnlyList<string> Ids() => carried?.Invoke() is { Count: > 0 } c ? c : [id];
         foreach (var q in _queues)
-            yield return q.Has(id)
-                ? new MoveTarget($"⏵ Take out of queue {q.Name}", new RelayCommand(() => { foreach (var x in Ids()) Remove(q, x); }))
-                : new MoveTarget($"⏵ Add to queue {q.Name}", new RelayCommand(() => DropOn(q, Ids())));
+        {
+            if (q.Has(id)) yield return new MoveTarget($"⏵ Take out of queue {q.Name}", new RelayCommand(() => { foreach (var x in Ids()) Remove(q, x); }));
+            else if (!takeOutOnly) yield return new MoveTarget($"⏵ Add to queue {q.Name}", new RelayCommand(() => DropOn(q, Ids())));
+        }
+        if (takeOutOnly) yield break;
         yield return new MoveTarget("⏵ New queue from this card", new RelayCommand(() => Make(null, null, Ids())));
     }
 
@@ -291,6 +293,15 @@ public partial class QueuesViewModel : ObservableObject
         var added = Add(q, ids);
         if (Row(q) is { } row)
             row.Doing = added.Count == 0 ? "Added nothing: those are in the queue already, or no board has them." : $"Added {string.Join(", ", added)}.";
+    }
+
+    /// <summary>Cards dragged out of a lane onto a board's list leave every queue they are in (WOR-0241), as ✕ and the menu's Take out do.</summary>
+    public void TakeOut(IReadOnlyList<string> ids)
+    {
+        var gone = new List<string>();
+        foreach (var q in _queues.ToList())
+            foreach (var id in ids)
+                if (Remove(q, id) && !gone.Contains(id)) gone.Add(id);
     }
 
     /// <summary>A lane's drop target key to its queue.</summary>
