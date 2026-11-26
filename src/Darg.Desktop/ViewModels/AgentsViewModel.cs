@@ -1027,11 +1027,14 @@ public partial class AgentViewModel : ObservableObject
     /// (Bench sends a line of context ahead of the person's words).</param>
     /// <param name="profile">The model profile for its job, still being picked (WOR-0034): the session starts once
     /// it is in, on that profile's model and effort. Null: start now on the person's own settings.</param>
+    /// <param name="spare">WOR-0235: offered the folder and full arguments its first session would start with, gives back a
+    /// session already started with exactly those (a spare, Fettle's), or null to start one as ever.</param>
     public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null, string? shown = null, string? id = null,
-        Task<ProfilePick?>? profile = null, Func<IReadOnlyList<string>>? mcp = null)
+        Task<ProfilePick?>? profile = null, Func<IReadOnlyList<string>>? mcp = null, Func<string, IReadOnlyList<string>, AgentSession?>? spare = null)
     {
         if (id is not null) Id = id;
         McpArgs = mcp;
+        _takeSpare = spare;
         _firstClock = new AgentTimings(Id); // from now, so the model pick counts in its first turn (WOR-0206)
         Cwd = cwd;
         CardId = cardId;
@@ -1049,6 +1052,8 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>The model profile it started on ("Deep"), if one was picked.</summary>
     [ObservableProperty] public partial string Profile { get; set; } = "";
     bool _handPicked, _ended;
+    // where its first session may come from ready started (WOR-0235); asked once, by the first Begin
+    Func<string, IReadOnlyList<string>, AgentSession?>? _takeSpare;
     // the clock its first session takes over: started when the agent was made (WOR-0206); a resumed session starts its own
     AgentTimings? _firstClock;
 
@@ -1203,7 +1208,11 @@ public partial class AgentViewModel : ObservableObject
             AgentSession session;
             var clock = _firstClock ?? new AgentTimings(Id);
             _firstClock = null;
-            using (StallWatch.Shared.Section("AgentSession.Start")) session = AgentSession.Start(Cwd, extraArgs: args, apiUrl: ArtifactHost.Server?.ApiUrl, timings: clock);
+            var take = resume ? null : _takeSpare;
+            _takeSpare = null;
+            // a spare started with exactly these args is already past start-up: its first reply skips it (WOR-0235)
+            if (take?.Invoke(Cwd, args) is { } spare) { session = spare; session.Retime(clock); }
+            else using (StallWatch.Shared.Section("AgentSession.Start")) session = AgentSession.Start(Cwd, extraArgs: args, apiUrl: ArtifactHost.Server?.ApiUrl, timings: clock);
             _session = session;
             (_runModel, _runEffort) = (runModel, runEffort);
             // a session closed on request still reports its last events and its exit: they're not news. Streamed text comes

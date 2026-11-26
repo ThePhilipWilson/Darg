@@ -37,7 +37,7 @@ function SessionFor($agent, [datetime]$at, [double]$elapsed) {
     $origin = $at.AddSeconds(-$elapsed)
     foreach ($s in @($byAgent[$agent])) { if ($s -and [math]::Abs(($s.Origin - $origin).TotalSeconds) -lt 1.5) { return $s } }
     $s = [pscustomobject]@{ Agent = $agent; Origin = $origin; Kind = $kindOf[$agent]; Logged = $null; Resume = $false; Pick = $null; PickRule = ''
-        Spawn = $null; Turns = [Collections.Generic.List[object]]::new() }
+        Spawn = $null; Spare = $false; Turns = [Collections.Generic.List[object]]::new() }
     $byAgent[$agent] = @(@($byAgent[$agent]) + $s | Where-Object { $_ })
     $sessions.Add($s)
     return $s
@@ -70,6 +70,7 @@ foreach ($l in [IO.File]::ReadLines((Resolve-Path -LiteralPath $Log).Path)) {
     if (-not $m.Groups['turn'].Success) {
         if ($what -match '^model pick end \((?<p>[\d.]+) s\) · (?<rule>.*)$') { $s.Pick = D $Matches['p']; $s.PickRule = $Matches['rule'] }
         elseif ($what -match '^process start \(spawn (?<ms>\d+) ms, \d+ args(?<r>, resume)?\)') { $s.Spawn = [int]$Matches['ms'] / 1000.0; if ($Matches['r']) { $s.Resume = $true } }
+        elseif ($what -match '^took spare session') { $s.Spare = $true } # WOR-0235: started ahead, so no spawn or start-up of its own
         continue
     }
     $t = TurnOf $s ([int]$m.Groups['turn'].Value) $at
@@ -127,7 +128,7 @@ $rows = foreach ($s in $sessions) {
         $hooks = if ($null -ne $t.HookStart -and $null -ne $t.HookEnd) { $t.HookEnd - $t.HookStart } else { $null }
         $other = if ($null -ne $t.Cc -and $null -ne $api) { [math]::Max(0.0, $t.Cc - $api - $t.Perm) } else { $null }
         [pscustomobject]@{
-            At = $t.At; Agent = $s.Agent; Kind = $kind; Session = if ($s.Resume) { 'resume' } else { 'new' }
+            At = $t.At; Agent = $s.Agent; Kind = $kind; Session = if ($s.Resume) { 'resume' } elseif ($s.Spare) { 'spare' } else { 'new' }
             Turn = $t.N; Pick = $pick; Spawn = $spawn; Startup = $startup; Hooks = $hooks; Init = $t.Init; Reply = $t.Reply; Tool = $t.Tool; ToolName = $t.ToolName
             Shown = $t.ShownLag; UiLag = $t.UiLagMax; Cc = $t.Cc; Api = $api; Other = $other; Perm = $t.Perm; Thinking = $t.Thinking; Ttft = $t.Ttft
             Total = $pick + $t.End; Waited = $pick + $t.End - $t.Perm

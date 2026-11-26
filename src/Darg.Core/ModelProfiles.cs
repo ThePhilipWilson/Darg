@@ -163,6 +163,19 @@ public static partial class ModelProfiles
         return null;
     }
 
+    /// <summary>The profile <see cref="Pick"/> would give the job whatever its text says (WOR-0235: what a spare session
+    /// starts on before the chat's words are known), with no model call. False when the pick would depend on the text
+    /// (no rule matches and Haiku would be asked).</summary>
+    public static bool PickWithoutText(ProfileSet set, AgentJob job, out ProfilePick? pick)
+    {
+        pick = null;
+        if (set.Profiles.Count == 0) return true;
+        if (ByRule(set, job) is { } byRule) { pick = byRule; return true; }
+        if (set.AskHaiku && set.Profiles.Count > 1) return false;
+        if (set.Find(set.Otherwise) is { } fallback) pick = new ProfilePick(fallback, "no rule matched");
+        return true;
+    }
+
     /// <summary>The profile for a job: by rule, else Haiku's pick, else Otherwise; null for the person's own
     /// settings (no profiles, or none fits). Never throws.</summary>
     public static async Task<ProfilePick?> Pick(ProfileSet set, AgentJob job, TimeSpan? timeout = null)

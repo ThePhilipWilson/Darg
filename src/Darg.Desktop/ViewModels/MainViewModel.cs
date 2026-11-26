@@ -104,6 +104,7 @@ public partial class MainViewModel : ObservableObject
         var why = TokenSaver.Set(on);
         if (Usage.OptimiseTokens != on) Usage.OptimiseTokens = on; // comes back here, which does no harm
         foreach (var a in Projects.SelectMany(p => p.Agents?.Agents ?? []).Concat(Mascot.Live()).Distinct().ToList()) a.ApplyTokenSaver();
+        Mascot.RefreshSpare(); // a new chat's model changed with it
         return why;
     }
 

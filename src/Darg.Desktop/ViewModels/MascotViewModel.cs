@@ -19,7 +19,12 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
 {
     static readonly ObservableCollection<TranscriptItem> Nothing = [];
     /// <summary>The instance's projects (updated when Setup saves; a session already running keeps what it was given).</summary>
-    public IReadOnlyList<ProjectConfig> Projects { get; set; } = projects;
+    public IReadOnlyList<ProjectConfig> Projects
+    {
+        get => _projects;
+        set { _projects = value; PlanSpare(); } // the briefing lists them: a spare started before is stale
+    }
+    IReadOnlyList<ProjectConfig> _projects = projects;
     /// <summary>Set by the app: a line saying what Philip is looking at right now.</summary>
     public Func<string>? Context { get; set; }
 
@@ -78,6 +83,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         if (projectId is not null && _open.TryGetValue(projectId, out var kept)) Agent = kept;
         else Agent = AgentStore.List(Store).FirstOrDefault(r => Mine(r.Project)) is { } newest ? Load(newest) : null;
         ListChats();
+        PlanSpare(); // its MCP servers are this project's
     }
 
     /// <summary>The project a Bench chat belongs to (for a notification about it), or null.</summary>
@@ -232,7 +238,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         Fresh();
         var home = InstanceConfig.Folder();
         Directory.CreateDirectory(home);
-        Agent = Wire(new AgentViewModel(home, WithContext(text), name: ChatTitle.Guess(shown), args: Args(), shown: shown, profile: ProfileFor(text), mcp: McpFor(ProjectId)) { StoreFolder = Store, Project = ProjectId });
+        Agent = Wire(new AgentViewModel(home, WithContext(text), name: ChatTitle.Guess(shown), args: Args(), shown: shown, profile: ProfileFor(text), mcp: McpFor(ProjectId), spare: TakeSpare) { StoreFolder = Store, Project = ProjectId });
         Agent.Save();
         ListChats();
         Open = true;
@@ -258,7 +264,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
             var home = InstanceConfig.Folder();
             Directory.CreateDirectory(home);
             // a quick title from the words now, a better one from Haiku a few seconds later
-            Agent = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text, profile: ProfileFor(text), mcp: McpFor(ProjectId)) { StoreFolder = Store, Project = ProjectId });
+            Agent = Wire(new AgentViewModel(home, sent, name: ChatTitle.Guess(text), args: Args(), shown: text, profile: ProfileFor(text), mcp: McpFor(ProjectId), spare: TakeSpare) { StoreFolder = Store, Project = ProjectId });
             Agent.Save();
             ListChats();
             _ = Retitle(Agent.Id, text);
@@ -314,10 +320,140 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         // WOR-0138: the briefing, with the whole command list, is far past what a .cmd shim's command line takes
         // (8191 characters), so it goes in a file; claude reads it whole
         var file = Path.Combine(InstanceConfig.Folder(), "fettle-briefing.md");
-        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
-        File.WriteAllText(file, Briefing());
+        WriteBriefing(file, Briefing());
         yield return "--append-system-prompt-file";
         yield return file;
+    }
+
+    /// <summary>The briefing file, rewritten only when it changes, aside and moved in: a spare (WOR-0235) writes it off the
+    /// UI thread while a chat may be writing it too, and a session starting must never read half of one.</summary>
+    static void WriteBriefing(string file, string text)
+    {
+        lock (BriefingLock)
+        {
+            try
+            {
+                if (File.Exists(file) && File.ReadAllText(file) == text) return;
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                var temp = file + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
+                File.WriteAllText(temp, text);
+                File.Move(temp, file, overwrite: true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // a file in use: the one there stands
+        }
+    }
+    static readonly object BriefingLock = new();
+
+    // ---- A spare session (WOR-0235): a new chat's first reply waited on Claude Code starting up (node, the person's
+    // SessionStart hooks, MCP servers: about 2.2 s of a 6.4 s first reply). One session is kept started and idle, as the
+    // next new chat (Send, Ask) would start it, and handed to that chat; another is started after. Its args come from the
+    // chat's own (Args, the model a rule picks, McpFor), and a chat takes it only when its own args and the files they name
+    // match exactly (SpareSession.KeyFor), else it starts afresh and the spare is replaced. One at a time, for the project
+    // on screen; nothing is sent to it. The phone's chat and resumed chats don't use it. It ends with the app (Close, and
+    // Darg's job if it dies).
+
+    /// <summary>How long after the project shows (or a spare is taken) the next spare starts, so it doesn't compete with
+    /// Darg's own start-up; null: no spares (the integration tests, except those about it).</summary>
+    public static TimeSpan? SpareAfter { get; set; } = TimeSpan.FromSeconds(5);
+
+    SpareSession? _spare;
+    DispatcherTimer? _spareTimer;
+    bool _spareStarting, _closed;
+    int _spareAsked; // bumped by every PlanSpare: one landing after a newer ask checks it still fits
+
+    /// <summary>The spare waiting now, if any (tests, and what's ended on closing).</summary>
+    public SpareSession? Spare => _spare;
+
+    /// <summary>Something a new chat starts with changed (Optimise tokens): replace the spare now rather than at the next chat.</summary>
+    public void RefreshSpare() => PlanSpare();
+
+    /// <summary>Make sure a spare that fits the project on screen is there, after <see cref="SpareAfter"/>.</summary>
+    void PlanSpare()
+    {
+        if (SpareAfter is not { } after || _closed || !_shown) return;
+        _spareAsked++;
+        if (_spareTimer is null)
+        {
+            _spareTimer = new DispatcherTimer(DispatcherPriority.Background);
+            _spareTimer.Tick += (_, _) => { _spareTimer.Stop(); MakeSpare(); };
+        }
+        _spareTimer.Stop();
+        _spareTimer.Interval = after > TimeSpan.Zero ? after : TimeSpan.FromMilliseconds(1);
+        _spareTimer.Start();
+    }
+
+    void MakeSpare()
+    {
+        if (_closed || _spareStarting || SpareAfter is null) return;
+        _spareStarting = true;
+        var asked = _spareAsked;
+        var project = ProjectId;
+        var api = ArtifactHost.Server?.ApiUrl;
+        // reading profiles.md and instance.json and writing the briefing and MCP files, and the process start: off the UI thread
+        Task.Run<(string? Key, SpareSession? Made)>(() =>
+        {
+            var home = InstanceConfig.Folder();
+            Directory.CreateDirectory(home);
+            var args = SpareArgs(project, home);
+            var key = args is null ? null : SpareSession.KeyFor(home, args, api);
+            if (args is null || key is null || _spare?.Fits(key) == true) return (key, null);
+            return (key, SpareSession.Start(home, args, api, key));
+        }).ContinueWith(t => Dispatcher.UIThread.Post(() =>
+        {
+            _spareStarting = false;
+            if (t.IsFaulted) return; // claude not found, and the like: a chat says so when it starts
+            var (key, made) = t.Result;
+            if (made is null)
+            {
+                // none needed (the one there fits), or none possible (the pick depends on the words): end one that doesn't fit
+                if (key is null || _spare?.Fits(key) != true) EndSpare(key is null ? "Fettle's model pick reads the chat's words" : "replaced");
+            }
+            else if (_closed) { made.End("Darg is closing"); return; }
+            else { EndSpare("replaced"); _spare = made; }
+            if (asked != _spareAsked) MakeSpare(); // the project or briefing changed while it started
+        }));
+    }
+
+    /// <summary>The args a new chat in <paramref name="project"/> would start with, as Begin makes them; null when its model
+    /// depends on what is asked (Haiku picks), so no spare could match.</summary>
+    List<string>? SpareArgs(string? project, string home)
+    {
+        if (!ModelProfiles.PickWithoutText(ModelProfiles.Load(), new AgentJob(JobKinds.Fettle, "", Project: project), out var pick)) return null;
+        string? model = pick is null || pick.Profile.Model == AgentChoices.Default ? null : pick.Profile.Model;
+        string? effort = pick is null || pick.Profile.Effort == AgentChoices.Default ? null : pick.Profile.Effort;
+        var (runModel, runEffort) = TokenSaver.Running(model, effort, AgentChoices.DefaultModel(home));
+        List<string> args = [.. Args(), .. AgentChoices.LaunchArgs(runModel, runEffort, AgentChoices.NewAgentMode)];
+        try { args.AddRange(McpFor(project)()); }
+        catch (Exception) { args.AddRange(McpServers.LaunchArgs(null)); }
+        return args;
+    }
+
+    /// <summary>A new chat's first session (AgentViewModel's spare hook): the spare, when it was started with exactly what
+    /// this one would be; else null, and the spare (if any) is ended. Either way another is planned.</summary>
+    AgentSession? TakeSpare(string cwd, IReadOnlyList<string> args)
+    {
+        var spare = _spare;
+        _spare = null;
+        PlanSpare();
+        if (spare is null) return null;
+        var key = SpareSession.KeyFor(cwd, args, ArtifactHost.Server?.ApiUrl);
+        if (spare.Misfit(key) is { } why) { spare.End(why); return null; }
+        return spare.Session;
+    }
+
+    void EndSpare(string why)
+    {
+        var s = _spare;
+        _spare = null;
+        s?.End(why);
+    }
+
+    /// <summary>The app is closing: the spare ends and none starts again.</summary>
+    public void Close()
+    {
+        _closed = true;
+        _spareTimer?.Stop();
+        EndSpare("Darg is closing");
     }
 
     string Briefing()

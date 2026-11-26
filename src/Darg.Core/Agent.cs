@@ -280,8 +280,20 @@ public sealed class AgentSession : IAsyncDisposable
     public bool Running => !_proc.HasExited;
     /// <summary>The session's clock (WOR-0206): each step of its start and turns goes to agents.log; null: not timed.</summary>
     public AgentTimings? Timings { get; private set; }
+    /// <summary>When its process was started.</summary>
+    public DateTime StartedAt { get; private set; } = DateTime.UtcNow;
 
     AgentSession(Process proc, string cwd) { _proc = proc; Cwd = cwd; }
+
+    /// <summary>A spare session taken by an agent (WOR-0235): from here its lines go on the agent's clock, which has its
+    /// model pick, so its first turn reads as one with no start-up. The spare's own clock says who took it.</summary>
+    public void Retime(AgentTimings timings)
+    {
+        var was = Timings;
+        Timings = timings;
+        was?.Note($"spare taken by {timings.AgentId}");
+        timings.Note($"took spare session {was?.AgentId ?? "?"} (started {(DateTime.UtcNow - StartedAt).TotalSeconds:0.0} s ago)");
+    }
 
     /// <summary>The claude executable: CLAUDE_PATH, else claude on PATH, else ~/.local/bin/claude.</summary>
     public static string? FindClaude()
@@ -336,6 +348,7 @@ public sealed class AgentSession : IAsyncDisposable
         var s = new AgentSession(proc, psi.WorkingDirectory) { Timings = timings };
         var spawn = Stopwatch.StartNew();
         proc.Start();
+        s.StartedAt = DateTime.UtcNow;
         timings?.ProcessStarted(spawn.Elapsed, psi.ArgumentList.Count, psi.ArgumentList.Contains("--resume"));
         s._group = ChildProcesses.Leftovers(proc, LeftBehind);
         proc.StandardInput.AutoFlush = true;

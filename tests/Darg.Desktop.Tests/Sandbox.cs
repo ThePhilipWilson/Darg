@@ -80,6 +80,9 @@ public static class Sandbox
         Environment.SetEnvironmentVariable("FAKE_RESULT", "200");
         Environment.SetEnvironmentVariable("FAKE_TOUCH", "0");
         Darg.Desktop.ViewModels.RemoteHost.PortOverride = 0; // phone access on any free port, never the real app's 47818 (not a DARG_ variable: a test clears those)
+        // no spare Fettle session (WOR-0235) unless a test is about it: one starting a few seconds in would add a claude
+        // start to every test that counts them
+        Darg.Desktop.ViewModels.MascotViewModel.SpareAfter = null;
 
         ChildProcesses.TieToThisProcess(); // fake agents die with the test run, as real ones die with the app
         Notifier.Capture = n => { lock (Notifications) Notifications.Add(n); };

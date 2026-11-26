@@ -313,6 +313,7 @@ public sealed class DargApp : IDisposable
         // FAKE_LOG (WOR-0131). Close ends every agent, those mid-pick too, stops the watchers and starts nothing after.
         foreach (var p in Main.Projects.ToList()) p.Close();
         foreach (var a in Main.Mascot.Live().ToList()) a.Shut();
+        Main.Mascot.Close(); // and its spare session (WOR-0235)
         _window.Close();
         _window = null;
         Dispatcher.UIThread.RunJobs();

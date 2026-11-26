@@ -115,6 +115,9 @@ public sealed class AgentTimings
 
     void Locked(Action a) { lock (_lock) a(); }
 
+    /// <summary>A line of Darg's own about the session (a spare taken or ended, WOR-0235).</summary>
+    public void Note(string what) => Locked(() => Mark(what));
+
     /// <summary>A message went to the session: a turn starts, or follows the one running.</summary>
     public void Sent()
     {

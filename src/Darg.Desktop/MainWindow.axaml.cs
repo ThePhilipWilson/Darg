@@ -35,6 +35,7 @@ public partial class MainWindow : Window
         Closing += (_, _) => vm.SaveAll();
         Closed += (_, _) =>
         {
+            vm.Mascot.Close(); // Fettle's spare session (WOR-0235)
             Notifier.Clear();
             // nothing static keeps this window once it's closed (WOR-0226)
             vm.Unhook();
