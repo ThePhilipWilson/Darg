@@ -646,6 +646,8 @@ public partial class ProjectViewModel : ObservableObject
             Reports.Reload();
             Reports!.OpenCard = id => { if (!Board.OpenById(id)) return false; Section = Section.Board; return true; };
             Agents.OpenCard = Reports.OpenCard;
+            // a work or rework agent cut off mid-turn when Darg last closed carries on if its card is still being worked (WOR-0221)
+            Agents.CardStillWorked = id => CutOffTurn.StillWorked(config.Boards, id);
             Agents.RefreshCards();
             // a card landing in Needs Attention gets its decision report, whoever moved it (WOR-0092)
             // WOR-0102: a card entering QA gets a QA report, one reaching done has it archived and a done report written

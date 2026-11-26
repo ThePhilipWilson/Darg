@@ -212,10 +212,12 @@ public partial class AgentsViewModel : ObservableObject
         a.IsDone || (a.State == AgentState.Saved && a.CardDone && a.FinishedTurn)
         || (Replaced(a) && Stopped(a)) || TaskOver(a);
 
-    /// <summary>A task agent that isn't running (WOR-0183): its turn ended, or it was cut off mid-turn by a crash, a close or
-    /// an update, or never got past its prompt. Its card waiting on the person keeps nothing: the decision is on the card,
-    /// answered there (a free-text answer starts a fresh card agent). Held only while Darg asks it for a missing decision.</summary>
-    bool TaskOver(AgentViewModel a) => IsTask(a) && Stopped(a) && !_held.Contains(a.Id);
+    /// <summary>A task agent that isn't running (WOR-0183): its turn ended, it was cut off mid-turn and isn't carrying on, or
+    /// it never got past its prompt. Its card waiting on the person keeps nothing: the decision is on the card, answered
+    /// there (a free-text answer starts a fresh card agent). Held only while Darg asks it for a missing decision.
+    /// Not a work or rework agent cut off mid-turn (WOR-0221): until its card's place is known it may carry on
+    /// (<see cref="ResumeCutOff"/>), and one cut off again on the turn Darg resumed it for stays listed, saved, for the person.</summary>
+    bool TaskOver(AgentViewModel a) => IsTask(a) && Stopped(a) && !_held.Contains(a.Id) && !a.CutOff && !a.LeftCutOff;
 
     /// <summary>A card agent doing one task (work, rework, QA, improve): once it stops the task is over and the agent has
     /// no place in the list (WOR-0183, Philip 2026-11-22: once a task, QA, building or whatever, has finished, there
@@ -359,6 +361,20 @@ public partial class AgentsViewModel : ObservableObject
     /// <summary>Shows a card on the board (WOR-0143); false when it isn't on the board shown.</summary>
     public Func<string, bool>? OpenCard { get; set; }
 
+    /// <summary>Whether a card is still being worked: in its board's working or needs-more-work column (set by the project,
+    /// <see cref="CutOffTurn.StillWorked"/>). Null: no boards, and a cut-off agent stays saved.</summary>
+    public Func<string, bool>? CardStillWorked { get; set; }
+
+    /// <summary>Work and rework agents Darg closed, crashed or updated on mid-turn (WOR-0221), once the boards are read: one
+    /// whose card is still being worked and that no newer agent on the card has replaced resumes its own session with a
+    /// carry-on message; one already resumed by Darg on that turn stays saved; the rest go as finished tasks (WOR-0183).</summary>
+    void ResumeCutOff()
+    {
+        if (CardStillWorked is null || _closed) return;
+        foreach (var a in Agents.Where(a => a.CutOff).ToList())
+            a.SeeToCutOff(!Replaced(a) && CardStillWorked(a.CardId!));
+    }
+
     /// <summary>Re-read every card agent's card after the boards change (a card moved to Done shows on its agent).</summary>
     public void RefreshCards()
     {
@@ -366,6 +382,7 @@ public partial class AgentsViewModel : ObservableObject
         if (CardBoards is not null) { _cardBoards = CardBoards(); SyncTabs(); Resort(); }
         var done = DoneCardIds?.Invoke(); // every board's, not only the one shown: an agent's card may be on another (WOR-0153)
         foreach (var a in Agents) if (a.CardId is not null) a.CardDone = done?.Contains(a.CardId) == true;
+        ResumeCutOff();
         // a task agent that isn't running has finished its task, ended or cut off: it leaves the list (a failed one stays)
         foreach (var a in Agents.Where(TaskOver).ToList()) Forget(a);
     }
@@ -934,6 +951,12 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>What the agent is sent when the limit has reset.</summary>
     public const string CarryOnMessage = "Your usage limit has reset. Carry on with what you were doing where you left off.";
 
+    /// <summary>What a work or rework agent cut off mid-turn is sent when Darg opens again (WOR-0221).</summary>
+    public const string CutOffMessage = "Darg closed while you were mid-turn (a crash, a close or an update), so your last turn was cut off. "
+        + "Carry on with what you were doing where you left off: check what you had already done before going on.";
+    /// <summary>The line its transcript gets, saying why it carries on by itself.</summary>
+    public const string CutOffNote = "Cut off mid-turn when Darg last closed: resuming its session to carry on.";
+
     UsageLimited? _rejected;          // a rate_limit_event this turn that said the limit is hit
     bool _carryingOn, _continuing;    // the next turn / this turn was sent at the reset (so a new limit re-arms by itself)
     DispatcherTimer? _waitTimer;
@@ -1088,9 +1111,56 @@ public partial class AgentViewModel : ObservableObject
         foreach (var i in r.Items) Items.Add(FromRecord(i));
         Activity = OneLine(Items.OfType<TextItem>().LastOrDefault()?.Text);
         State = AgentState.Saved;
+        _autoResumed = r.AutoResumed;
         // it was waiting for the usage limit to reset when Darg closed: it still is (or carries on now)
         if (r.ContinueAt is { } at) { LimitHit = true; WaitFor(at); }
+        else CutOff = WasCutOff();
     }
+
+    // ---- Cut off mid-turn (WOR-0221): Darg closed, crashed or updated while a work or rework agent was at work on its card.
+    // It comes back saved; the project resumes its session with CutOffMessage once its boards are read, if its card is
+    // still being worked (AgentsViewModel.ResumeCutOff). Once at most: cut off again on that turn, it is left saved.
+
+    /// <summary>Loaded cut off mid-turn and not yet seen to: a work or rework agent on a card, with a session to resume,
+    /// whose transcript just stops (no "Turn done", no error, not closed on purpose by Close or Fettle).</summary>
+    public bool CutOff { get; private set; }
+    /// <summary>Cut off again on the turn Darg resumed it for: left saved and listed, for the person (a send carries it on).</summary>
+    public bool LeftCutOff { get; private set; }
+    /// <summary>Darg resumed it by itself and that turn hasn't ended (saved as <see cref="AgentRecord.AutoResumed"/>).</summary>
+    public bool AutoResumed => _autoResumed;
+    bool _autoResumed;
+
+    bool WasCutOff() =>
+        Purpose is AgentPurposes.Work or AgentPurposes.Rework && CardId is not null && SessionId is not null
+        && Items.Count > 0 && !FinishedTurn && !EndedInError
+        && !(Items[^1] is NoteItem { Bad: false } n && n.Text.StartsWith("Session closed", StringComparison.Ordinal));
+
+    /// <summary>See to a cut-off agent once its card's place is known: resume its session (its card still being worked, and
+    /// not resumed by Darg already on the turn that was cut off), leave it saved and listed (it was), or let it go as a
+    /// finished task (its card moved on, or a newer agent has it). Returns whether it was resumed.</summary>
+    public bool SeeToCutOff(bool stillWorked)
+    {
+        if (!CutOff) return false;
+        CutOff = false;
+        if (!stillWorked) return false;
+        if (_autoResumed)
+        {
+            LeftCutOff = true;
+            if (!(Items.LastOrDefault() is NoteItem { Text: CutOffAgainNote }))
+                Items.Add(new NoteItem(CutOffAgainNote, false));
+            Activity = CutOffAgainNote;
+            Save();
+            return false;
+        }
+        Items.Add(new NoteItem(CutOffNote, false));
+        _autoResumed = true;
+        Say("↻ Carry on (Darg closed mid-turn)", CutOffMessage);
+        Save(); // marked before its session starts: a crash right now still counts this as its one resume
+        return true;
+    }
+
+    /// <summary>The line a cut-off agent gets when it was cut off again on the turn Darg resumed it for.</summary>
+    public const string CutOffAgainNote = "Cut off mid-turn again on the turn Darg resumed it for: not resumed a second time. Send a message to carry on.";
 
     /// <summary>Start (or resume) the Claude session and send it a message.</summary>
     /// <summary>Its project is closing (removed in Setup, or a test's app ending): end the session and never start
@@ -1107,6 +1177,7 @@ public partial class AgentViewModel : ObservableObject
     {
         if (_shut) { Items.Add(new NoteItem("Not started: its project has closed.", false)); return; }
         Resting = false;
+        LeftCutOff = false; // carried on: from here it is any other agent at work
         using var timing = StallWatch.Shared.Section("Agent.Begin");
         try
         {
@@ -1163,7 +1234,7 @@ public partial class AgentViewModel : ObservableObject
             AgentStore.SaveLater(StoreFolder, new AgentRecord
             {
                 Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Purpose = Purpose, Project = Project, Plan = Plan, SessionId = SessionId, Args = [.. _args],
-                Model = _model, Effort = _effort, Mode = _mode, ModelByHand = _modelByHand, EffortByHand = _effortByHand, ContinueAt = ContinueAt,
+                Model = _model, Effort = _effort, Mode = _mode, ModelByHand = _modelByHand, EffortByHand = _effortByHand, ContinueAt = ContinueAt, AutoResumed = _autoResumed,
                 Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
             });
         }
@@ -1252,9 +1323,11 @@ public partial class AgentViewModel : ObservableObject
                 _rejected = u;
                 break;
             case TurnFinished f when IsLimit(f):
+                _autoResumed = false; // the turn it was resumed for has ended: a later cut-off resumes again
                 OutOfUsage(f);
                 break;
             case TurnFinished f:
+                _autoResumed = false;
                 if (f.IsError) Items.Add(new NoteItem(f.Text, true));
                 // Claude Code reports a cost on every turn, priced as if on the API; on a subscription
                 // nothing is charged per turn, so only an API-key session shows it
@@ -1341,6 +1414,7 @@ public partial class AgentViewModel : ObservableObject
         if (text.Length == 0) return;
         Compose = "";
         if (Wrap is not null) { Say(text, Wrap(text)); return; } // a Bench chat: it hears where Philip is
+        _autoResumed = false; // the person's own turn: cut off, it is resumed again (WOR-0221)
         Items.Add(new UserItem(text));
         if (_session is null)
         {

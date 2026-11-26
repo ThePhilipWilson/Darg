@@ -231,7 +231,27 @@ public sealed class DargApp : IDisposable
         if (p.ExitCode != 0) throw new InvalidOperationException($"git {string.Join(' ', args)}: {p.StandardError.ReadToEnd()}");
     }
 
-    public void Dispose()
+    /// <summary>Darg closing as a crash or an update leaves it, then opening again on the same instance (WOR-0221). Every
+    /// agent is saved as it stands (what the window's Closing does), its saved files are kept as they are at that moment,
+    /// the app is closed, the files are put back as they were (a crash writes nothing after; Darg's own close of a session
+    /// doesn't either), <paramref name="whileClosed"/> runs, and a new window opens.</summary>
+    public async Task Reopen(Action? whileClosed = null)
+    {
+        Main.SaveAll();
+        AgentStore.Flush();
+        var store = AgentStore.Folder("proj", Home);
+        var saved = Directory.Exists(store) ? Directory.GetFiles(store, "*.json").ToDictionary(f => f, File.ReadAllText) : [];
+        Close();
+        AgentStore.Flush();
+        foreach (var f in Directory.Exists(store) ? Directory.GetFiles(store, "*.json") : []) File.Delete(f);
+        foreach (var (f, text) in saved) File.WriteAllText(f, text);
+        whileClosed?.Invoke();
+        await Start();
+    }
+
+    public void Dispose() => Close();
+
+    void Close()
     {
         if (_window is null) return;
         // close the projects, not just their agents' sessions: the window closing leaves their view models, board
@@ -241,6 +261,7 @@ public sealed class DargApp : IDisposable
         foreach (var p in Main.Projects.ToList()) p.Close();
         foreach (var a in Main.Mascot.Live().ToList()) a.Shut();
         _window.Close();
+        _window = null;
         Dispatcher.UIThread.RunJobs();
     }
 }

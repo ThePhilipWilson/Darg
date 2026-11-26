@@ -56,6 +56,9 @@ public sealed class AgentRecord
     public bool EffortByHand { get; set; }
     /// <summary>Out of usage, and set to carry on at this time (when the limit resets); null: not waiting.</summary>
     public DateTimeOffset? ContinueAt { get; set; }
+    /// <summary>Darg resumed it by itself after it was cut off mid-turn (WOR-0221), and that turn hasn't ended yet: cut off
+    /// again, it is left saved rather than resumed again, so a crash loop can't keep restarting it.</summary>
+    public bool AutoResumed { get; set; }
     public DateTime Created { get; set; }
     public DateTime Updated { get; set; }
     public List<ItemRecord> Items { get; set; } = [];

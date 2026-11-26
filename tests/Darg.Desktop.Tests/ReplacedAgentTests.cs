@@ -94,7 +94,9 @@ public class ReplacedAgentTests
     /// <summary>The kinds of saved agent a restart meets on one card: id, purpose, transcript, set to carry on after a reset.</summary>
     static readonly (string Id, string Purpose, ItemRecord[] Items, bool CarriesOn)[] Saved =
     [
-        // cut off mid-turn by a crash: the last item a tool call, its text, the prompt itself or nothing at all
+        // cut off mid-turn by a crash: the last item a tool call, its text, the prompt itself or nothing at all. None carries
+        // on (WOR-0221): a QA agent isn't resumed, newer work agents on the card have replaced the rework one, the prompt-only
+        // ones never got a session (NoSession) and the Improve agent isn't work
         ("midtool", AgentPurposes.Qa, [new() { Kind = "user", Text = "check it" }, new() { Kind = "text", Text = "Running the suite." }, new() { Kind = "tool", Name = "Bash", Summary = "test" }], false),
         ("midtext", AgentPurposes.Rework, [new() { Kind = "user", Text = "fix it" }, new() { Kind = "text", Text = "Looking." }], false),
         ("promptonly", AgentPurposes.Work, [new() { Kind = "user", Text = "work on it" }], false),
@@ -108,6 +110,7 @@ public class ReplacedAgentTests
         ("carrieson", AgentPurposes.Work, [new() { Kind = "user", Text = "work" }, new() { Kind = "note", Text = "You've hit your limit", Bad = true }], true),
     ];
     static readonly string[] Stay = ["failed", "died", "carrieson"];
+    static readonly string[] NoSession = ["promptonly", "profileonly", "empty"];
 
     static void SeedSaved(DargApp app, Card card, string store)
     {
@@ -115,7 +118,7 @@ public class ReplacedAgentTests
         foreach (var (id, purpose, items, carriesOn) in Saved)
             AgentStore.Save(store, new AgentRecord
             {
-                Id = id, Name = $"{card.Id} {id}", Cwd = app.Repo, CardId = card.Id, Purpose = purpose, SessionId = "s-" + id,
+                Id = id, Name = $"{card.Id} {id}", Cwd = app.Repo, CardId = card.Id, Purpose = purpose, SessionId = NoSession.Contains(id) ? null : "s-" + id,
                 Created = DateTime.Now.AddHours(-1).AddMinutes(n++), Updated = DateTime.Now.AddHours(-1),
                 ContinueAt = carriesOn ? DateTimeOffset.Now.AddHours(2) : null, Items = [.. items],
             });
@@ -142,6 +145,7 @@ public class ReplacedAgentTests
 
         var left = app.Agents.Agents.Where(a => a.CardId == card.Id).Select(a => a.Id).Order().ToList();
         Assert.Equal([.. Stay.Append("chat").Order()], left);
+        Assert.DoesNotContain(app.ClaudeCalls(), c => (string?)c["kind"] == "start"); // none of them carried on (WOR-0221)
         foreach (var (id, _, _, _) in Saved)
             Assert.True(Stay.Contains(id) == File.Exists(Path.Combine(store, id + ".json")), $"{id}'s file: kept {File.Exists(Path.Combine(store, id + ".json"))}");
         Assert.Equal("", app.Crashes());
@@ -161,7 +165,9 @@ public class ReplacedAgentTests
         var agents = AgentStore.List(store).Select(r => new AgentViewModel(r, store)).ToList();
         Assert.Equal(Saved.Length + 1, agents.Count);
         var finished = agents.Where(app.Agents.IsFinished).Select(a => a.Id).Order().ToList();
-        Assert.Equal([.. Saved.Select(s => s.Id).Except(Stay).Order()], finished);
+        // a work or rework agent cut off mid-turn isn't finished until its card's place is known (WOR-0221): off the list
+        // these never are, but in the app the boards are read as it opens, before anyone can press Clear finished
+        Assert.Equal([.. Saved.Select(s => s.Id).Except(Stay).Except(["midtext"]).Order()], finished);
         foreach (var a in agents) a.Shut();
     }
 
