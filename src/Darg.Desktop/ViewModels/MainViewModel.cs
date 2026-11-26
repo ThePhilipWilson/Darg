@@ -667,6 +667,8 @@ public partial class ProjectViewModel : ObservableObject
             // a card agent shows its card's state: "Complete, pending removal" once the card is done
             Agents.DoneCardIds = Board.DoneCardIds;
             Agents.CardBoards = Board.CardBoards;
+            // WOR-0227: these answer from the boards' last read, which lands off the UI thread and then runs RefreshCards
+            Agents.BoardsRead = () => Board.BoardsRead;
             Board.Reloaded += Agents.RefreshCards;
             // a plan's made cards show their column and agent as the board has them
             Board.Reloaded += () => { if (OnDesign) Design?.Reload(); };
@@ -675,7 +677,7 @@ public partial class ProjectViewModel : ObservableObject
             Reports!.OpenCard = id => { if (!Board.OpenById(id)) return false; Section = Section.Board; return true; };
             Agents.OpenCard = Reports.OpenCard;
             // a work or rework agent cut off mid-turn when Darg last closed carries on if its card is still being worked (WOR-0221)
-            Agents.CardStillWorked = id => CutOffTurn.StillWorked(config.Boards, id);
+            Agents.CardStillWorked = Board.StillWorked;
             Agents.RefreshCards();
             // a card landing in Needs Attention gets its decision report, whoever moved it (WOR-0092)
             // WOR-0102: a card entering QA gets a QA report, one reaching done has it archived and a done report written

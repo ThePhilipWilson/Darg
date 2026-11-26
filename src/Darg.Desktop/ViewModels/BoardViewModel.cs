@@ -470,15 +470,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     }
     public void Open(CardViewModel card) => Root.Editor = new CardEditor(this, card);
 
-    /// <summary>Each card's board (its story, WOR-0113), by card id, from the boards on disk.</summary>
-    public Dictionary<string, string> CardBoards()
-    {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (_project.Boards is null) return map;
-        foreach (var b in BoardStore.List(_project.Boards))
-            foreach (var c in BoardStore.ReadCards(Path.Combine(_project.Boards, b))) map.TryAdd(c.Id, b);
-        return map;
-    }
+    /// <summary>Each card's board (its story, WOR-0113), by card id, as the boards were last read (WOR-0227: from memory,
+    /// not every card file read again).</summary>
+    public Dictionary<string, string> CardBoards() => AllBoards().CardBoards();
 
     /// <summary>Open a card by its ID, on whichever board holds it (clearing filters that hide it).</summary>
     public bool OpenById(string id)
@@ -901,41 +895,47 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         Lists.FirstOrDefault(l => l.Id == id)?.StartRenameCommand.Execute(null);
     }
 
-    /// <summary>The board changed on disk: reload, unless a header is being edited (then once it's done).</summary>
+    /// <summary>The board changed on disk: a pass reads it off the UI thread (WOR-0227), unless a header is being edited
+    /// (then once it's done).</summary>
     void Changed()
     {
-        if (_held is not null) _reloadWaiting = true; else Reload();
+        if (_held is not null) _reloadWaiting = true; else ReloadLater();
     }
 
     /// <summary>A card's agent was forgotten: its card drops the link (Work on, flows, moving to another board
-    /// come back), on the board and in the card's panel if it's open.</summary>
+    /// come back), on the board and in the card's panel if it's open. Nothing is read: the tiles are drawn again from the
+    /// boards in memory, once for however many agents go together (WOR-0227: each one reloaded every row, which raised
+    /// Reloaded, which forgot the next, ten deep).</summary>
     public void AgentGone(string cardId)
     {
-        foreach (var r in Root.Rows) r.Reload();
+        RedrawLater();
         if (Root.Editor is { } e && e.CardId == cardId) e.AgentChanged();
     }
 
-    /// <summary>Reload now. A header being edited is given up (this is a click elsewhere: a move, another board).</summary>
+    /// <summary>Reload this row now, after the person's own click wrote its board (a move, a column edited, a card made), so
+    /// the next line sees the result: this row's board is read on the UI thread, and the rest (every other board,
+    /// <see cref="Reloaded"/>) follows in a pass off it (<see cref="ReloadLater"/>). Anything else uses ReloadLater.
+    /// A header being edited is given up (this is a click elsewhere: a move, another board).</summary>
     public void Reload()
     {
         if (_held is not null) { _held.IsRenaming = false; _held.ConfirmingRemove = false; _held = null; }
         _reloadWaiting = false;
         if (Folder is null) return;
-        using var timing = StallWatch.Shared.Section("Board.Reload");
-        try
+        using (StallWatch.Shared.Section("Board.Reload (click)"))
         {
-            using var loading = StallWatch.Shared.Section("BoardStore.Load");
-            BoardStore.EnsureAttentionColumn(Folder);
-            _board = BoardStore.Load(Folder);
-            // a column change made outside Move (an agent editing the card) is stamped Moved, then read again
-            if (_stamps.Read(Folder, _board).Count > 0) _board = BoardStore.Load(Folder);
+            _gen++;
+            try
+            {
+                using var loading = StallWatch.Shared.Section("BoardStore.Load");
+                _board = ReadBoard(Folder);
+            }
+            catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
+            BlockersStale();
+            NoticeAttention();
+            if (Root.SyncLabels()) ApplyAll(); else { Apply(); RedrawBlockedRows(); }
+            Root.Editor?.RefreshSendBack();
         }
-        catch (Exception e) { Status = $"Couldn't read the board: {e.Message}"; return; }
-        BlockersStale();
-        NoticeAttention();
-        if (Root.SyncLabels()) ApplyAll(); else { Apply(); RedrawBlockedRows(); }
-        Root.Reloaded?.Invoke();
-        Root.Editor?.RefreshSendBack();
+        ReloadLater();
     }
 
     /// <summary>The label chips, one per label on any row's cards; false when they were already those (the chips stay).</summary>
@@ -979,29 +979,16 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     /// <summary>Every card in the done (last) column of each of the project's boards, with its card file (WOR-0112).</summary>
     /// <param name="completedToo">Cards whose Status is Completed count as well (they are done; IsDone says so).</param>
-    public List<(Card Card, string File)> DoneCards(bool completedToo = false)
-    {
-        var found = new List<(Card, string)>();
-        foreach (var b in BoardStore.List(_project.Boards))
-        {
-            var folder = Path.Combine(_project.Boards!, b);
-            try
-            {
-                var board = BoardStore.Load(folder);
-                if (board.Columns.LastOrDefault()?.Name is not { } last) continue;
-                var place = BoardStore.PlaceOf(last, board.Columns);
-                foreach (var c in board.AllCards.Where(c => BoardStore.PlaceOf(c.Status, board.Columns) is var p && (p == place || completedToo && p == Board.Completed)))
-                    found.Add((c, Path.GetFullPath(Path.Combine(folder, "items", c.File))));
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-        }
-        return found;
-    }
+    /// <remarks>As the boards were last read (WOR-0227).</remarks>
+    public List<(Card Card, string File)> DoneCards(bool completedToo = false) => AllBoards().DoneCards(completedToo);
 
     /// <summary>The id of every card done on any of the project's boards (WOR-0153: an agent's card may sit on a board that
-    /// isn't the one shown, so <see cref="IsDone"/> alone missed it). Read from the boards on disk, like <see cref="CardBoards"/>.</summary>
-    public HashSet<string> DoneCardIds() =>
-        _project.Boards is null ? [] : DoneCards(completedToo: true).Select(d => d.Card.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    /// isn't the one shown, so <see cref="IsDone"/> alone missed it). As the boards were last read, like <see cref="CardBoards"/>.</summary>
+    public IReadOnlySet<string> DoneCardIds() => AllBoards().DoneCardIds();
+
+    /// <summary>Whether the card sits in its board's working or needs-more-work column, as the boards were last read
+    /// (WOR-0221's question, answered from memory).</summary>
+    public bool StillWorked(string cardId) => AllBoards().StillWorked(cardId);
 
     /// <summary>A card is done when it's in Completed or the board's last column (its done column).</summary>
     public bool IsDone(string cardId)
@@ -1489,11 +1476,18 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         _watch.Changed += Poke; _watch.Created += Poke; _watch.Deleted += Poke; _watch.Renamed += (s, e) => Poke(s, e);
     }
 
-    /// <summary>Reload every row (an agent ended: its card may be on any of them).</summary>
-    public void ReloadAll() { foreach (var r in Root.Rows) r.Reload(); }
+    /// <summary>Reload every row (an agent ended: its card may be on any of them): the tiles are drawn again at once from the
+    /// boards in memory (an agent starting or stopping shows on its tile now; nothing is read), then a pass reads the files
+    /// off the UI thread.</summary>
+    public void ReloadAll()
+    {
+        ApplyAll();
+        ReloadLater();
+    }
 
     public void Dispose()
     {
+        _disposed = true;
         _watch?.Dispose(); _watchBoards?.Dispose();
         foreach (var r in Rows.Where(r => r != this)) r.Dispose();
     }

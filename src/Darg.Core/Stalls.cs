@@ -53,10 +53,14 @@ public sealed class StallWatch
         return new Scope(this, string.Join(" > ", open), open.Count == 1, Now());
     }
 
+    /// <summary>Called with each section's path as it ends (the tests watch for sections run inside each other, WOR-0227).</summary>
+    public Action<string>? SectionEnded { get; set; }
+
     void Ended(string path, bool top, long started)
     {
         var open = _open;
         if (open is { Count: > 0 }) open.RemoveAt(open.Count - 1);
+        SectionEnded?.Invoke(path);
         var ms = Ms(Now() - started);
         // added up by name, so a flood of small pieces of work shows as well as one slow one
         lock (_lock)

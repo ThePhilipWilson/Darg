@@ -10,16 +10,17 @@ public static class CutOffTurn
     public static bool StillWorked(string? boardsFolder, string cardId)
     {
         if (boardsFolder is null || !Directory.Exists(boardsFolder)) return false;
-        foreach (var name in BoardStore.List(boardsFolder))
-        {
-            Board board;
-            try { board = BoardStore.Load(Path.Combine(boardsFolder, name)); }
-            catch (Exception e) when (e is IOException or System.Text.Json.JsonException or UnauthorizedAccessException) { continue; }
+        return StillWorkedOn(ProjectBoards.Read(boardsFolder).Boards, cardId);
+    }
+
+    /// <summary>The same, on boards already read (WOR-0227: the board section's last read, so the UI thread reads nothing).</summary>
+    public static bool StillWorkedOn(IEnumerable<Board> boards, string cardId)
+    {
+        foreach (var board in boards)
             foreach (var (listId, cards) in board.Lists)
                 if (cards.Any(c => c.Id.Equals(cardId, StringComparison.OrdinalIgnoreCase)))
                     return listId == BulkStart.Working(board.Columns)?.Id
                         || BoardColumns.Rework(board.Columns) is { } rework && listId == BoardStore.PlaceOf(rework, board.Columns);
-        }
         return false;
     }
 }

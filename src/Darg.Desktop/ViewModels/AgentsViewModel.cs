@@ -375,9 +375,16 @@ public partial class AgentsViewModel : ObservableObject
             a.SeeToCutOff(!Replaced(a) && CardStillWorked(a.CardId!));
     }
 
-    /// <summary>Re-read every card agent's card after the boards change (a card moved to Done shows on its agent).</summary>
+    /// <summary>Whether the boards have been read yet (set by the project): until they have, <see cref="RefreshCards"/> waits
+    /// for the read's own call rather than read every board on the UI thread (WOR-0227).</summary>
+    public Func<bool>? BoardsRead { get; set; }
+
+    /// <summary>Re-read every card agent's card after the boards change (a card moved to Done shows on its agent). Called as
+    /// each read of the boards lands (WOR-0227), and answered from that read: it reads no file. An agent it forgets only
+    /// redraws the board's tiles, so this isn't run again inside itself.</summary>
     public void RefreshCards()
     {
+        if (BoardsRead?.Invoke() == false) return;
         using var timing = StallWatch.Shared.Section("Agents.RefreshCards");
         if (CardBoards is not null) { _cardBoards = CardBoards(); SyncTabs(); Resort(); }
         var done = DoneCardIds?.Invoke(); // every board's, not only the one shown: an agent's card may be on another (WOR-0153)
