@@ -12,24 +12,35 @@ public partial class RestartViewModel : ObservableObject
 {
     readonly Func<IReadOnlyList<string>> _busyAgents;
     readonly Action _saveAll;
-    readonly string _install = Updater.InstallFolder;
+    readonly string _install;
     static string FailedFile => Path.Combine(InstanceConfig.Folder(), "update-failed.txt");
     static string HelperFile => Path.Combine(InstanceConfig.Folder(), "restart.ps1");
 
     /// <summary>The repo this copy was published from; null for a copy that can only restart.</summary>
-    public string? Source { get; } = Updater.SourceRepo();
+    public string? Source { get; }
     public bool CanUpdate => Source is not null && Live is null;
     /// <summary>Set when this is a live copy (tools/live.ps1, WOR-0126): updates are pulled in and applied
     /// while it runs, rather than built and restarted into.</summary>
-    public LiveCopy? Live { get; } = LiveCopy.FromEnvironment();
+    public LiveCopy? Live { get; }
     public bool IsLive => Live is not null;
+
+    /// <summary>Which copy this is, as the header names it (WOR-0242): only the live copy takes changes while it runs, and
+    /// the installed copy looked the same as it, so a change that never arrived was a surprise.</summary>
+    public string CopyName => Live is not null ? "live" : Source is not null ? "installed" : "debug";
+    public string HeaderTip => Live is { } live
+        ? $"The live copy, running under dotnet watch from {live.Tree}: Pull in takes {live.Branch}'s new commits while it runs."
+        : Source is { } repo
+        ? $"The installed copy, from {_install}. It doesn't hot reload: what lands in {repo} reaches it only through Update, which restarts it "
+          + "(work agents on cards carry on by themselves afterwards). tools/live.ps1 runs the live copy, which takes changes while it runs."
+          + (Built ? " An update is built: restart into it when you're ready." : HasChanges == true ? $" {repo} has changes this copy doesn't." : "")
+        : $"A debug copy, from {_install}: it doesn't hot reload or update itself; it can only restart into the same build.";
     /// <summary>Commits the followed branch has that the live copy hasn't pulled in; null when git can't say.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(SourceNote), nameof(PullInLabel), nameof(CanPullIn), nameof(HeaderLabel))] public partial int? Behind { get; set; }
     public bool CanPullIn => Behind > 0;
     public string PullInLabel => Behind is not > 0 || Live is null ? "Up to date"
         : Armed ? "Pull in anyway" : $"Pull in {(Behind == 1 ? "1 commit" : $"{Behind} commits")} from {Live.Branch}";
     /// <summary>Whether the repo has changed since this copy was built: null when it can't be told.</summary>
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(SourceNote), nameof(UpdateLabel), nameof(HeaderLabel))] public partial bool? HasChanges { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(SourceNote), nameof(UpdateLabel), nameof(HeaderLabel), nameof(HeaderTip))] public partial bool? HasChanges { get; set; }
     public string SourceNote => Live is { } live
         ? $"A live copy, running under dotnet watch from {live.Tree}. " + (Behind switch
         {
@@ -39,7 +50,7 @@ public partial class RestartViewModel : ObservableObject
         }) + " An edit hot reload can't take makes dotnet watch close and reopen Darg, which stops agents mid-turn."
         : Source is not { } repo
         ? "This copy wasn't installed by tools/publish.ps1, so it can restart but not update itself."
-        : Built ? (StaleBuild
+        : "The installed copy: it doesn't hot reload, so changes reach it only through Update. " + (Built ? (StaleBuild
             ? $"{repo} has changed since the update was built. Rebuild to take those changes in too, or restart into the build you have."
             : $"The update is built from {repo} as it is now.")
         : HasChanges switch
@@ -47,10 +58,10 @@ public partial class RestartViewModel : ObservableObject
             false => $"Nothing to update: {repo} hasn't changed since this copy was built.",
             true => $"{repo} has changes this copy doesn't. Update builds it as it is on disk now (uncommitted changes too), while you carry on. Restarting into it closes and reopens Darg.",
             _ => $"Update builds {repo} as it is on disk now (uncommitted changes too), while you carry on. Restarting into it closes and reopens Darg. (This copy predates update checking, so it can't say whether anything changed.)",
-        };
+        });
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(UpdateLabel), nameof(HeaderLabel))] public partial bool Building { get; set; }
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(UpdateLabel), nameof(HeaderLabel), nameof(SourceNote), nameof(CanUseBuilt))] public partial bool Built { get; set; }
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(UpdateLabel), nameof(HeaderLabel), nameof(SourceNote), nameof(CanUseBuilt), nameof(HeaderTip))] public partial bool Built { get; set; }
     /// <summary>The repo changed after the update was built (or while it was building): Update builds again
     /// rather than restarting into a build that leaves those changes out (WOR-0104).</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(UpdateLabel), nameof(HeaderLabel), nameof(SourceNote), nameof(CanUseBuilt))] public partial bool StaleBuild { get; set; }
@@ -71,17 +82,42 @@ public partial class RestartViewModel : ObservableObject
         : Built ? (StaleBuild ? "Rebuild" : Armed ? "Restart into it anyway" : "Restart into the new build")
         : (HasChanges == false ? "Rebuild and restart anyway" : "Update and restart");
     public string UseBuiltLabel => Armed ? "Use it anyway" : "Use last build";
+    /// <summary>The header button: which copy this is (live, installed or debug), then what's waiting on it.</summary>
     public string HeaderLabel => Live is not null ? (HasFailure ? "⟳ live !" : Behind > 0 ? "⟳ live •" : "⟳ live")
-        : Building ? "⟳ Building…" : Built ? (StaleBuild ? "⟳ Update ready •" : "⟳ Update ready") : HasFailure ? "⟳ !" : HasChanges == true ? "⟳ •" : "⟳";
+        : Source is null ? "⟳ debug"
+        : Building ? "⟳ installed · building…" : Built ? (StaleBuild ? "⟳ installed · update ready •" : "⟳ installed · update ready")
+        : HasFailure ? "⟳ installed !" : HasChanges == true ? "⟳ installed •" : "⟳ installed";
 
-    public RestartViewModel(Func<IReadOnlyList<string>> busyAgents, Action saveAll)
+    /// <param name="install">The folder this copy runs from (tests give one; else the exe's).</param>
+    /// <param name="live">This copy as a live one (tests; else read from the environment tools/live.ps1 sets).</param>
+    public RestartViewModel(Func<IReadOnlyList<string>> busyAgents, Action saveAll, string? install = null, LiveCopy? live = null)
     {
         _busyAgents = busyAgents;
         _saveAll = saveAll;
-        if (Live is { } live) Behind = live.Behind();
+        _install = install ?? Updater.InstallFolder;
+        Source = Updater.SourceRepo(_install);
+        Live = install is null ? LiveCopy.FromEnvironment() : live;
+        if (Live is { } l) Behind = l.Behind();
         else if (Source is { } repo) HasChanges = Updater.HasChanges(repo, _install);
         try { if (File.Exists(FailedFile)) Failure = File.ReadAllText(FailedFile).Trim(); }
         catch (IOException) { }
+        // the installed copy looks again every minute, so work landing in its repo shows on the header (•) without the menu
+        // being opened: a change that never arrives is then no surprise (WOR-0242)
+        if (install is null && Live is null && Source is not null)
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+            timer.Tick += async (_, _) => await CheckSource();
+            timer.Start();
+        }
+    }
+
+    /// <summary>The installed copy: whether its repo has changes it doesn't, read off the UI thread (the read walks src/).
+    /// Nothing while an update builds or waits: the menu checks a built one against the repo when it opens.</summary>
+    public async Task CheckSource()
+    {
+        if (Live is not null || Source is not { } repo || Building || Built) return;
+        var changed = await Task.Run(() => Updater.HasChanges(repo, _install));
+        if (!Building && !Built) HasChanges = changed;
     }
 
     /// <summary>The menu opened: say which agents a restart would cut off now.</summary>
@@ -97,9 +133,13 @@ public partial class RestartViewModel : ObservableObject
         }
         var busy = _busyAgents();
         Warning = busy.Count == 0 ? "" :
-            $"{Plural(busy.Count, "agent is", "agents are")} mid-turn: {string.Join(", ", busy)}. Restarting stops {(busy.Count == 1 ? "it" : "them")}; " +
-            "the chat comes back saved, to carry on with.";
+            $"{Plural(busy.Count, "agent is", "agents are")} mid-turn: {string.Join(", ", busy)}. Restarting stops {(busy.Count == 1 ? "it" : "them")}. " +
+            RestartNote;
     }
+
+    /// <summary>What happens to agents stopped mid-turn (WOR-0221's resume, said where the person decides to restart).</summary>
+    public const string RestartNote = "Work agents on cards carry on by themselves once Darg is back; chats come back saved, to carry on with a message; "
+        + "a QA or Improve run ends and needs starting again.";
 
     static string Plural(int n, string one, string many) => n == 1 ? $"1 {one}" : $"{n} {many}";
 

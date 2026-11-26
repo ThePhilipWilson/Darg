@@ -51,7 +51,7 @@ The *why* behind Darg, the traps found and what was tried and dropped, harvested
 - **Drag lift** (WOR-0080): the lift is a snapshot of the card's bounds, so a polaroid's tape can clip mid-drag.
 - **Overwritten status messages** (WOR-0131): a file watcher reload overwrote the status message after Reports → Clean up; the reload has a 400 ms debounce, so the message now holds 8 s.
 - **Two pending asks** (WOR-0094): notification entries don't record which ask they came from, so with two pending asks both stay until the last is answered.
-- **Logo and icon**: they only change after a publish or ⟳ Update.
+- **Logo and icon**: they only change after a publish or Update in the ⟳ menu.
 
 ### Agents
 
