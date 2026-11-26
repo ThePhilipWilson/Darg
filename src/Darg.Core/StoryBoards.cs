@@ -26,7 +26,11 @@ public static class StoryBoards
     /// <summary>What Haiku is asked: which story board the card is plainly part of, or none. Strict (WOR-0219): a card
     /// stays on the default board unless it is one more piece of a single story's work, so a near fit, a shared word or
     /// a guess is none. Each board's name is on a line of its own after "Board:", apart from its cards' titles: with
-    /// name and titles on one line Haiku sometimes answered with a card's title, or the new card's own.</summary>
+    /// name and titles on one line Haiku sometimes answered with a card's title, or the new card's own. Haiku says how it
+    /// decided before answering on the last line: asked for the name alone, it left a card plainly part of a story on the
+    /// default board on up to 9 tries in 10, swayed by whatever else it had loaded (measured 2026-11-26: the live test's
+    /// merge card reached its board on 1 of 10 from one folder and 10 of 10 from another). Reasoning first, story cards
+    /// reached their board on 35 of 36 tries across both folders, and the cards that fit no story stayed on 54 of 54.</summary>
     public static string Prompt(Card card, IReadOnlyList<(string Name, IReadOnlyList<string> Titles)> stories)
     {
         var description = card.Description.Trim();
@@ -39,7 +43,8 @@ public static class StoryBoards
             "feature, something its cards build or need. Reply none when the card is about another part of the app, when it only " +
             "shares a word or a topic with a story (both mention boards, sync, agents or the phone), when it fits only partly, " +
             "when more than one story could take it, or when you aren't sure. Most new cards are none.",
-            "Reply with one board's name exactly as written after \"Board:\" below, or with none. Never a card's title. Nothing else.",
+            "First say in two or three short sentences how you decided. Then, on the last line by itself, the answer: one " +
+            "board's name exactly as written after \"Board:\" below, or none. Never a card's title.",
             "",
             "Story boards:",
         };
@@ -53,17 +58,18 @@ public static class StoryBoards
         return string.Join("\n", lines);
     }
 
-    /// <summary>A model's reply as one of the boards, or null for none or for a reply that isn't one. What comes back
-    /// wrong from a model asked to pick from a list, and is refused or unwrapped here: wrapping (quotes, backticks,
-    /// bold, a list dash, "Board:", a full stop: stripped); talk (a second line, a sentence around the name: refused,
-    /// since a name inside a sentence could be a mention of the wrong board); a name not on the list or made up
-    /// (refused); and "none", "no board", "N/A" (none).</summary>
+    /// <summary>A model's reply as one of the boards, or null for none or for a reply that isn't one. The answer is the
+    /// reply's last line; the lines above say how it decided and may name any board, so they are never read. What comes
+    /// back wrong from a model asked to pick from a list, and is refused or unwrapped here: wrapping (quotes, backticks,
+    /// bold, a list dash, "Answer:" or "Board:", a full stop: stripped); talk on the last line (a sentence around the
+    /// name, or the reasoning run into it: refused, since a name inside a sentence could be a mention of the wrong
+    /// board); a name not on the list or made up (refused); and "none", "no board", "N/A" (none).</summary>
     public static string? Pick(string reply, IReadOnlyList<string> boards)
     {
         var lines = reply.Replace("\r\n", "\n").Split('\n')
             .Select(l => l.Trim()).Where(l => l.Length > 0 && !l.StartsWith("```", StringComparison.Ordinal)).ToList();
-        if (lines.Count != 1) return null;
-        var t = Regex.Replace(lines[0], @"^(?:[-*]\s+)?(?:\*\*)?(?:board\s*:\s*)?", "", RegexOptions.IgnoreCase);
+        if (lines.Count == 0) return null;
+        var t = Regex.Replace(lines[^1], @"^(?:[-*]\s+)?(?:\*\*)?(?:(?:final\s+)?answer\s*:\s*)?(?:\*\*)?(?:board\s*:\s*)?", "", RegexOptions.IgnoreCase);
         t = Regex.Replace(t.Trim().Trim('"', '\'', '*', '`', '“', '”', '‘', '’', ' '), @"\s+", " ").TrimEnd('.', ' ');
         return boards.FirstOrDefault(b => b.Equals(t, StringComparison.OrdinalIgnoreCase));
     }

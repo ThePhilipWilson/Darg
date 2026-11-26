@@ -289,6 +289,9 @@ public class BoardTabsTests
         Assert.Contains(BoardStore.ReadCards(art), c => c.Title == "Paint the splash screen");
         await app.Until(() => app.ClaudeCalls().Any(c => (string?)c["kind"] == "ask" && ((string?)c["text"] ?? "").Contains("Board: Main")
             && ((string?)c["text"] ?? "").Contains("Paint the splash screen")), "Haiku asked from the default board, offering Main");
+        // asked from an empty folder of its own, never from where Darg runs, whose CLAUDE.md and memory swayed the answer
+        var ask = app.ClaudeCalls().First(c => (string?)c["kind"] == "ask" && ((string?)c["text"] ?? "").Contains("Paint the splash screen"));
+        Assert.Equal(Path.GetFullPath(Haiku.Folder()!).TrimEnd('\\', '/'), Path.GetFullPath((string)ask["cwd"]!).TrimEnd('\\', '/'), ignoreCase: true);
 
         // and so does the next note's ticket
         var notes = app.Project.Notes!;

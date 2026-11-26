@@ -77,7 +77,7 @@ def emit(o):
 
 if "--output-format" in args and args[args.index("--output-format") + 1] in ("text", "json"):
     question = sys.stdin.read()  # a Haiku question (model pick, chat title)
-    log("ask", args=args, text=question)
+    log("ask", args=args, text=question, cwd=os.getcwd())
     answer = "Standard | ordinary work"
     if args[args.index("--output-format") + 1] == "json":  # as claude -p prints it: the result object on one line
         print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": answer, "duration_ms": 10}))

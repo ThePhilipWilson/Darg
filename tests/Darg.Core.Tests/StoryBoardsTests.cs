@@ -95,6 +95,11 @@ public sealed class StoryBoardsTests : IDisposable
     [InlineData("- Notes wall", "Notes wall")]
     [InlineData("`Notes wall`\n", "Notes wall")]
     [InlineData("```\nNotes wall\n```", "Notes wall")]
+    // WOR-0219: how it decided first, the answer on the last line; boards the reasoning names are never taken
+    [InlineData("The card is about post-its, which the Notes wall story builds. Art pipeline only shares a word.\n\nNotes wall", "Notes wall")]
+    [InlineData("It is one more piece of the notes work.\nAnswer: Notes wall", "Notes wall")]
+    [InlineData("It is one more piece of the notes work.\n**Answer:** **Notes wall**", "Notes wall")]
+    [InlineData("It fits the notes work.\r\nBoard: Notes wall", "Notes wall")]
     public void Takes_a_board_from_the_list_and_strips_its_wrapping(string reply, string expected) =>
         Assert.Equal(expected, StoryBoards.Pick(reply, Boards));
 
@@ -108,7 +113,9 @@ public sealed class StoryBoardsTests : IDisposable
     [InlineData("Art")]                                  // not a board on the list
     [InlineData("Code review")]                          // made up
     [InlineData("It belongs on Notes wall.")]            // talk around it
-    [InlineData("Notes wall\nbecause it's about notes")] // a second line
+    [InlineData("Notes wall\nbecause it's about notes")] // the last line isn't the answer
+    [InlineData("It looks like Notes wall's work, but only shares a word.\nnone")] // a board named only in the reasoning
+    [InlineData("Notes wall is close, but it only shares a word with it. None")] // the reasoning run into the answer
     [InlineData("Notes wall or Art pipeline")]
     [InlineData("")]
     public void Refuses_none_and_anything_not_a_board(string reply) => Assert.Null(StoryBoards.Pick(reply, Boards));
@@ -124,6 +131,9 @@ public sealed class StoryBoardsTests : IDisposable
         // WOR-0219: strict, and only a board's name back
         Assert.Contains("shares a word or a topic", p);
         Assert.Contains("Never a card's title", p);
+        // reasoning first, the answer alone on the last line: asked for the name alone, a plain story card mostly stayed
+        Assert.Contains("First say in two or three short sentences how you decided", p);
+        Assert.Contains("on the last line by itself", p);
     }
 
     string Board(string name) => BoardStore.CreateBoard(_root, name, ["To Do", "In Progress", "Done"], "WOR");
@@ -252,7 +262,7 @@ public sealed class StoryBoardsTests : IDisposable
     ];
 
     /// <summary>Real Haiku calls (DARG_LIVE=1): a bug about the Work All count fits no story and stays on the default
-    /// board on every try; a card plainly about a story goes there on at least 2 of 6 tries, staying put on the others.</summary>
+    /// board on every try; a card plainly about a story goes there on at least 4 of 6 tries, staying put on any others.</summary>
     [Theory]
     [InlineData("In Progress Work All count should show workable backlog tickets",
         "> The In Progress column's Work All button should show the number of tickets in the backlog that can be worked on (not blocked by open cards, no live agent). On the Main board it currently shows 0 even though there are workable backlog cards.",
@@ -278,9 +288,11 @@ public sealed class StoryBoardsTests : IDisposable
         var said = string.Join(", ", picks.Select(p => p ?? "none"));
         Console.WriteLine($"{title}: {said}");
         // a model's pick varies, and the prompt is strict on purpose (WOR-0219, Philip's pick): a wrong board is never
-        // all right, so a card that fits no story must stay every time (it did on 60 of 60 tries); a story's card stays
-        // put now and then, the safe miss (about 3 tries in 10, measured 2026-11-25), so it must reach its story on at
-        // least 2 of 6 and never another board: by chance that fails about 1 run in 50, where 2 of 3 failed 3 in 10
+        // all right, so a card that fits no story must stay every time; a story's card stays put now and then, the safe
+        // miss, so it must reach its story on at least 4 of 6 and never another board. Measured 2026-11-26 with Haiku
+        // reasoning before its answer: story cards reached theirs on 35 of 36 tries, the others stayed on 54 of 54, so
+        // 4 of 6 fails well under 1 run in 100 by chance. Answering with the name alone, the merge card had stayed on
+        // up to 9 tries in 10, depending on the folder claude started in.
         if (expected is null)
             Assert.True(picks.All(p => p is null), $"{title} should stay on the default board every time; got {said}");
         else
@@ -291,7 +303,7 @@ public sealed class StoryBoardsTests : IDisposable
     }
 
     /// <summary>Tries per live card, and how many a story's card must reach its story on.</summary>
-    const int Tries = 6, StoryAtLeast = 2;
+    const int Tries = 6, StoryAtLeast = 4;
 
     public void Dispose() { try { Directory.Delete(_root, true); } catch (IOException) { } }
 }

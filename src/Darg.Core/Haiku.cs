@@ -17,6 +17,16 @@ public static class Haiku
     /// line the moment the answer is in, so the 0.7 s claude takes to exit after it isn't waited.</summary>
     public static readonly IReadOnlyList<string> Args = ["-p", "--model", "haiku", "--tools", "", "--output-format", "json", "--strict-mcp-config", "--setting-sources", ""];
 
+    /// <summary>An empty folder of its own that every question is asked from (WOR-0219), so the answer doesn't depend on
+    /// where Darg was started: claude loads the CLAUDE.md files, memory and project hooks of the folder it starts in, and
+    /// with Darg's own repo around it a card placing's answer swung from 1 in 10 right to 10 in 10. Null when it can't be
+    /// made, and then claude starts where Darg is.</summary>
+    public static string? Folder()
+    {
+        try { return Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "darg-haiku")).FullName; }
+        catch (Exception) { return null; }
+    }
+
     /// <summary>Haiku's reply, or null when Claude isn't found, fails, or takes longer than the timeout. Never throws.</summary>
     public static async Task<string?> Ask(string prompt, TimeSpan timeout)
     {
@@ -31,6 +41,7 @@ public static class Haiku
                 UseShellExecute = false, CreateNoWindow = true, StandardOutputEncoding = Encoding.UTF8,
             };
             foreach (var a in Args) psi.ArgumentList.Add(a);
+            if (Folder() is { } folder) psi.WorkingDirectory = folder;
             p = Process.Start(psi)!;
             await p.StandardInput.WriteAsync(prompt);
             p.StandardInput.Close();
