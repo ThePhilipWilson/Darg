@@ -39,6 +39,10 @@ public partial class ArtifactsViewModel : ObservableObject
     readonly FileSystemWatcher? _watch;
     readonly DispatcherTimer _debounce;
     readonly HashSet<string> _closed = new(StringComparer.OrdinalIgnoreCase);
+    readonly BackgroundRead<List<Artifact>> _read;
+
+    /// <summary>Every artifact as last read, newest first (Home's tiles take theirs from here, reading nothing).</summary>
+    public IReadOnlyList<Artifact> All { get; private set; } = [];
 
     public string Folder { get; }
     public ObservableCollection<ArtifactGroup> Groups { get; } = [];
@@ -58,8 +62,9 @@ public partial class ArtifactsViewModel : ObservableObject
         _project = projectId;
         _agentName = agentName;
         Folder = ArtifactStore.Folder(projectId);
-        _debounce = new DispatcherTimer(TimeSpan.FromMilliseconds(400), DispatcherPriority.Background, (_, _) => { _debounce!.Stop(); Refresh(); });
-        Refresh();
+        _read = new(() => ArtifactStore.List(projectId), Apply, e => Status = $"Couldn't read the artifacts: {e.Message}");
+        _debounce = new DispatcherTimer(TimeSpan.FromMilliseconds(400), DispatcherPriority.Background, (_, _) => { _debounce!.Stop(); _ = Refresh(); });
+        _ = Refresh();
         try
         {
             Directory.CreateDirectory(Folder);
@@ -70,12 +75,15 @@ public partial class ArtifactsViewModel : ObservableObject
         catch (Exception) { }
     }
 
-    /// <summary>Read the folder again, keeping what's open and which agents' folders are closed.</summary>
-    public void Refresh()
+    /// <summary>Read the folder again, off the UI thread (WOR-0231), then show it keeping what's open and which
+    /// agents' folders are closed. The task ends once it shows.</summary>
+    public Task Refresh() => _read.Run();
+
+    void Apply(List<Artifact> all)
     {
         using var timing = StallWatch.Shared.Section("Artifacts.Refresh");
         var keep = Selected?.Artifact.Path;
-        var all = ArtifactStore.List(_project);
+        All = all;
         Groups.Clear();
         foreach (var g in all.GroupBy(a => a.Agent))
         {
@@ -98,10 +106,17 @@ public partial class ArtifactsViewModel : ObservableObject
 
     partial void OnSelectedChanged(ArtifactEntry? value) => Page = value is null ? null : new Uri(Url(value.Artifact));
 
-    /// <summary>Open the artifact in a file, if it's one of this project's.</summary>
-    public bool Show(string file)
+    /// <summary>Open the artifact in a file, if it's one of this project's. One already listed opens at once (Back
+    /// and Forward count on that); one not listed yet, just written, say, opens once the folder is read again.</summary>
+    public async Task<bool> Show(string file)
     {
-        Refresh();
+        if (Select(file)) return true;
+        await Refresh();
+        return Select(file);
+    }
+
+    bool Select(string file)
+    {
         var e = Groups.SelectMany(g => g.Children).FirstOrDefault(x => string.Equals(x.Artifact.Path, Path.GetFullPath(file), StringComparison.OrdinalIgnoreCase));
         if (e is null) return false;
         Groups.First(g => g.Children.Contains(e)).IsExpanded = true;

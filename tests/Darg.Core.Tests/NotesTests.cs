@@ -265,6 +265,64 @@ public sealed class NoteStoreTests : IDisposable
         Assert.Equal(3, NoteStore.List(notes).Count);
     }
 
+    [Fact] // WOR-0231: the wall reads its tickets' cards alone, not every card on every board
+    public void Ticket_statuses_open_only_the_wanted_cards_files()
+    {
+        var boards = Directory.CreateDirectory(Path.Combine(_dir, "tasks")).FullName;
+        var board = Directory.CreateDirectory(Path.Combine(boards, "Main")).FullName;
+        File.WriteAllText(Path.Combine(board, "board.json"), """{"columns":[{"id":"c1","name":"In Progress"}],"prefix":"T","nextId":1,"order":{}}""");
+        var wanted = BoardStore.Create(board, "the one a note names");
+        var other = BoardStore.Create(board, "nobody's ticket");
+        BoardStore.Move(board, wanted.Id, "c1");
+        // a card file named for no ID is still found when a wanted ID has no file named for it
+        var odd = BoardStore.Create(board, "renamed by hand");
+        File.Move(Path.Combine(board, "items", odd.File), Path.Combine(board, "items", "renamed.md"));
+
+        // the other card's file held open with no sharing: reading every card, as before, fails on it
+        using (new FileStream(Path.Combine(board, "items", other.File), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.ThrowsAny<IOException>(() => NoteStore.TicketStatuses(boards));
+            var statuses = NoteStore.TicketStatuses(boards, [wanted.Id, odd.Id, "T-0099", ""]);
+            Assert.Equal(2, statuses.Count);
+            Assert.Equal("In Progress", statuses[wanted.Id]);
+            Assert.Equal("Backlog", statuses[odd.Id]);
+        }
+        Assert.Empty(NoteStore.TicketStatuses(boards, []));
+        Assert.Empty(NoteStore.TicketStatuses(null, [wanted.Id]));
+    }
+
+    [Theory]
+    [InlineData("WOR-0231 - Reload Artifacts and Notes.md", "WOR-0231")] [InlineData("T-0001.md", "T-0001")]
+    [InlineData("renamed.md", null)] [InlineData("WOR-0231 notes.md", null)] [InlineData("WOR-0231 - x.txt", null)]
+    public void A_card_files_id_is_the_start_of_its_name(string file, string? id) => Assert.Equal(id, NoteStore.CardFileId(file));
+
+    [Fact] // WOR-0231: the whole wall in one read, so the app can read it off the UI thread and show it at once
+    public void Read_wall_syncs_the_archive_and_gives_the_wall_as_it_is_after()
+    {
+        var boards = Directory.CreateDirectory(Path.Combine(_dir, "tasks")).FullName;
+        var board = Directory.CreateDirectory(Path.Combine(boards, "Main")).FullName;
+        File.WriteAllText(Path.Combine(board, "board.json"), """{"columns":[{"id":"c1","name":"In Progress"}],"prefix":"T","nextId":1,"order":{}}""");
+        var notes = Directory.CreateDirectory(Path.Combine(_dir, "notes")).FullName;
+        var (_, done) = NoteStore.MakeTicket(notes, NoteStore.Save(notes, new Note("n1", "ship it", "Loose", "yellow", [], "2026-11-01 10:00", "")), board);
+        var (_, open) = NoteStore.MakeTicket(notes, NoteStore.Save(notes, new Note("n2", "fix it", "Loose", "yellow", [], "2026-11-02 10:00", "")), board);
+        NoteStore.Save(notes, new Note("n3", "loose", "Parked", "pink", [], "2026-11-03 10:00", ""));
+        NoteStore.Save(NoteStore.ArchiveFolder(notes), new Note("n0", "reopened", "Loose", "yellow", [], "2026-10-01 10:00", open.Id));
+        BoardStore.Move(board, done.Id, Board.Completed);
+
+        var read = NoteStore.ReadWall(notes, boards);
+
+        Assert.Equal((1, 1), (read.ArchivedNow, read.Restored));
+        Assert.Equal(["n3", "n2", "n0"], read.Notes.Select(n => n.Id)); // newest first, as List gives them
+        Assert.Equal(["n1"], read.Archived.Select(n => n.Id));
+        Assert.Equal(read.Notes.Select(n => n.Id).Order(), NoteStore.List(notes).Select(n => n.Id).Order());
+        Assert.Equal(["n1"], NoteStore.Archived(notes).Select(n => n.Id));
+        Assert.Equal(new HashSet<string> { done.Id, open.Id }, read.Tickets());
+        Assert.Equal(2, read.Statuses.Count);
+        Assert.Equal(NoteStore.Columns(notes), read.Columns);
+        Assert.Equal(NoteStore.DefaultWidth, read.Width);
+        Assert.Equal((0, 0), (NoteStore.ReadWall(notes, boards).ArchivedNow, NoteStore.ReadWall(notes, boards).Restored));
+    }
+
     [Theory] // a board that ends in its own Done column never uses Completed
     [InlineData("Completed", true)] [InlineData("completed", true)] [InlineData("Done", true)] [InlineData(" done ", true)]
     [InlineData("In Progress", false)] [InlineData("", false)] [InlineData("Backlog", false)] [InlineData("Done-ish", false)]

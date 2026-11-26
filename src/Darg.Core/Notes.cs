@@ -161,12 +161,17 @@ public static class NoteStore
 
     public static List<Note> List(string folder)
     {
+        FileReads.Note("notes", folder);
         if (!Directory.Exists(folder)) return [];
         var notes = new List<Note>();
         foreach (var f in Directory.GetFiles(folder, "*.md"))
             if (Parse(File.ReadAllText(f), Path.GetFileNameWithoutExtension(f)) is { } n) notes.Add(n);
-        return notes.OrderByDescending(n => n.Created, StringComparer.Ordinal).ThenByDescending(n => n.Id, StringComparer.Ordinal).ToList();
+        return Sorted(notes);
     }
+
+    /// <summary>Newest first, as the wall shows them.</summary>
+    static List<Note> Sorted(IEnumerable<Note> notes) =>
+        notes.OrderByDescending(n => n.Created, StringComparer.Ordinal).ThenByDescending(n => n.Id, StringComparer.Ordinal).ToList();
 
     public static Note? Parse(string text, string id)
     {
@@ -279,15 +284,53 @@ public static class NoteStore
 
     public static List<Note> Archived(string folder) => List(ArchiveFolder(folder));
 
-    /// <summary>Every card's Status across a project's boards (each subfolder with a board.json), by card ID.</summary>
-    public static Dictionary<string, string> TicketStatuses(string? boardsFolder)
+    /// <summary>Card Statuses across a project's boards (each subfolder with a board.json), by card ID: every
+    /// card's, or with <paramref name="ids"/> only those cards' (WOR-0231: the notes wall wants its tickets'
+    /// alone, and read every card file on each board change). A card file is named for its ID
+    /// (<c>WOR-0231 - title.md</c>), so only the wanted ones are opened; a wanted ID no file is named for is
+    /// looked for in the files not named for any ID.</summary>
+    public static Dictionary<string, string> TicketStatuses(string? boardsFolder, IEnumerable<string>? ids = null)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (boardsFolder is null) return map;
+        FileReads.Note("ticket statuses", boardsFolder);
+        if (ids is null)
+        {
+            foreach (var board in BoardStore.List(boardsFolder))
+                foreach (var card in BoardStore.ReadCards(Path.Combine(boardsFolder, board)))
+                    map.TryAdd(card.Id, card.Status);
+            return map;
+        }
+        var wanted = new HashSet<string>(ids.Where(i => i.Length > 0), StringComparer.OrdinalIgnoreCase);
+        if (wanted.Count == 0) return map;
+        var unnamed = new List<string>();
         foreach (var board in BoardStore.List(boardsFolder))
-            foreach (var card in BoardStore.ReadCards(Path.Combine(boardsFolder!, board)))
-                map.TryAdd(card.Id, card.Status);
+        {
+            var items = Path.Combine(boardsFolder, board, "items");
+            if (!Directory.Exists(items)) continue;
+            foreach (var file in Directory.EnumerateFiles(items, "*.md"))
+            {
+                var id = CardFileId(Path.GetFileName(file));
+                if (id is null) unnamed.Add(file);
+                else if (wanted.Contains(id) && !map.ContainsKey(id) && ReadCard(file) is { } card) map.TryAdd(card.Id, card.Status);
+            }
+        }
+        if (wanted.Any(w => !map.ContainsKey(w)))
+            foreach (var file in unnamed)
+                if (ReadCard(file) is { } card && wanted.Contains(card.Id)) map.TryAdd(card.Id, card.Status);
         return map;
     }
+
+    static Card? ReadCard(string file)
+    {
+        try { return BoardStore.Parse(File.ReadAllText(file), Path.GetFileName(file)); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; } // moved or deleted as it was read
+    }
+
+    static readonly Regex CardFileName = new(@"^([A-Z][A-Z0-9]*-\d+)(?: - .*)?\.md$", RegexOptions.IgnoreCase);
+
+    /// <summary>The card ID a card file is named for (<c>WOR-0231 - title.md</c> gives WOR-0231), else null.</summary>
+    public static string? CardFileId(string fileName) => CardFileName.Match(fileName) is { Success: true } m ? m.Groups[1].Value : null;
 
     /// <summary>Finished: the board's Completed list, or a column called Done (boards that end in their own
     /// Done column, as Darg's does, never use Completed).</summary>
@@ -299,22 +342,39 @@ public static class NoteStore
     /// its note where it is. Returns how many went each way.</summary>
     public static (int Archived, int Restored) SyncArchive(string folder, IReadOnlyDictionary<string, string> statuses)
     {
-        int archived = 0, restored = 0;
-        var archive = ArchiveFolder(folder);
-        foreach (var n in List(folder))
-            if (n.Ticket.Length > 0 && statuses.TryGetValue(n.Ticket, out var s) && IsCompleted(s))
-            {
-                Directory.CreateDirectory(archive);
-                File.Move(Path.Combine(folder, n.Id + ".md"), Path.Combine(archive, n.Id + ".md"), overwrite: true);
-                archived++;
-            }
-        foreach (var n in List(archive))
-            if (n.Ticket.Length > 0 && statuses.TryGetValue(n.Ticket, out var s) && !IsCompleted(s))
-            {
-                File.Move(Path.Combine(archive, n.Id + ".md"), Path.Combine(folder, n.Id + ".md"), overwrite: true);
-                restored++;
-            }
+        var (archived, restored, _, _) = SyncArchive(folder, statuses, List(folder), Archived(folder));
         return (archived, restored);
+    }
+
+    /// <summary><see cref="SyncArchive(string, IReadOnlyDictionary{string, string})"/> on the wall's and
+    /// archive's notes as already read, giving them back as they are after the moves.</summary>
+    static (int Archived, int Restored, List<Note> Notes, List<Note> Archive) SyncArchive(string folder,
+        IReadOnlyDictionary<string, string> statuses, List<Note> notes, List<Note> archive)
+    {
+        var archiveFolder = ArchiveFolder(folder);
+        var toArchive = notes.Where(n => n.Ticket.Length > 0 && statuses.TryGetValue(n.Ticket, out var s) && IsCompleted(s)).ToList();
+        var toWall = archive.Where(n => n.Ticket.Length > 0 && statuses.TryGetValue(n.Ticket, out var s) && !IsCompleted(s)).ToList();
+        foreach (var n in toArchive)
+        {
+            Directory.CreateDirectory(archiveFolder);
+            File.Move(Path.Combine(folder, n.Id + ".md"), Path.Combine(archiveFolder, n.Id + ".md"), overwrite: true);
+        }
+        foreach (var n in toWall)
+            File.Move(Path.Combine(archiveFolder, n.Id + ".md"), Path.Combine(folder, n.Id + ".md"), overwrite: true);
+        if (toArchive.Count + toWall.Count == 0) return (0, 0, notes, archive);
+        return (toArchive.Count, toWall.Count, Sorted(notes.Except(toArchive).Concat(toWall)), Sorted(archive.Except(toWall).Concat(toArchive)));
+    }
+
+    /// <summary>Everything the notes wall shows, read in one go (WOR-0231: off the UI thread, then shown at once):
+    /// the wall's notes and the archive's, after <see cref="SyncArchive(string, IReadOnlyDictionary{string, string})"/>
+    /// has moved those whose tickets finished or reopened, the Statuses of their tickets only, the columns and the width.</summary>
+    public static WallRead ReadWall(string folder, string? boardsFolder)
+    {
+        var notes = List(folder);
+        var archive = Archived(folder);
+        var statuses = TicketStatuses(boardsFolder, notes.Concat(archive).Select(n => n.Ticket));
+        var (archived, restored, wall, archiveNow) = SyncArchive(folder, statuses, notes, archive);
+        return new WallRead(wall, archiveNow, Columns(folder), ColumnWidth(folder), statuses, archived, restored);
     }
 
     /// <summary>Turn several notes into cards at once, oldest note first so the card IDs follow the order
@@ -356,4 +416,14 @@ public static class NoteStore
         sb.Append("When done, reply in a few lines: what went where (by theme, not note by note), any new columns or tags, and any duplicates.");
         return sb.ToString();
     }
+}
+
+/// <summary>The notes wall as <see cref="NoteStore.ReadWall"/> read it: notes, archived notes, columns, width,
+/// the tickets' Statuses by card ID, and how many notes the read just archived and put back.</summary>
+public sealed record WallRead(List<Note> Notes, List<Note> Archived, IReadOnlyList<string> Columns, double Width,
+    Dictionary<string, string> Statuses, int ArchivedNow, int Restored)
+{
+    /// <summary>The card IDs the notes (on the wall and archived) are ticketed to.</summary>
+    public HashSet<string> Tickets() =>
+        new(Notes.Concat(Archived).Select(n => n.Ticket).Where(t => t.Length > 0), StringComparer.OrdinalIgnoreCase);
 }

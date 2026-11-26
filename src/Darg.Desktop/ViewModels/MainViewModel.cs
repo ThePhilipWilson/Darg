@@ -145,7 +145,7 @@ public partial class MainViewModel : ObservableObject
         if (project?.Artifacts is null) return;
         Selected = project;
         project.OpenCommand.Execute(nameof(Section.Artifacts));
-        project.Artifacts.Show(file);
+        _ = project.Artifacts.Show(file);
     }
 
     ProjectViewModel Make(ProjectConfig p)
@@ -967,7 +967,7 @@ public partial class ProjectViewModel : ObservableObject
         if (value == Section.Terminal) { TerminalStarted = true; Consoles?.EnsureOne(); }
         if (value == Section.Code) Code?.Load();
         if (value == Section.GitHub) Hub?.Load();
-        if (value == Section.Artifacts) Artifacts?.Refresh();
+        if (value == Section.Artifacts) _ = Artifacts?.Refresh();
         if (value == Section.Mistakes) Mistakes?.Reload();
         foreach (var p in Plugins) p.Showing = value == Section.Plugin && p == ShownPlugin;
         if (value == Section.Context) Context.Reload();

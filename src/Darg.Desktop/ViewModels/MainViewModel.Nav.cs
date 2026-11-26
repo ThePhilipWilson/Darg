@@ -82,7 +82,7 @@ public partial class MainViewModel
             {
                 case Section.Docs: p.Docs!.Show(item); break;
                 case Section.Agents when p.Agents!.Find(item) is { } a: p.Agents.Selected = a; break;
-                case Section.Artifacts: p.Artifacts!.Show(item); break;
+                case Section.Artifacts: _ = p.Artifacts!.Show(item); break; // a page it had open is listed, so this lands at once
                 case Section.Code when p.Code!.Tabs.FirstOrDefault(f => string.Equals(f.FullPath, item, StringComparison.OrdinalIgnoreCase)) is { } f:
                     p.Code.Current = f; break;
                 case Section.Design: p.Design!.ShowFile(item); break;

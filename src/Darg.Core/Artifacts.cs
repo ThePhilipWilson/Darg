@@ -35,6 +35,7 @@ public static class ArtifactStore
     public static List<Artifact> List(string projectId, string? instanceFolder = null)
     {
         var root = Folder(projectId, instanceFolder);
+        FileReads.Note("artifacts", root);
         var all = new List<Artifact>();
         if (!Directory.Exists(root)) return all;
         foreach (var dir in Directory.EnumerateDirectories(root))

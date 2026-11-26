@@ -60,6 +60,12 @@ public partial class NotesViewModel : ObservableObject
 
     readonly FileSystemWatcher? _watch, _watchBoards, _watchWall;
     readonly DispatcherTimer _debounce;
+    readonly BackgroundRead<WallRead> _read;
+    /// <summary>The card IDs the notes are ticketed to, as last read: the board watcher (on its own thread)
+    /// reloads only for a change to one of those cards' files (WOR-0231: every board change reloaded the wall).</summary>
+    volatile HashSet<string> _tickets = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>The width wall.json holds, as last read or saved, so a change of width reads no file to compare.</summary>
+    double _savedWidth = NoteStore.DefaultWidth;
     List<Note> _all = [];
     List<Note> _archived = [];
     /// <summary>Every ticket's Status, by card ID, read from the project's boards on each reload.</summary>
@@ -91,11 +97,11 @@ public partial class NotesViewModel : ObservableObject
     DispatcherTimer? _widthSave;
     partial void OnColumnWidthChanged(double value)
     {
-        if (Math.Abs(value - NoteStore.ColumnWidth(Folder)) < 0.5) return;
+        if (Math.Abs(value - _savedWidth) < 0.5) return;
         _widthSave ??= new DispatcherTimer(TimeSpan.FromMilliseconds(400), DispatcherPriority.Background, (_, _) =>
         {
             _widthSave!.Stop();
-            try { NoteStore.SetColumnWidth(Folder, ColumnWidth); }
+            try { NoteStore.SetColumnWidth(Folder, ColumnWidth); _savedWidth = ColumnWidth; }
             catch (Exception e) { Status = $"Couldn't save the width: {e.Message}"; }
         });
         _widthSave.Stop(); _widthSave.Start();
@@ -133,8 +139,9 @@ public partial class NotesViewModel : ObservableObject
             chip.Changed += Apply;
             Colours.Add(chip);
         }
+        _read = new(() => NoteStore.ReadWall(folder, boards), Applied, e => Status = $"Couldn't read the notes: {e.Message}");
         _debounce = new DispatcherTimer(TimeSpan.FromMilliseconds(300), DispatcherPriority.Background, (_, _) => { _debounce!.Stop(); Changed(); });
-        Reload();
+        _ = Reload();
         try
         {
             Directory.CreateDirectory(folder);
@@ -145,18 +152,32 @@ public partial class NotesViewModel : ObservableObject
             _watchWall = new FileSystemWatcher(folder, "wall.json") { EnableRaisingEvents = true };
             _watchWall.Changed += Poke; _watchWall.Created += Poke; _watchWall.Deleted += Poke; _watchWall.Renamed += (s, e) => Poke(s, e);
         }
-        catch (Exception e) { Status = $"Can't watch {folder}: {e.Message}"; }
+        catch (Exception e) { _notice = $"Can't watch {folder}: {e.Message}"; }
         // a ticket moving on the board changes its note: completed sends the note to the archive
         try
         {
             if (boards is not null && Directory.Exists(boards))
             {
                 _watchBoards = new FileSystemWatcher(boards, "*.md") { IncludeSubdirectories = true, EnableRaisingEvents = true };
-                void Poke(object? s, FileSystemEventArgs e) { StallWatch.Shared.Count("Watch.NotesBoards"); Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); }); }
+                void Poke(object? s, FileSystemEventArgs e)
+                {
+                    StallWatch.Shared.Count("Watch.NotesBoards");
+                    if (!TouchesTicket(e)) return;
+                    Dispatcher.UIThread.Post(() => { _debounce.Stop(); _debounce.Start(); });
+                }
                 _watchBoards.Changed += Poke; _watchBoards.Created += Poke; _watchBoards.Deleted += Poke; _watchBoards.Renamed += (s, e) => Poke(s, e);
             }
         }
-        catch (Exception e) { Status = $"Can't watch {boards}: {e.Message}"; }
+        catch (Exception e) { _notice = $"Can't watch {boards}: {e.Message}"; }
+    }
+
+    /// <summary>Whether a change on the boards is to a card a note is ticketed to (or to a file not named for a
+    /// card, which might be one): only then can the wall change.</summary>
+    bool TouchesTicket(FileSystemEventArgs e)
+    {
+        var tickets = _tickets;
+        bool Hit(string? name) => name is not null && (NoteStore.CardFileId(Path.GetFileName(name)) is not { } id || tickets.Contains(id));
+        return Hit(e.Name) || e is RenamedEventArgs r && Hit(r.OldName);
     }
 
     partial void OnFilterChanged(string value) { _notice = null; Apply(); }
@@ -174,15 +195,16 @@ public partial class NotesViewModel : ObservableObject
     internal void Release()
     {
         _held = null;
-        if (_reloadWaiting) Reload();
+        if (_reloadWaiting) _ = Reload();
     }
     void Changed()
     {
-        if (_held is not null) _reloadWaiting = true; else Reload();
+        if (_held is not null) _reloadWaiting = true; else _ = Reload();
     }
 
-    /// <summary>Run a change to the wall's columns, then reload; a refusal (a bad name) shows on the column.</summary>
-    bool ChangeColumns(NoteColumn? column, Action change, string? notice = null)
+    /// <summary>Run a change to the wall's columns, then reload; a refusal (a bad name) shows on the column.
+    /// False when refused; the task ends once the wall shows the change.</summary>
+    async Task<bool> ChangeColumns(NoteColumn? column, Action change, string? notice = null)
     {
         try { change(); }
         catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException)
@@ -191,24 +213,24 @@ public partial class NotesViewModel : ObservableObject
             return false;
         }
         _notice = notice;
-        Reload();
+        await Reload();
         return true;
     }
 
-    internal void RenameColumn(NoteColumn c, string name)
+    internal Task RenameColumn(NoteColumn c, string name)
     {
-        if (name.Trim() == c.Name) { c.CancelRenameCommand.Execute(null); return; }
-        ChangeColumns(c, () => NoteStore.RenameColumn(Folder, c.Name, name));
+        if (name.Trim() == c.Name) { c.CancelRenameCommand.Execute(null); return Task.CompletedTask; }
+        return ChangeColumns(c, () => NoteStore.RenameColumn(Folder, c.Name, name));
     }
 
-    internal void RemoveColumn(NoteColumn c)
+    internal async Task RemoveColumn(NoteColumn c)
     {
         var moved = 0;
-        ChangeColumns(c, () => moved = NoteStore.RemoveColumn(Folder, c.Name));
+        if (!await ChangeColumns(c, () => moved = NoteStore.RemoveColumn(Folder, c.Name))) return;
         if (_notice is null && moved > 0) { _notice = $"Removed {c.Name}; {(moved == 1 ? "its note is" : $"its {moved} notes are")} in {ColumnNames[0]}"; Apply(); }
     }
 
-    internal void ShiftColumn(NoteColumn c, int by) => ChangeColumns(c, () =>
+    internal Task ShiftColumn(NoteColumn c, int by) => ChangeColumns(c, () =>
     {
         // a column only notes name isn't on the wall yet: shifting it puts it there first
         if (!ColumnNames.Contains(c.Name, StringComparer.OrdinalIgnoreCase)) NoteStore.AddColumn(Folder, c.Name);
@@ -216,7 +238,7 @@ public partial class NotesViewModel : ObservableObject
     });
 
     /// <summary>Drag a column's header: it lands before <paramref name="before"/>, or last of the wall's own columns.</summary>
-    internal void DropColumn(NoteColumn c, NoteColumn? before) => ChangeColumns(c, () =>
+    internal Task DropColumn(NoteColumn c, NoteColumn? before) => ChangeColumns(c, () =>
     {
         if (!ColumnNames.Contains(c.Name, StringComparer.OrdinalIgnoreCase)) NoteStore.AddColumn(Folder, c.Name);
         if (before is not null && !ColumnNames.Contains(before.Name, StringComparer.OrdinalIgnoreCase)) NoteStore.AddColumn(Folder, before.Name);
@@ -225,37 +247,43 @@ public partial class NotesViewModel : ObservableObject
 
     /// <summary>A new column at the end of the wall's own columns, its name open to type over.</summary>
     [RelayCommand]
-    void AddColumn()
+    async Task AddColumn()
     {
         var name = "";
-        if (!ChangeColumns(null, () => name = NoteStore.AddColumn(Folder))) return;
+        if (!await ChangeColumns(null, () => name = NoteStore.AddColumn(Folder))) return;
         Columns.FirstOrDefault(c => c.Name == name)?.StartRenameCommand.Execute(null);
     }
 
-    public void Reload()
+    /// <summary>Read the wall again: notes, archive, columns and the tickets' Statuses are read off the UI thread
+    /// (WOR-0231) and shown in one go. The task ends once the wall shows what was on disk when it was called.</summary>
+    public Task Reload()
     {
         if (_held is not null) { _held.IsRenaming = false; _held.ConfirmingRemove = false; _held = null; }
         _reloadWaiting = false;
+        return _read.Run();
+    }
+
+    void Applied(WallRead read)
+    {
+        // a column header taken for editing while this was read: keep what's typed, and read again once it's let go
+        if (_held is not null) { _reloadWaiting = true; return; }
         using var timing = StallWatch.Shared.Section("Notes.Reload");
-        try
-        {
-            _statuses = NoteStore.TicketStatuses(Boards);
-            var (archived, restored) = NoteStore.SyncArchive(Folder, _statuses);
-            if (archived + restored > 0)
-                _notice = (archived, restored) switch
-                {
-                    (1, 0) => "A note's ticket is completed: moved the note to the archive",
-                    (_, 0) => $"{archived} notes' tickets are completed: moved them to the archive",
-                    (0, 1) =>"An archived note's ticket is open again: put it back on the wall",
-                    (0, _) => $"{restored} archived notes' tickets are open again: put them back on the wall",
-                    _ => $"Archived {archived} notes with completed tickets, put back {restored} reopened",
-                };
-            _all = NoteStore.List(Folder);
-            _archived = NoteStore.Archived(Folder);
-            ColumnNames = NoteStore.Columns(Folder);
-            if (_widthSave is not { IsEnabled: true }) ColumnWidth = NoteStore.ColumnWidth(Folder);
-        }
-        catch (Exception e) { Status = $"Couldn't read the notes: {e.Message}"; return; }
+        _statuses = read.Statuses;
+        _tickets = read.Tickets();
+        if (read.ArchivedNow + read.Restored > 0)
+            _notice = (read.ArchivedNow, read.Restored) switch
+            {
+                (1, 0) => "A note's ticket is completed: moved the note to the archive",
+                (var archived, 0) => $"{archived} notes' tickets are completed: moved them to the archive",
+                (0, 1) =>"An archived note's ticket is open again: put it back on the wall",
+                (0, var restored) => $"{restored} archived notes' tickets are open again: put them back on the wall",
+                var (archived, restored) => $"Archived {archived} notes with completed tickets, put back {restored} reopened",
+            };
+        _all = read.Notes;
+        _archived = read.Archived;
+        ColumnNames = read.Columns;
+        _savedWidth = read.Width;
+        if (_widthSave is not { IsEnabled: true }) ColumnWidth = read.Width;
         if (_archived.Count == 0) ShowArchive = false;
         OnPropertyChanged(nameof(ArchiveText));
         OnPropertyChanged(nameof(HasArchive));
@@ -360,7 +388,7 @@ public partial class NotesViewModel : ObservableObject
         var notes = _all.Where(n => _picked.Contains(n.Id)).ToList();
         List<Card> cards;
         try { cards = NoteStore.MakeTickets(Folder, notes, board); }
-        catch (Exception e) { _notice = $"Stopped making tickets: {e.Message}"; Reload(); return; }
+        catch (Exception e) { _notice = $"Stopped making tickets: {e.Message}"; _ = Reload(); return; }
         var texts = notes.ToDictionary(n => n.Id, n => n.Text);
         foreach (var n in NoteStore.List(Folder))
             if (cards.FirstOrDefault(c => c.Id == n.Ticket) is { } card && texts.TryGetValue(n.Id, out var text))
@@ -372,7 +400,7 @@ public partial class NotesViewModel : ObservableObject
             1 => $"Made {cards[0].Id}: {cards[0].Title}",
             _ => $"Made {cards.Count} tickets: {cards[0].Id} to {cards[^1].Id}",
         };
-        Reload();
+        _ = Reload();
     }
 
     /// <summary>Haiku retitles a card just made from a note, in the background (<see cref="TicketTitle"/>); the
@@ -424,7 +452,7 @@ public partial class NotesViewModel : ObservableObject
             NoteStore.Save(Folder, n with { Column = column });
             moved = true;
         }
-        if (moved) Reload();
+        if (moved) _ = Reload();
     }
 
     public void Move(string noteId, string column)
@@ -434,14 +462,14 @@ public partial class NotesViewModel : ObservableObject
         var n = _all.FirstOrDefault(x => x.Id == noteId);
         if (n is null || n.Ticket.Length > 0 || n.Column == column) return;
         NoteStore.Save(Folder, n with { Column = column });
-        Reload();
+        _ = Reload();
     }
 
     internal void Saved(string? message = null)
     {
         Editor = null;
         _notice = message;
-        Reload();
+        _ = Reload();
     }
 }
 

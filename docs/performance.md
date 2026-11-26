@@ -105,3 +105,9 @@ So the very long freezes are gone (nothing over 12.6 s, against 30.9 s), but the
 | 10 | Smaller: `Home.Glance` 3.7 s, `ImagePaths.Find` on a tool result 2.8 s, `BoardStore.Move` 2.4 s, `PlanStore.Edit` 1.5 s | 10 s | 2.8 s | file reads and writes, as above | Off the UI thread when each is next touched | |
 
 The transcript is ranked by what could be measured; with long-running agents, switching between them twenty times a day would be 40 s or more, so it may well belong higher. Hotspots 1, 2 and 3 are about 250 s of the 517 s, and none of the top five needs anything new: each is a folder read moved off the UI thread, or not done at all.
+
+### Hotspots 4 and 5, fixed (WOR-0231, 26 Nov)
+
+Both sections now read through `BackgroundRead` (Desktop): the folder is read on the thread pool, one read at a time with a burst of watcher events folded into one more, and the result is shown on the UI thread in one go. So `Artifacts.Refresh` and `Notes.Reload` in stalls.log now time only the showing, not the reading. The notes wall reads in one call, `NoteStore.ReadWall` (notes, archive, columns, width, archive sync), and asks `NoteStore.TicketStatuses` for its tickets' cards alone, opening only the files named for them. The board watcher (`Watch.NotesBoards`, still counted on every event) reloads the wall only when a changed file is one of those cards, so most board changes now read nothing. Home's artifact tile takes the Artifacts section's last read rather than listing the folder every 3 s (part of hotspot 10's `Home.Glance`). `FileReads` in Core says on which thread each of these folder reads ran; `OffThreadReloadTests` fails if one runs on the UI thread.
+
+Still to check: a week of stalls.log from 26 Nov with no `Artifacts.Refresh` or `Notes.Reload` stall over 200 ms (`pwsh -File tools/perf/analyze.ps1 -Since 2026-11-26`). Note the result here.

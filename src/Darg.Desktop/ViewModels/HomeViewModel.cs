@@ -124,10 +124,11 @@ public partial class HomeViewModel : ObservableObject
             var rest = agents.Agents.Count - live.Count;
             AgentsEmpty = live.Count > 0 ? "" : rest == 0 ? "No agents yet." : $"None at work. {rest} finished or saved in Agents.";
         }
-        if (_project.Artifacts is not null)
+        if (_project.Artifacts is { } artifacts)
         {
             var now = DateTime.Now;
-            var list = ArtifactStore.List(_project.Config.Id).Take(5)
+            // the Artifacts section's own read, kept current by its watcher: Home reads no folder on the UI thread (WOR-0231)
+            var list = artifacts.All.Take(5)
                 .Select(a => new HomeArtifact(a.Path, a.Title, ProjectHome.Ago(a.Modified, now))).ToList();
             Sync(Artifacts, list);
             ArtifactsEmpty = list.Count == 0 ? "No artifacts yet." : "";
@@ -157,9 +158,9 @@ public partial class HomeViewModel : ObservableObject
     }
 
     [RelayCommand]
-    void OpenArtifact(HomeArtifact artifact)
+    async Task OpenArtifact(HomeArtifact artifact)
     {
-        if (_project.Artifacts?.Show(artifact.Path) == true) _project.OpenCommand.Execute(nameof(Section.Artifacts));
+        if (_project.Artifacts is { } artifacts && await artifacts.Show(artifact.Path)) _project.OpenCommand.Execute(nameof(Section.Artifacts));
     }
 
     /// <summary>Edit the README: in Docs, where it can be read, edited and saved like any doc; without Docs, in
