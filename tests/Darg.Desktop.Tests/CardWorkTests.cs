@@ -124,29 +124,26 @@ public class CardWorkTests
     [AvaloniaFact] // WOR-0115: a reworked card back in QA gets a QA agent once the rework agent's turn has ended
     public async Task A_reworked_card_back_in_QA_gets_a_QA_agent_after_the_turn()
     {
-        Environment.SetEnvironmentVariable("FAKE_SECONDS", "4");
-        try
-        {
-            using var app = DargApp.Make();
-            var card = app.Card("fix the logo aliasing", "QA Ready", "The logo's edges are jagged." + HowToCheck);
-            await app.Start();
-            await app.Api("send-back", new { project = "proj", card = card.Id, notes = "still jagged" });
-            var rework = app.Agents.ForCard(card.Id)!;
-            await app.Until(() => rework.State == AgentState.Working, "the rework agent to start working");
+        using var app = DargApp.Make();
+        using var turns = app.HoldTurns();
+        var card = app.Card("fix the logo aliasing", "QA Ready", "The logo's edges are jagged." + HowToCheck);
+        await app.Start();
+        await app.Api("send-back", new { project = "proj", card = card.Id, notes = "still jagged" });
+        var rework = app.Agents.ForCard(card.Id)!;
+        await app.Until(() => rework.State == AgentState.Working, "the rework agent to start working");
 
-            // the agent puts the card back in QA mid-turn, as a real one does as its last steps
-            BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("QA Ready"));
-            await DargApp.Settle(1000);
-            Assert.DoesNotContain(app.Agents.Agents, a => a.Purpose == AgentPurposes.Qa); // not while it's still working
+        // the agent puts the card back in QA mid-turn, as a real one does as its last steps
+        BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("QA Ready"));
+        await DargApp.Settle(1000);
+        Assert.DoesNotContain(app.Agents.Agents, a => a.Purpose == AgentPurposes.Qa); // not while it's still working
 
-            await app.Until(() => app.Agents.Agents.Any(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Qa),
-                "a QA agent on the card once the rework turn ended");
-            Assert.DoesNotContain(rework, app.Agents.Agents); // QA now has the card: the settled rework agent leaves (WOR-0183)
-            // and its process has started: one still waiting on its model pick when the test ends starts during the next
-            // test, logs into that test's fake-claude log and fails it (WOR-0131 hit this in Send back's test)
-            await app.Until(() => app.Prompts().Any(p => p.Contains("QA it for me")), "the QA agent to be sent its prompt");
-        }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
+        turns.Release();
+        await app.Until(() => app.Agents.Agents.Any(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Qa),
+            "a QA agent on the card once the rework turn ended");
+        Assert.DoesNotContain(rework, app.Agents.Agents); // QA now has the card: the settled rework agent leaves (WOR-0183)
+        // and its process has started: one still waiting on its model pick when the test ends starts during the next
+        // test, logs into that test's fake-claude log and fails it (WOR-0131 hit this in Send back's test)
+        await app.Until(() => app.Prompts().Any(p => p.Contains("QA it for me")), "the QA agent to be sent its prompt");
     }
 
     [AvaloniaFact] // WOR-0115: a card reaching QA from ordinary work gets no QA agent by itself

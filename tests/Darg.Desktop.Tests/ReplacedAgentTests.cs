@@ -45,27 +45,25 @@ public class ReplacedAgentTests
     public async Task An_agent_whose_card_waits_on_the_person_goes_after_its_turn_and_the_decision_stays_on_the_card()
     {
         // Philip, 2026-11-22: the agent that asked a card's decision goes as well; the decision stays on the card
-        Environment.SetEnvironmentVariable("FAKE_SECONDS", "3");
-        try
-        {
-            using var app = DargApp.Make();
-            var card = app.Card("fix the logo aliasing", "To Do");
-            await app.Start();
-            await app.Api("work-on", new { project = "proj", card = card.Id });
-            var agent = app.Agents.ForCard(card.Id)!;
-            await app.Until(() => agent.State == AgentState.Working, "the agent to start working");
-            // as a card agent's rules have it: the decision written, then the card moved
-            var file = Path.Combine(app.BoardFolder, "items", card.File);
-            File.WriteAllText(file, File.ReadAllText(file) + DecisionBy(agent.Id));
-            Assert.Null(app.Board.MoveToAttention(card.Id));
+        using var app = DargApp.Make();
+        using var turns = app.HoldTurns();
+        var card = app.Card("fix the logo aliasing", "To Do");
+        await app.Start();
+        await app.Api("work-on", new { project = "proj", card = card.Id });
+        var agent = app.Agents.ForCard(card.Id)!;
+        await app.Until(() => agent.State == AgentState.Working, "the agent to start working");
+        // as a card agent's rules have it: the decision written, then the card moved
+        var file = Path.Combine(app.BoardFolder, "items", card.File);
+        File.WriteAllText(file, File.ReadAllText(file) + DecisionBy(agent.Id));
+        Assert.Null(app.Board.MoveToAttention(card.Id));
+        await DargApp.Settle(1000); // the move seen while the agent is still at work
 
-            await app.Until(() => !app.Agents.Agents.Contains(agent), "the asker to go once its turn ended");
-            Assert.Contains(app.Board.OpenDecisions(), d => d.Card.Id == card.Id); // the card still waits on its decision
-            await app.Api("decide", new { project = "proj", card = card.Id, answer = "Yes" });
-            Assert.Equal("Done", app.Read(card.Id).Status); // and a pick still runs its action
-            Assert.Equal("", app.Crashes());
-        }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
+        turns.Release();
+        await app.Until(() => !app.Agents.Agents.Contains(agent), "the asker to go once its turn ended");
+        Assert.Contains(app.Board.OpenDecisions(), d => d.Card.Id == card.Id); // the card still waits on its decision
+        await app.Api("decide", new { project = "proj", card = card.Id, answer = "Yes" });
+        Assert.Equal("Done", app.Read(card.Id).Status); // and a pick still runs its action
+        Assert.Equal("", app.Crashes());
     }
 
     [AvaloniaFact]
@@ -193,27 +191,24 @@ public class ReplacedAgentTests
     [AvaloniaFact]
     public async Task An_older_agent_still_at_work_stays_then_goes_once_its_turn_ends()
     {
-        Environment.SetEnvironmentVariable("FAKE_SECONDS", "4");
-        try
-        {
-            using var app = DargApp.Make();
-            var card = app.Card("fix the logo aliasing", "To Do");
-            await app.Start();
-            await app.Api("work-on", new { project = "proj", card = card.Id });
-            var older = app.Agents.ForCard(card.Id)!;
-            await app.Until(() => older.State == AgentState.Working, "the first agent to start working");
+        using var app = DargApp.Make();
+        using var olderTurn = app.HoldTurns(name: "older");
+        var card = app.Card("fix the logo aliasing", "To Do");
+        await app.Start();
+        await app.Api("work-on", new { project = "proj", card = card.Id });
+        var older = app.Agents.ForCard(card.Id)!;
+        await app.Until(() => older.State == AgentState.Working, "the first agent to start working");
 
-            // a longer turn, so the newer one is still at work when the older one goes (a task agent leaves once it stops)
-            Environment.SetEnvironmentVariable("FAKE_SECONDS", "12");
-            var newer = app.Agents.Start("check it", app.Repo, cardId: card.Id, name: "check", purpose: AgentPurposes.Qa);
-            await DargApp.Settle(500);
-            Assert.Contains(older, app.Agents.Agents); // working: not touched
+        // held on a hold of its own, so the newer one is still at work when the older one goes (a task agent leaves once it stops)
+        using var newerTurn = app.HoldTurns(name: "newer");
+        var newer = app.Agents.Start("check it", app.Repo, cardId: card.Id, name: "check", purpose: AgentPurposes.Qa);
+        await DargApp.Settle(500);
+        Assert.Contains(older, app.Agents.Agents); // working: not touched
 
-            await app.Until(() => !app.Agents.Agents.Contains(older), "the older agent to go once its turn ended");
-            await app.Until(() => app.Prompts().Any(p => p.Contains("check it")), "the newer agent to be sent its prompt");
-            Assert.Contains(newer, app.Agents.Agents);
-        }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
+        olderTurn.Release();
+        await app.Until(() => !app.Agents.Agents.Contains(older), "the older agent to go once its turn ended");
+        await app.Until(() => app.Prompts().Any(p => p.Contains("check it")), "the newer agent to be sent its prompt");
+        Assert.Contains(newer, app.Agents.Agents);
     }
 
     [AvaloniaFact]

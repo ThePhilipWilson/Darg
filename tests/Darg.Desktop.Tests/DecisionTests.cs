@@ -297,18 +297,16 @@ public class DecisionTests
     /// has ended (a task agent then leaves the list, WOR-0183, unless Darg holds it to ask for a missing decision).</summary>
     static async Task<AgentViewModel> WorkMovingTo(DargApp app, Card card, Action move)
     {
-        Environment.SetEnvironmentVariable("FAKE_SECONDS", "4");
-        try
-        {
-            await app.Api("work-on", new { project = "proj", card = card.Id });
-            var agent = app.Agents.ForCard(card.Id)!;
-            await app.Until(() => agent.State == AgentState.Working, "the card agent to start working");
-            move();
-            // idle, waiting on the person, or already off the list and saved (WOR-0183)
-            await app.Until(() => agent.State is not (AgentState.Starting or AgentState.Working), "the card agent's turn to end");
-            return agent;
-        }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
+        using var turns = app.HoldTurns();
+        await app.Api("work-on", new { project = "proj", card = card.Id });
+        var agent = app.Agents.ForCard(card.Id)!;
+        await app.Until(() => agent.State == AgentState.Working, "the card agent to start working");
+        move();
+        await DargApp.Settle(1000); // the board read and the move acted on while the agent is still at work
+        turns.Release();
+        // idle, waiting on the person, or already off the list and saved (WOR-0183)
+        await app.Until(() => agent.State is not (AgentState.Starting or AgentState.Working), "the card agent's turn to end");
+        return agent;
     }
 
     /// <summary>WOR-0169: a card with its agent, which has written the decision and moved the card to For Human

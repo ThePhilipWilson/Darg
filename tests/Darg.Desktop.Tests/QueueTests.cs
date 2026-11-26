@@ -58,10 +58,9 @@ public class QueueTests
     [AvaloniaFact]
     public async Task A_queue_runs_its_cards_in_dependency_order_one_at_a_time_and_pauses_on_a_card_left_unfinished()
     {
-        Environment.SetEnvironmentVariable("FAKE_SECONDS", "4");
-        try
+        using var app = DargApp.Make();
+        using var turns = app.HoldTurns(); // the first card's agent at work until its card is in QA
         {
-            using var app = DargApp.Make();
             var second = app.Card("builds on the first", "Backlog");
             var first = app.Card("the first piece", "Backlog");
             var third = app.Card("separate work", "Backlog");
@@ -88,6 +87,8 @@ public class QueueTests
 
             // it lands in QA: once its agent's turn is over the check is asked, says nothing waits on it, and the next starts
             BoardStore.Move(app.BoardFolder, first.Id, app.ColumnId("QA Ready"));
+            await DargApp.Settle(1000);
+            turns.Release(); // its turn ends; the cards started from here take one step
             await app.Until(() => Live(app, second.Id) is not null, "the second card to start once the first is in QA and the check says go", 40);
             Assert.Contains(asked, p => p.Contains(first.Id) && p.Contains(second.Id));
             Assert.Null(Live(app, third.Id));
@@ -105,7 +106,6 @@ public class QueueTests
             await app.Until(() => Live(app, third.Id) is not null, "Resume to start the third card");
             Assert.Contains(second.Id, Queue(app).Released);
         }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
     }
 
     [AvaloniaFact]

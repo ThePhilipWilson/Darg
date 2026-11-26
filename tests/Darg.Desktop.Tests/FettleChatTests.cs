@@ -62,10 +62,9 @@ public class FettleChatTests
     /// a shared folder was still in use when the next case wiped it (WOR-0170).</summary>
     static async Task LeftMidTurnFinishesItsTurn(Action<DargApp> leave, [System.Runtime.CompilerServices.CallerMemberName] string test = "")
     {
-        Environment.SetEnvironmentVariable("FAKE_SECONDS", "3");
-        try
+        using var app = DargApp.Make(test);
+        using var turns = app.HoldTurns(); // at work until it has been left, then its turn ends
         {
-            using var app = DargApp.Make(test);
             Seed(app, "chat-old", "Older chat", 5);
             await app.Start();
             var fettle = app.Main.Mascot;
@@ -80,6 +79,7 @@ public class FettleChatTests
             await DargApp.Settle();
             Assert.NotSame(first, fettle.Agent);
             Assert.True(first.Working, $"the chat left mid-turn was {first.State}, not still at work");
+            turns.Release();
 
             await app.Until(() => first.FinishedTurn, "the chat left mid-turn to finish its turn");
             var saved = AgentStore.List(AgentStore.Folder("~bench")).Single(r => r.Id == first.Id);
@@ -88,7 +88,6 @@ public class FettleChatTests
             await app.Until(() => first.State is AgentState.Saved or AgentState.Exited, "its session to close once the turn ended");
             Assert.Equal("", app.Crashes());
         }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); } // the Sandbox default
     }
 
     [AvaloniaFact]

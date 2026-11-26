@@ -2,6 +2,9 @@
 
 FAKE_RATE     tool calls per second per agent (default 5); each is a text, a tool_use and a tool_result
 FAKE_SECONDS  how long a turn streams (default 60)
+FAKE_HOLD     a file: a turn goes on while it exists (up to FAKE_SECONDS) and ends at its next step once it's gone, so a
+              test holds an agent mid-turn exactly as long as it needs instead of waiting out a fixed turn (WOR-0226);
+              a turn that starts with the file gone ends after one step
 FAKE_RESULT   characters in each tool result (default 4000)
 FAKE_TOUCH    1: rewrite the agent's card file every FAKE_TOUCH_EVERY seconds (default 10), as agents edit cards
 FAKE_LOG      a file: each start (its args and folder), each message it is sent and each one-shot question is
@@ -215,7 +218,10 @@ def work(text):
     end = time.time() + seconds
     last_touch = time.time()
     n = 0
+    hold = os.environ.get("FAKE_HOLD")
     while time.time() < end:
+        if hold and n > 0 and not os.path.exists(hold):
+            break
         n += 1
         emit({"type": "assistant", "message": {"content": [{"type": "text", "text": f"Step {n}: " + "looking at the code " * 15}]}})
         emit({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": f"t{n}", "name": "Read",

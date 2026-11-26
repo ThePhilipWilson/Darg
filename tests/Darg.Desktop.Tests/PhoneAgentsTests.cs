@@ -41,10 +41,9 @@ public class PhoneAgentsTests
     [AvaloniaFact]
     public async Task An_agent_is_watched_from_where_it_was_read_and_nudged_mid_turn()
     {
-        Environment.SetEnvironmentVariable("FAKE_SECONDS", "4");
-        try
+        using var app = DargApp.Make();
+        using var turns = app.HoldTurns(); // at work until the nudge is in, then the turns end
         {
-            using var app = DargApp.Make();
             await app.Start();
             var phone = new Phone();
             await app.Api("start-agent", new { project = "proj", prompt = "tidy the header", name = "header" });
@@ -69,6 +68,7 @@ public class PhoneAgentsTests
             await Assert.ThrowsAsync<ApiError>(() => phone.Call("say", new { id = agent.Id, text = "too soon" }));
             await feed.Send("use the teal logo");
             await app.Until(() => app.Prompts().Contains("use the teal logo"), "the nudge to reach the agent");
+            turns.Release();
 
             // the fake works on the nudge in a second turn overlapping the first: wait until it's idle and nothing more comes
             await Quiet(app, agent);
@@ -88,7 +88,6 @@ public class PhoneAgentsTests
             Assert.Equal(0, phone.EntriesPerCall[^1]);
             app.Shot("after-nudge");
         }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
     }
 
     [AvaloniaFact]

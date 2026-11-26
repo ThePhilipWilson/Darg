@@ -19,12 +19,12 @@ public class MobileAgentsTests
     [AvaloniaFact]
     public async Task An_agent_is_watched_and_nudged_from_the_phone()
     {
-        Environment.SetEnvironmentVariable("FAKE_SECONDS", "6");
         var (listEvery, pageEvery) = (AgentsListViewModel.PollEvery, AgentPageViewModel.PollEvery);
         AgentsListViewModel.PollEvery = AgentPageViewModel.PollEvery = TimeSpan.FromMilliseconds(300);
         try
         {
             using var app = DargApp.Make();
+            using var turns = app.HoldTurns(); // at work until the nudge is in, then the turns end
             await app.Start();
             var prompt = "tidy the header\n" + string.Join("\n", Enumerable.Range(1, 29).Select(i => $"step {i} of the brief"));
             await app.Api("start-agent", new { project = "proj", prompt, name = "header" });
@@ -84,6 +84,7 @@ public class MobileAgentsTests
             await app.Until(() => app.Prompts().Contains("use the teal logo"), "the nudge to reach the agent");
             Assert.Contains(open.Entries, e => e.IsUser && e.Text == "use the teal logo");
 
+            turns.Release();
             await app.Until(() => agent.State == AgentState.Idle, "the turn to end", 60);
             await app.Until(() => !open.Working && open.Entries.Count == agent.Items.Count, "the phone to catch up with the finished turn");
             Assert.Equal(Enumerable.Range(0, open.Entries.Count), open.Entries.Select(e => e.Entry.Index));
@@ -97,7 +98,6 @@ public class MobileAgentsTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("FAKE_SECONDS", "1");
             (AgentsListViewModel.PollEvery, AgentPageViewModel.PollEvery) = (listEvery, pageEvery);
         }
     }

@@ -48,13 +48,10 @@ public sealed class DargApp : IDisposable
         Folder = Path.Combine(Sandbox.Root, name);
         Wipe(Folder);
         Home = Directory.CreateDirectory(Path.Combine(Folder, "home")).FullName;
-        Repo = Directory.CreateDirectory(Path.Combine(Folder, "proj", "repo")).FullName;
+        Repo = Path.GetFullPath(Path.Combine(Folder, "proj", "repo"));
         Boards = Path.Combine(Folder, "proj", "tasks");
         ClaudeLog = Path.Combine(Folder, "fake-claude.jsonl");
-        Git("init", "-q", "-b", "main");
-        File.WriteAllText(Path.Combine(Repo, "README.md"), "# Proj\n\nA throwaway project for Darg's integration tests.\n");
-        Git("add", "README.md");
-        Git("-c", "user.name=Darg tests", "-c", "user.email=tests@example.com", "commit", "-q", "-m", "First");
+        Copy(TemplateRepo.Value, Repo);
         BoardFolder = BoardStore.CreateBoard(Boards, "Main", Columns, "T");
         Docs = Directory.CreateDirectory(Path.Combine(Folder, "proj", "docs")).FullName;
         File.WriteAllText(Path.Combine(Docs, "PLAN.md"), "# Plan\n\nWhat Proj is for, and what comes next.\n");
@@ -72,6 +69,39 @@ public sealed class DargApp : IDisposable
 
     /// <summary>A fresh instance for the calling test, not started yet.</summary>
     public static DargApp Make([CallerMemberName] string test = "") => new(test);
+
+    /// <summary>Fake agents started from now on keep a turn going while held (up to 60 s) and end it at their next step
+    /// once released (tools/perf/fake_claude.py's FAKE_HOLD), so a test that catches an agent mid-turn and then waits
+    /// for its turn to end waits only as long as it needs (WOR-0226), not out a fixed FAKE_SECONDS. Disposing it
+    /// releases and puts the Sandbox's 1 s turns back.</summary>
+    /// <param name="name">A hold of its own for the agents started from now on, so two agents' turns end apart.</param>
+    public TurnHold HoldTurns(bool held = true, string name = "turn-hold") => new(Path.Combine(Folder, name), held);
+
+    public sealed class TurnHold : IDisposable
+    {
+        readonly string _file;
+
+        internal TurnHold(string file, bool held)
+        {
+            _file = file;
+            if (held) Hold(); else Release();
+            Environment.SetEnvironmentVariable("FAKE_HOLD", file);
+            Environment.SetEnvironmentVariable("FAKE_SECONDS", "60");
+        }
+
+        /// <summary>Turns go on until <see cref="Release"/>; a turn already over isn't started again.</summary>
+        public void Hold() => File.WriteAllText(_file, "");
+
+        /// <summary>Every held turn ends at its next step (within a quarter second); turns started now take one step.</summary>
+        public void Release() { if (File.Exists(_file)) File.Delete(_file); }
+
+        public void Dispose()
+        {
+            Release();
+            Environment.SetEnvironmentVariable("FAKE_HOLD", null);
+            Environment.SetEnvironmentVariable("FAKE_SECONDS", "1");
+        }
+    }
 
     /// <summary>A card on the board, in a column (by name; Backlog by default).</summary>
     public Card Card(string title, string column = "Backlog", string description = "", string type = "Task")
@@ -222,9 +252,32 @@ public sealed class DargApp : IDisposable
         Directory.Delete(folder, true);
     }
 
-    void Git(params string[] args)
+    /// <summary>The project's repo as every test starts it (a README, one commit), made once a run and copied into each
+    /// test's folder: three git processes a test cost 0.3 to 1.9 s, about two minutes a run (WOR-0226).</summary>
+    static readonly Lazy<string> TemplateRepo = new(() =>
     {
-        var psi = new System.Diagnostics.ProcessStartInfo("git") { WorkingDirectory = Repo, RedirectStandardOutput = true, RedirectStandardError = true };
+        var repo = Path.Combine(Sandbox.Root, "_template", "repo");
+        Wipe(Path.GetDirectoryName(repo)!);
+        Directory.CreateDirectory(repo);
+        Git(repo, "init", "-q", "-b", "main");
+        File.WriteAllText(Path.Combine(repo, "README.md"), "# Proj\n\nA throwaway project for Darg's integration tests.\n");
+        Git(repo, "add", "README.md");
+        Git(repo, "-c", "user.name=Darg tests", "-c", "user.email=tests@example.com", "commit", "-q", "-m", "First");
+        return repo;
+    });
+
+    static void Copy(string from, string to)
+    {
+        Directory.CreateDirectory(to);
+        foreach (var dir in Directory.EnumerateDirectories(from, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(to, Path.GetRelativePath(from, dir)));
+        foreach (var file in Directory.EnumerateFiles(from, "*", SearchOption.AllDirectories))
+            File.Copy(file, Path.Combine(to, Path.GetRelativePath(from, file)));
+    }
+
+    static void Git(string repo, params string[] args)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo("git") { WorkingDirectory = repo, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var a in args) psi.ArgumentList.Add(a);
         using var p = System.Diagnostics.Process.Start(psi)!;
         p.WaitForExit();

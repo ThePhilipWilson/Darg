@@ -46,26 +46,23 @@ public class DoneCardTests
     [AvaloniaFact]
     public async Task An_agent_at_work_when_its_card_reaches_done_is_left_to_finish_then_goes()
     {
-        Environment.SetEnvironmentVariable("FAKE_SECONDS", "4");
-        try
-        {
-            using var app = DargApp.Make();
-            var card = app.Card("fix the logo aliasing", "To Do");
-            await app.Start();
-            await app.Api("work-on", new { project = "proj", card = card.Id });
-            var agent = app.Agents.ForCard(card.Id)!;
-            await app.Until(() => agent.State == AgentState.Working, "the agent to start working");
+        using var app = DargApp.Make();
+        using var turns = app.HoldTurns();
+        var card = app.Card("fix the logo aliasing", "To Do");
+        await app.Start();
+        await app.Api("work-on", new { project = "proj", card = card.Id });
+        var agent = app.Agents.ForCard(card.Id)!;
+        await app.Until(() => agent.State == AgentState.Working, "the agent to start working");
 
-            // the agent moves its own card to done mid-turn, as a QA agent passing it or a card agent finishing does
-            BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("Done"));
-            await DargApp.Settle(1000);
-            Assert.Contains(agent, app.Agents.Agents); // not killed mid-turn
-            Assert.Equal(AgentState.Working, agent.State);
+        // the agent moves its own card to done mid-turn, as a QA agent passing it or a card agent finishing does
+        BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("Done"));
+        await DargApp.Settle(1000);
+        Assert.Contains(agent, app.Agents.Agents); // not killed mid-turn
+        Assert.Equal(AgentState.Working, agent.State);
 
-            await app.Until(() => !app.Agents.Agents.Contains(agent), "the agent to go once its turn ended");
-            Assert.Equal("", app.Crashes());
-        }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
+        turns.Release();
+        await app.Until(() => !app.Agents.Agents.Contains(agent), "the agent to go once its turn ended");
+        Assert.Equal("", app.Crashes());
     }
 
     [AvaloniaFact]
@@ -73,25 +70,22 @@ public class DoneCardTests
     {
         // WOR-0153: Run QA reloads the board as its agent's turn ends, which closes a QA agent that's done ("Session closed
         // by Darg"); the forget waiting for that turn then saw a closed agent, not a finished one, and it stayed listed
-        Environment.SetEnvironmentVariable("FAKE_SECONDS", "4");
-        try
-        {
-            using var app = DargApp.Make();
-            var card = app.Card("check the logo", "QA Ready", "The logo.\n\n## How to check\n\nLook at the logo.\n");
-            await app.Start();
-            await app.Api("qa-all", new { project = "proj" });
-            var qa = app.Agents.Agents.Single(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Qa);
-            await app.Until(() => qa.State == AgentState.Working, "the QA agent to start working");
+        using var app = DargApp.Make();
+        using var turns = app.HoldTurns();
+        var card = app.Card("check the logo", "QA Ready", "The logo.\n\n## How to check\n\nLook at the logo.\n");
+        await app.Start();
+        await app.Api("qa-all", new { project = "proj" });
+        var qa = app.Agents.Agents.Single(a => a.CardId == card.Id && a.Purpose == AgentPurposes.Qa);
+        await app.Until(() => qa.State == AgentState.Working, "the QA agent to start working");
 
-            // it passes the card mid-turn, as a QA agent does before its closing message
-            BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("Done"));
-            await DargApp.Settle(1000);
-            Assert.Contains(qa, app.Agents.Agents); // not killed mid-turn
+        // it passes the card mid-turn, as a QA agent does before its closing message
+        BoardStore.Move(app.BoardFolder, card.Id, app.ColumnId("Done"));
+        await DargApp.Settle(1000);
+        Assert.Contains(qa, app.Agents.Agents); // not killed mid-turn
 
-            await app.Until(() => !app.Agents.Agents.Contains(qa), "the QA agent to go once its turn ended");
-            Assert.Equal("", app.Crashes());
-        }
-        finally { Environment.SetEnvironmentVariable("FAKE_SECONDS", "1"); }
+        turns.Release();
+        await app.Until(() => !app.Agents.Agents.Contains(qa), "the QA agent to go once its turn ended");
+        Assert.Equal("", app.Crashes());
     }
 
     [AvaloniaFact]
