@@ -408,6 +408,81 @@ public class DecisionTests
         Assert.Contains("no open decision", item.Outcome);
     }
 
+    /// <summary>WOR-0225: a QA agent writes the card's decision, moves the card to For Human Attention and then asks the
+    /// same question in its chat (AskUserQuestion), so it sits waiting on the person. Returns once it is.</summary>
+    static async Task<(Card Card, AgentViewModel Asker)> QaAsksInChatToo(DargApp app)
+    {
+        var card = app.Card("FAKE_ASK voice mode", "QA Ready", Body()); // the title is in the agent's prompt, so it asks
+        await app.Start();
+        await app.Api("qa-all", new { project = "proj" });
+        var asker = app.Agents.Agents.Single(a => a.CardId == card.Id);
+        Assert.Equal(AgentPurposes.Qa, asker.Purpose);
+        await app.Until(() => asker.State == AgentState.NeedsYou, "the QA agent to ask in its chat");
+        File.WriteAllText(FileOf(app, card), File.ReadAllText(FileOf(app, card)).Replace("## How to check", Decision(asker.Id) + "\n## How to check"));
+        Assert.Null(app.Board.MoveToAttention(card.Id));
+        await app.Until(() => asker.OpenDecisions.Any(), "the card's decision to show on the asker");
+        return (card, asker);
+    }
+
+    static bool AskPending(AgentViewModel agent) => agent.Items.OfType<QuestionItem>().Any(q => q.Pending);
+
+    [AvaloniaFact]
+    public async Task Send_back_on_the_card_settles_the_askers_own_question_and_starts_a_rework_agent()
+    {
+        using var app = DargApp.Make();
+        var (card, asker) = await QaAsksInChatToo(app);
+
+        await app.Api("decide", new { project = "proj", card = card.Id, answer = "Still fails", notes = "the box said no sound" });
+
+        Assert.Equal("In Progress", app.Read(card.Id).Status);
+        Assert.Contains("Does dictation work for you? I picked: Still fails. the box said no sound", File.ReadAllText(FileOf(app, card)));
+        // the asker's question in its chat is settled, not left waiting on Philip, and it's told Darg has acted on it
+        Assert.False(AskPending(asker), "the asker still waits on the same question in its chat");
+        Assert.NotEqual(AgentState.NeedsYou, asker.State);
+        Assert.DoesNotContain(asker.OpenDecisions, d => d.CardId == card.Id);
+        await app.Until(() => app.ClaudeCalls().Any(c => (string?)c["kind"] == "answered"), "the asker to be answered");
+        var told = app.ClaudeCalls().First(c => (string?)c["kind"] == "answered")["response"]!.ToJsonString();
+        Assert.Contains("deny", told);
+        Assert.Contains("started an agent to rework it", told);
+        // nothing about it is left on Needs you
+        var needs = System.Text.Json.Nodes.JsonNode.Parse(await app.Api("needs-you", new { project = "proj" }))!.AsArray();
+        Assert.DoesNotContain(needs, n => (string?)n!["agent"] == asker.Id);
+        Assert.DoesNotContain(needs, n => (string?)n!["kind"] == "decision");
+        // and an agent reworks the card from the notes, as Send back does
+        var rework = Assert.Single(app.Agents.Agents, a => a.Purpose == AgentPurposes.Rework);
+        Assert.Equal(card.Id, rework.CardId);
+        await app.Until(() => app.Prompts().Any(p => p.Contains("the box said no sound")), "the rework agent to be sent the notes");
+        Assert.Equal("", app.Crashes());
+    }
+
+    [AvaloniaFact]
+    public async Task Approving_on_the_card_settles_the_askers_own_question()
+    {
+        using var app = DargApp.Make();
+        var (card, asker) = await QaAsksInChatToo(app);
+
+        await app.Api("decide", new { project = "proj", card = card.Id, answer = "Works" });
+
+        Assert.Equal("Done", app.Read(card.Id).Status);
+        Assert.False(AskPending(asker), "the asker still waits on the same question in its chat");
+        await app.Until(() => app.ClaudeCalls().Any(c => (string?)c["kind"] == "answered"), "the asker to be answered");
+        Assert.Contains("done", app.ClaudeCalls().First(c => (string?)c["kind"] == "answered")["response"]!.ToJsonString());
+        Assert.DoesNotContain(app.Agents.Agents, a => a.Purpose == AgentPurposes.Rework);
+    }
+
+    [AvaloniaFact]
+    public async Task A_stay_on_the_card_leaves_the_askers_own_question_waiting()
+    {
+        using var app = DargApp.Make();
+        var (card, asker) = await QaAsksInChatToo(app);
+
+        await app.Api("decide", new { project = "proj", card = card.Id, answer = "Not tried yet" });
+
+        Assert.Equal(BoardStore.AttentionName, app.Read(card.Id).Status);
+        Assert.True(AskPending(asker));
+        Assert.Equal(AgentState.NeedsYou, asker.State);
+    }
+
     [AvaloniaFact]
     public async Task A_card_landing_with_a_decision_notifies_and_asks_nobody()
     {

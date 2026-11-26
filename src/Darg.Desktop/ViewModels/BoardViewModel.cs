@@ -42,6 +42,9 @@ public partial class BoardViewModel : ObservableObject, IDisposable
 
     /// <summary>Set by the project: the live agent working on a card, if any.</summary>
     public Func<string, AgentViewModel?>? AgentFor { get => _parent is null ? field : _parent.AgentFor; set; }
+    /// <summary>Set by the project: every listed agent on a card, live or not (WOR-0225: answering its decision tells
+    /// the one asking in its chat from the one at work).</summary>
+    public Func<string, IReadOnlyList<AgentViewModel>>? CardAgents { get => _parent is null ? field : _parent.CardAgents; set; }
     /// <summary>Whether a QA agent (Run QA) is running on a card: Run QA is offered unless one is, whatever other agents the card has (WOR-0110).</summary>
     public Func<string, bool>? QaRunning { get => _parent is null ? field : _parent.QaRunning; set; }
     /// <summary>Set by the project: start an agent on a card. Passed: the card's file path, the ids of cards
@@ -1256,25 +1259,44 @@ public partial class BoardViewModel : ObservableObject, IDisposable
             Apply();
             return null;
         }
+        // WOR-0225: an agent on the card waiting on me with a question in its chat (as a rule this same one, asked there
+        // too) isn't at work on it: the answer settles its question below, and it doesn't hold the card
+        var asking = CardAgents?.Invoke(card.Id).Where(a => a.AsksQuestion).ToList() ?? [];
         // an agent at work on the card holds it: sending back goes to that agent rather than starting another
-        if (action == DecisionAction.Back && AgentFor?.Invoke(card.Id) is not null) action = DecisionAction.Agent;
+        if (action == DecisionAction.Back && HolderOf(card.Id, asking) is not null) action = DecisionAction.Agent;
         if (action == DecisionAction.Back && recorded is null && notes.Trim().Length == 0) return "Say what's wrong first: the agent works from your notes.";
         if ((action == DecisionAction.Back && Rework is null) || (action == DecisionAction.Agent && DecisionToAgent is null)) return "This board can't start agents.";
         // a decision shown but not answered in the file would stay open and come back with the card (WOR-0124 QA)
         try { if (recorded is not null && CardDecision.Answer(file, label, notes, DateTime.Now) is null) return $"Couldn't find {card.Id}'s Decision section to write the answer into, so nothing moved."; }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return $"Couldn't write the answer into the card: {e.Message}"; }
+        var done = action switch
+        {
+            DecisionAction.Done => "Darg has approved the card and moved it to done.",
+            DecisionAction.Back => "Darg has sent the card back with my notes and started an agent to rework it.",
+            _ => "My answer comes to you as my next message once this turn ends.",
+        };
+        void SettleAsks()
+        {
+            foreach (var a in asking)
+                a.SettleQuestions($"{label} (on the card)",
+                    $"I answered this on {card.Id}'s card in Darg instead: {label}." + (notes.Trim().Length > 0 ? $" Notes: {notes.Trim()}" : "") +
+                    $" {done} Don't act on it yourself and change nothing: end this turn now.");
+        }
         switch (action)
         {
             case DecisionAction.Done:
                 if (Approve(card.Id) is { } error) return error;
+                SettleAsks();
                 DecisionSettled?.Invoke(card.Id, DecisionReport.Approved, notes);
                 return null;
             case DecisionAction.Back:
                 var why = recorded is null ? notes : $"{decision.Question} I picked: {label}." + (notes.Trim().Length > 0 ? " " + notes.Trim() : "");
-                if (SendBackCard(card, why) is { } sendError) return sendError;
+                if (SendBackCard(card, why, asking) is { } sendError) return sendError;
+                SettleAsks();
                 DecisionSettled?.Invoke(card.Id, DecisionReport.SentBack, why);
                 return null;
             default:
+                SettleAsks();
                 DecisionToAgent!(card, file, decision, label, notes);
                 DecisionSettled?.Invoke(card.Id, DecisionReport.Answered, (label + ". " + notes.Trim()).Trim());
                 _notice = $"{card.Id}: you picked {label}";
@@ -1306,11 +1328,17 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// them, and the card goes back to the working column. Returns what went wrong, or null.</summary>
     public string? SendBack(CardViewModel card, string notes) => SendBackCard(card.Card, notes);
 
-    string? SendBackCard(Card card, string notes)
+    /// <summary>The live agent on the card, leaving out <paramref name="besides"/> (agents whose ask about the card was
+    /// just settled: they are ending their turn and hand the card on).</summary>
+    AgentViewModel? HolderOf(string cardId, IReadOnlyCollection<AgentViewModel> besides) =>
+        besides.Count == 0 || CardAgents is null ? AgentFor?.Invoke(cardId)
+            : CardAgents(cardId).FirstOrDefault(a => a.IsLiveOnCard && !besides.Contains(a));
+
+    string? SendBackCard(Card card, string notes, IReadOnlyCollection<AgentViewModel>? besides = null)
     {
         if (Folder is null || _board is null || Rework is null) return "This board can't start agents.";
         if (notes.Trim().Length == 0) return "Say what's wrong first: the agent works from your notes.";
-        if (AgentFor?.Invoke(card.Id) is not null) return $"{card.Id} already has an agent.";
+        if (HolderOf(card.Id, besides ?? []) is not null) return $"{card.Id} already has an agent.";
         var file = Path.GetFullPath(Path.Combine(Folder, "items", card.File));
         try { QaNotes.Add(file, notes, DateTime.Now); }
         catch (Exception e) { return $"Couldn't write the notes into the card: {e.Message}"; }

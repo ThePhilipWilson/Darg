@@ -661,6 +661,7 @@ public partial class ProjectViewModel : ObservableObject
         if (Board is not null && Agents is not null)
         {
             Board.AgentFor = Agents.ForCard;
+            Board.CardAgents = id => Agents.Agents.Where(a => a.CardId == id).ToList();
             Board.QaRunning = Agents.QaRunningFor;
             Agents.CardAgentChanged += _ => Board.StatesChanged();
             // a card agent shows its card's state: "Complete, pending removal" once the card is done

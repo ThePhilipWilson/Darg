@@ -1532,6 +1532,17 @@ public partial class AgentViewModel : ObservableObject
         return item;
     }
 
+    /// <summary>Whether it waits on the person for an answer to a question of its own (AskUserQuestion) it can still take.</summary>
+    public bool AsksQuestion => Open && Items.OfType<QuestionItem>().Any(q => q.Pending);
+
+    /// <summary>Its card's decision was answered on the card while it was asking in its chat too, as a rule the same
+    /// question (WOR-0225): each question still waiting is settled with <paramref name="message"/> rather than left
+    /// open on Needs you, where answering it again would only start it on the work Darg has already done.</summary>
+    public void SettleQuestions(string shown, string message)
+    {
+        foreach (var q in Items.OfType<QuestionItem>().Where(q => q.Pending).ToList()) q.Settle(shown, message);
+    }
+
     /// <summary>The card's decision was answered or closed elsewhere: its item here closes, saying how.</summary>
     public void CloseDecision(string cardId, string how)
     {
@@ -1785,6 +1796,17 @@ public sealed partial class QuestionItem : TranscriptItem, IPending
                 catch (Exception) { }
             Questions.Add(group);
         }
+    }
+
+    /// <summary>Answered somewhere else (WOR-0225: the same question as its card's decision, answered on the card): the
+    /// ask is declined with <paramref name="message"/>, which tells the agent what was decided and what Darg did, and
+    /// each question shows <paramref name="shown"/>.</summary>
+    internal void Settle(string shown, string message)
+    {
+        if (Sent) return;
+        Sent = true;
+        foreach (var g in Questions) g.Chosen ??= shown;
+        _agent.Answered(this, s => s.Deny(_ask.RequestId, message));
     }
 
     internal void Pick(string question, string label)
