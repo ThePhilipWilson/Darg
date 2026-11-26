@@ -103,6 +103,12 @@
                    PlaceholderText="push D:/GitHub/me/MyApp"/>
         </StackPanel>
 
+        <StackPanel Spacing="4">
+          <TextBlock Text="Plugins, one folder per line. Each folder holds a plugin.json and a page; it shows as a section on this project's rail." Classes="dim small" TextWrapping="Wrap"/>
+          <TextBox Text="{Binding PluginsText}" Classes="mono" AcceptsReturn="True" MinHeight="34"
+                   PlaceholderText="D:/Projects/home/darg-plugins/disk"/>
+        </StackPanel>
+
         <TextBlock Text="Accounts" FontWeight="SemiBold" Margin="0,8,0,0"/>
         <StackPanel Spacing="4">
           <TextBlock Text="GitHub account for this project (empty: gh's active account)" Classes="dim small"/>

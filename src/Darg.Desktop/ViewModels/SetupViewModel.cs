@@ -117,6 +117,8 @@ public partial class ProjectSetup : ObservableObject
     [ObservableProperty] public partial string GitHubAccount { get; set; }
     [ObservableProperty] public partial string CommandsText { get; set; }
     [ObservableProperty] public partial string CommitsText { get; set; }
+    /// <summary>The project's plugin folders, one per line (HOM-0001).</summary>
+    [ObservableProperty] public partial string PluginsText { get; set; }
     /// <summary>What was worked out from the folder, for a project just added from one.</summary>
     public string Found { get; init; } = "";
     public bool HasFound => Found.Length > 0;
@@ -136,6 +138,7 @@ public partial class ProjectSetup : ObservableObject
         GitHubAccount = p.GitHub ?? "";
         CommandsText = SavedCommand.Render(p.Commands);
         CommitsText = Core.Commits.Render(p.Commits);
+        PluginsText = string.Join(Environment.NewLine, p.Plugins ?? []);
         _keep = p;
         foreach (var f in Core.Features.All) Features.Add(new FeatureTick(f, p.Uses(f)));
         Swatches = SetupViewModel.Palette.Select(c => new SwatchChoice(new SolidColorBrush(Avalonia.Media.Color.Parse(c)), new RelayCommand(() => Color = c))).ToList();
@@ -158,6 +161,7 @@ public partial class ProjectSetup : ObservableObject
             Commits = Core.Commits.ParseText(CommitsText),
             Preview = _keep.Preview, // not editable here yet: set in instance.json
             Mcp = _keep.Mcp, // ticked on the Context page (WOR-0208)
+            Plugins = PluginsText.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) is { Length: > 0 } plugins ? plugins.ToList() : null,
             // every feature ticked is stored as "all", so features added later are on by default
             Features = on.Count == Core.Features.All.Length ? [] : on,
         };

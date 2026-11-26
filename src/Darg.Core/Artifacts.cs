@@ -172,6 +172,16 @@ public sealed class ArtifactServer : IDisposable
     /// <summary>The Darg API the app registers its commands in (GET /api/&lt;token&gt; lists them,
     /// GET or POST /api/&lt;token&gt;/&lt;name&gt; runs one, its arguments as a JSON object in the body or the query string).</summary>
     public DargApi Api { get; } = new();
+    /// <summary>Set by the app: a project's plugin by its id (HOM-0001), for /p/ pages and their runs.</summary>
+    public Func<string, string, PluginInfo?>? FindPlugin { get; set; }
+    /// <summary>Set by the app: the theme's colours by key, handed to plugin pages as <c>darg.theme</c> and <c>--darg-Key</c> CSS variables.</summary>
+    public Func<IReadOnlyDictionary<string, string>>? Theme { get; set; }
+    /// <summary>The plugin commands pages have started.</summary>
+    public PluginRunner Runs { get; } = new();
+
+    /// <summary>The address a project's plugin page is shown at.</summary>
+    public string PluginUrl(string project, PluginInfo p) =>
+        $"{Root}p/{Uri.EscapeDataString(project)}/{Uri.EscapeDataString(p.Id)}/{Esc(p.Page.Replace('\\', '/'))}";
 
     ArtifactServer(string instance, int port, string token)
     {
@@ -243,6 +253,17 @@ public sealed class ArtifactServer : IDisposable
             }
             else if (parts.Length is 2 or 3 && parts[0] == "agents")
                 await Agents(ctx, parts[1], parts.Length == 3 ? parts[2] : null);
+            else if (parts.Length >= 4 && parts[0] == "p" && ctx.Request.HttpMethod == "GET")
+                await ServePlugin(res, parts[1], parts[2], string.Join('/', parts[3..]));
+            else if (parts.Length == 4 && parts[0] == "prun" && ctx.Request.HttpMethod == "POST")
+                await RunPlugin(ctx, parts[1], parts[2], parts[3]);
+            else if (parts.Length == 3 && parts[0] == "pjob" && ctx.Request.HttpMethod == "GET")
+                await ReadJob(ctx, parts[1], parts[2]);
+            else if (parts.Length == 3 && parts[0] == "pstop" && ctx.Request.HttpMethod == "POST")
+            {
+                if (!Allowed(parts[1])) { res.StatusCode = 403; return; }
+                res.StatusCode = Runs.Stop(parts[2]) ? 204 : 404;
+            }
             else res.StatusCode = 404;
         }
         catch (Exception) { try { res.StatusCode = 500; } catch (Exception) { } }
@@ -337,6 +358,79 @@ public sealed class ArtifactServer : IDisposable
         if (Reply is null) { ctx.Response.StatusCode = 503; return; }
         Reply(new ArtifactReply(project, agent, file, text));
         ctx.Response.StatusCode = 204;
+    }
+
+    /// <summary>A file of a plugin's folder (nothing outside it); its HTML pages get the plugin bridge.</summary>
+    async Task ServePlugin(HttpListenerResponse res, string project, string plugin, string rel)
+    {
+        if (FindPlugin?.Invoke(project, plugin) is not { } p) { res.StatusCode = 404; return; }
+        var dir = p.Folder.TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+        var file = Path.GetFullPath(Path.Combine(dir, rel));
+        if (!file.StartsWith(dir, StringComparison.OrdinalIgnoreCase) || !File.Exists(file)) { res.StatusCode = 404; return; }
+        res.Headers["Cache-Control"] = "no-store";
+        if (Path.GetExtension(file).ToLowerInvariant() is ".html" or ".htm")
+            await Write(res, Encoding.UTF8.GetBytes(WithPluginBridge(await File.ReadAllTextAsync(file), project, p.Id)), "text/html; charset=utf-8");
+        else await Write(res, await File.ReadAllBytesAsync(file), ContentType(file));
+    }
+
+    /// <summary>Start a plugin's command with the body's JSON array as its arguments: answers {"job": id}.</summary>
+    async Task RunPlugin(HttpListenerContext ctx, string token, string project, string plugin)
+    {
+        var res = ctx.Response;
+        if (!Allowed(token)) { res.StatusCode = 403; return; }
+        if (FindPlugin?.Invoke(project, plugin) is not { } p) { res.StatusCode = 404; return; }
+        using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
+        var body = await reader.ReadToEndAsync();
+        if (body.Length > MaxReply) { res.StatusCode = 413; return; }
+        string[] args;
+        try { args = body.Trim().Length == 0 ? [] : JsonSerializer.Deserialize<string[]>(body) ?? []; }
+        catch (JsonException) { await Json(res, 400, new JsonObject { ["error"] = "The body must be a JSON array of strings." }); return; }
+        try { await Json(res, 200, new JsonObject { ["job"] = Runs.Start(p, args).Id }); }
+        catch (InvalidOperationException e) { await Json(res, 400, new JsonObject { ["error"] = e.Message }); }
+    }
+
+    /// <summary>A run's output from line ?from=n on: {"lines", "next", "done", "exit", "errors"}.</summary>
+    async Task ReadJob(HttpListenerContext ctx, string token, string id)
+    {
+        var res = ctx.Response;
+        if (!Allowed(token)) { res.StatusCode = 403; return; }
+        if (Runs.Find(id) is not { } job) { res.StatusCode = 404; return; }
+        var from = int.TryParse(ctx.Request.QueryString["from"], out var f) ? Math.Max(0, f) : 0;
+        var (lines, done, exit, errors) = job.Read(from);
+        var arr = new JsonArray();
+        foreach (var l in lines) arr.Add(l);
+        await Json(res, 200, new JsonObject { ["lines"] = arr, ["next"] = from + lines.Count, ["done"] = done, ["exit"] = exit, ["errors"] = errors });
+    }
+
+    static async Task Json(HttpListenerResponse res, int status, JsonObject o)
+    {
+        res.StatusCode = status;
+        await Write(res, Encoding.UTF8.GetBytes(o.ToJsonString()), "application/json");
+    }
+
+    /// <summary>A plugin page with its bridge put in: <c>darg.run(args, onLine)</c> runs the plugin's command and resolves
+    /// with {exit, lines, output, errors, stopped} once it ends (its <c>stop()</c> ends it sooner); <c>darg.theme</c> holds the
+    /// theme's colours, also set as <c>--darg-Key</c> CSS variables on the page.</summary>
+    public string WithPluginBridge(string html, string project, string plugin)
+    {
+        var theme = new JsonObject();
+        foreach (var (k, v) in Theme?.Invoke() ?? new Dictionary<string, string>()) theme[k] = v;
+        string S(string s) => JsonSerializer.Serialize(s); // escapes < > &, so nothing can end the script element
+        var script = "<script>(function(){var T=" + S(_token) + ",P=" + S(Uri.EscapeDataString(project)) + ",G=" + S(Uri.EscapeDataString(plugin)) +
+            ",theme=" + JsonSerializer.Serialize(theme.ToJsonString()) + ";theme=JSON.parse(theme);" +
+            "var r=document.documentElement;for(var k in theme)r.style.setProperty('--darg-'+k,theme[k]);" +
+            "function stopJob(j){return fetch('/pstop/'+T+'/'+j,{method:'POST'})}" +
+            "function run(args,onLine){var st={stopped:false,job:null};" +
+            "var pr=fetch('/prun/'+T+'/'+P+'/'+G,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(args||[])})" +
+            ".then(function(res){return res.json().then(function(j){if(!res.ok)throw new Error(j.error||('HTTP '+res.status));return j})})" +
+            ".then(function(j){st.job=j.job;if(st.stopped)stopJob(j.job);var from=0,all=[];" +
+            "return new Promise(function(resolve,reject){function poll(){fetch('/pjob/'+T+'/'+st.job+'?from='+from).then(function(x){return x.json()}).then(function(s){" +
+            "for(var i=0;i<s.lines.length;i++){all.push(s.lines[i]);if(onLine)try{onLine(s.lines[i])}catch(e){}}from=s.next;" +
+            "if(s.done)resolve({exit:s.exit,lines:all,output:all.join('\\n'),errors:s.errors,stopped:st.stopped});else setTimeout(poll,120)},reject)}poll()})});" +
+            "pr.stop=function(){st.stopped=true;if(st.job)return stopJob(st.job)};return pr}" +
+            "window.darg={theme:theme,run:run,project:decodeURIComponent(P),plugin:decodeURIComponent(G)}})();</script>";
+        var head = Regex.Match(html, @"<head(\s[^>]*)?>", RegexOptions.IgnoreCase);
+        return head.Success ? html.Insert(head.Index + head.Length, script) : script + html;
     }
 
     /// <summary>The page with the bridge put in: inside &lt;head&gt; if it has one, else first.</summary>

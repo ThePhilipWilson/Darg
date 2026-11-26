@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Darg.Desktop.ViewModels"
+             x:Class="Darg.Desktop.Views.PluginView"
+             x:DataType="vm:PluginSection">
+  <DockPanel>
+    <!-- the plugin owns the page; Darg only adds where it comes from and a way to reload it -->
+    <Border DockPanel.Dock="Bottom" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="12,3">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+          <Button Classes="header" Content="⟳ Reload" Command="{Binding ReloadCommand}" ToolTip.Tip="Load the page again (after the plugin's files changed)"/>
+          <Button Classes="header" Content="Open in browser" Command="{Binding OpenInBrowserCommand}" ToolTip.Tip="{Binding Address}"/>
+          <Button Classes="header" Content="Plugin folder" Command="{Binding OpenFolderCommand}" ToolTip.Tip="{Binding Info.Folder}"/>
+        </StackPanel>
+        <TextBlock Classes="dim small" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+          <Run Text="{Binding Name}"/><Run Text=" plugin · "/><Run Text="{Binding Info.Folder}"/>
+        </TextBlock>
+      </DockPanel>
+    </Border>
+    <Panel>
+      <NativeWebView x:Name="Web" Source="{Binding Page}" IsVisible="{Binding HasPage}"/>
+      <TextBlock Classes="dim" HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" MaxWidth="460" TextWrapping="Wrap"
+                 IsVisible="{Binding !HasPage}" Text="{Binding Problem}"/>
+    </Panel>
+  </DockPanel>
+</UserControl>

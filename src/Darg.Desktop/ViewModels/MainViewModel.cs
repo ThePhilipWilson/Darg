@@ -52,6 +52,8 @@ public partial class MainViewModel : ObservableObject
             artifacts.Reply += r => Avalonia.Threading.Dispatcher.UIThread.Post(() => FromArtifact(r));
             artifacts.ListAgents = () => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => ListAgents()).GetTask();
             artifacts.CloseAgents = ids => Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => CloseAgents(ids)).GetTask();
+            artifacts.FindPlugin = FindPlugin;
+            artifacts.Theme = () => ThemeManager.Current.Colours;
             RegisterApi(artifacts.Api);
             StartRemote(config, artifacts.Api);
         }
@@ -84,6 +86,17 @@ public partial class MainViewModel : ObservableObject
         return Projects.SelectMany(p => p.Agents?.Agents ?? []).Where(Busy).Select(a => $"\"{a.Name}\"")
             .Concat(Mascot.Live().Where(Busy).Select(a => $"Fettle's \"{a.Name}\""))
             .Distinct().ToList();
+    }
+
+    /// <summary>A project's plugin by their ids, for the page server (called off the UI thread: a copy of the list is read).</summary>
+    PluginInfo? FindPlugin(string project, string plugin)
+    {
+        try
+        {
+            return Projects.ToArray().FirstOrDefault(p => p.Config.Id == project)?.Plugins
+                .FirstOrDefault(x => x.Info.Id.Equals(plugin, StringComparison.OrdinalIgnoreCase))?.Info;
+        }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException) { return null; } // the list changed while copied
     }
 
     /// <summary>What an artifact page sent: to the agent that made it, as a message from the person.</summary>
@@ -252,6 +265,9 @@ public partial class MainViewModel : ObservableObject
                 break;
             case Section.Mistakes when p.Mistakes is not null:
                 s.Append($", mistake log {p.Mistakes.File}");
+                break;
+            case Section.Plugin when p.ShownPlugin is { } plugin:
+                s.Append($", the {plugin.Name} plugin's page (its folder {plugin.Info.Folder})");
                 break;
             case Section.Context:
                 s.Append($", context page (CLAUDE.md files and memory for {p.Config.WorkingFolder()})");
@@ -495,7 +511,7 @@ public record NotificationEntry(string ProjectId, string AgentId, string Project
     public string Sub => $"{Project} · {At:HH:mm}";
 }
 
-public enum Section { Home, Board, Notes, Docs, Design, Agents, Flows, Reports, Artifacts, Mistakes, Context, Code, GitHub, Preview, Terminal }
+public enum Section { Home, Board, Notes, Docs, Design, Agents, Flows, Reports, Artifacts, Mistakes, Plugin, Context, Code, GitHub, Preview, Terminal }
 
 public partial class ProjectViewModel : ObservableObject
 {
@@ -520,6 +536,12 @@ public partial class ProjectViewModel : ObservableObject
     public ArtifactsViewModel? Artifacts { get; }
     /// <summary>The project's mistake log, read and counted (there with the agents feature, which writes it).</summary>
     public MistakesViewModel? Mistakes { get; }
+    /// <summary>Its plugins (HOM-0001): each a rail button and a page, owned by the repo its folder is in.</summary>
+    public IReadOnlyList<PluginSection> Plugins { get; }
+    /// <summary>Plugin folders that couldn't be read, and why (the footer says so).</summary>
+    public IReadOnlyList<string> PluginProblems { get; }
+    /// <summary>The plugin whose page shows while the section is <see cref="Section.Plugin"/>.</summary>
+    [ObservableProperty] public partial PluginSection? ShownPlugin { get; set; }
     /// <summary>The instructions, memory and added context agents start with, to read (WOR-0145; every project has it).</summary>
     public ContextViewModel Context { get; }
     /// <summary>Where a project opens: its README and what's going on (every project has one).</summary>
@@ -534,7 +556,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>A card's decision was answered (WOR-0124): its notification goes from the list.</summary>
     public event Action<string>? CardSettled;
 
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnDesign), nameof(OnAgents), nameof(OnFlows), nameof(OnReports), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnContext), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(OnHome), nameof(OnBoard), nameof(OnNotes), nameof(OnDocs), nameof(OnDesign), nameof(OnAgents), nameof(OnFlows), nameof(OnReports), nameof(OnArtifacts), nameof(OnMistakes), nameof(OnPlugin), nameof(OnContext), nameof(OnCode), nameof(OnHub), nameof(OnPreview), nameof(OnTerminal))]
     public partial Section Section { get; set; }
     /// <summary>The terminal starts the first time its section is opened, not with the app.</summary>
     [ObservableProperty] public partial bool TerminalStarted { get; set; }
@@ -545,7 +567,7 @@ public partial class ProjectViewModel : ObservableObject
         { ShowingAll: true } => " · all boards",
         { SelectedBoard: { } b } => $" · board {b}",
         _ => "",
-    });
+    }) + (PluginProblems.Count > 0 ? " · plugin not loaded: " + string.Join("; ", PluginProblems) : "");
 
     public bool OnHome => Section == Section.Home;
     public bool OnBoard => Section == Section.Board;
@@ -559,6 +581,8 @@ public partial class ProjectViewModel : ObservableObject
     public bool OnFlows => Section == Section.Flows;
     public bool OnArtifacts => Section == Section.Artifacts;
     public bool OnMistakes => Section == Section.Mistakes;
+    /// <summary>A plugin's page is on screen (which one: <see cref='ShownPlugin'/>).</summary>
+    public bool OnPlugin => Section == Section.Plugin;
     public bool OnContext => Section == Section.Context;
     public bool OnReports => Section == Section.Reports;
     public bool OnTerminal => Section == Section.Terminal;
@@ -596,6 +620,9 @@ public partial class ProjectViewModel : ObservableObject
             Agents.Reported(ReportStore.List(Reports.Folder));
         }
         if (config.Uses(Features.Terminal)) Consoles = new ConsolesViewModel(config);
+        var (plugins, problems) = PluginStore.For(config);
+        Plugins = plugins.Select(p => new PluginSection(config.Id, p)).ToList();
+        PluginProblems = problems;
         if (config.Uses(Features.Docs) && config.Docs is { Length: > 0 } docs) Docs = new DocsViewModel(docs);
         if (PlanStore.FolderFor(config) is { } plans)
             Design = new DesignViewModel(config, plans)
@@ -939,10 +966,21 @@ public partial class ProjectViewModel : ObservableObject
         if (value == Section.GitHub) Hub?.Load();
         if (value == Section.Artifacts) Artifacts?.Refresh();
         if (value == Section.Mistakes) Mistakes?.Reload();
+        foreach (var p in Plugins) p.Showing = value == Section.Plugin && p == ShownPlugin;
         if (value == Section.Context) Context.Reload();
         if (value == Section.Design) Design?.Reload();
         if (value == Section.Reports) Reports?.Reload();
         if (value == Section.Preview) _ = Preview?.Open();
+    }
+
+    /// <summary>Show a plugin's page.</summary>
+    [RelayCommand]
+    public void OpenPlugin(PluginSection plugin)
+    {
+        if (!Plugins.Contains(plugin)) return;
+        ShownPlugin = plugin;
+        if (Section == Section.Plugin) foreach (var p in Plugins) p.Showing = p == plugin;
+        else Section = Section.Plugin;
     }
 
     /// <summary>Show a section, if this project has it (an unticked feature's section never opens).</summary>
@@ -956,7 +994,7 @@ public partial class ProjectViewModel : ObservableObject
     /// <summary>Whether this project has a section (its feature ticked and what it needs set up).</summary>
     public bool Has(Section s) => s switch
     {
-        Section.Home => true, Section.Context => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Design => Design is not null, Section.Agents => Agents is not null, Section.Flows => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null, Section.Reports => Reports is not null,
+        Section.Home => true, Section.Context => true, Section.Board => Board is not null, Section.Notes => Notes is not null, Section.Docs => Docs is not null, Section.Design => Design is not null, Section.Agents => Agents is not null, Section.Flows => Agents is not null, Section.Artifacts => Artifacts is not null, Section.Mistakes => Mistakes is not null, Section.Plugin => ShownPlugin is not null, Section.Reports => Reports is not null,
         Section.Code => Code is not null, Section.GitHub => Hub is not null, Section.Preview => Preview is not null, _ => Consoles is not null,
     };
 

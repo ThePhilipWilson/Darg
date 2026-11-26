@@ -163,6 +163,10 @@ public sealed class ProjectConfig
 
     public bool Uses(string feature) => Features.Count == 0 || Features.Contains(feature, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Plugin folders (HOM-0001, <see cref="PluginStore"/>): each a section on the rail, its page and command owned by
+    /// whichever repo holds the folder. Null when it has none, so other projects' entries stay as they were.</summary>
+    public List<string>? Plugins { get; set; }
+
     /// <summary>Where agents and terminals start: the first repo, else the boards folder, else home.</summary>
     public string WorkingFolder() =>
         Repos.FirstOrDefault(Directory.Exists) ?? (Boards is not null && Directory.Exists(Boards) ? Boards

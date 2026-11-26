@@ -66,6 +66,17 @@
                       Command="{Binding OpenCommand}" CommandParameter="Mistakes" ToolTip.Tip="Mistakes: what agents got wrong here, counted by kind">
           <StackPanel><TextBlock Text="✗" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Mistakes" FontSize="9" HorizontalAlignment="Center" Margin="-8,0"/></StackPanel>
         </ToggleButton>
+        <!-- the project's plugins (HOM-0001): each folder's own icon and name -->
+        <ItemsControl ItemsSource="{Binding Plugins}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:PluginSection">
+              <ToggleButton Classes="rail" IsChecked="{Binding Showing, Mode=OneWay}" ToolTip.Tip="{Binding Tip}" AutomationProperties.Name="{Binding Name}"
+                            Command="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OpenPluginCommand}" CommandParameter="{Binding}">
+                <StackPanel><TextBlock Text="{Binding Icon}" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="{Binding Name}" FontSize="9" HorizontalAlignment="Center" Margin="-8,0" TextTrimming="CharacterEllipsis"/></StackPanel>
+              </ToggleButton>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
         <ToggleButton Classes="rail" IsChecked="{Binding OnContext, Mode=OneWay}"
                       Command="{Binding OpenCommand}" CommandParameter="Context" ToolTip.Tip="Context: the instructions, memory and extras agents here start with">
           <StackPanel><TextBlock Text="☰" FontSize="17" HorizontalAlignment="Center"/><TextBlock Text="Context" FontSize="9" HorizontalAlignment="Center" Margin="-8,0"/></StackPanel>
@@ -102,6 +113,15 @@
       <views:ReportsView DataContext="{Binding Reports}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnReports}"/>
       <views:ArtifactsView DataContext="{Binding Artifacts}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnArtifacts}"/>
       <views:MistakesView DataContext="{Binding Mistakes}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnMistakes}"/>
+      <!-- a view per plugin, so each keeps its page loaded; only the one showing is visible -->
+      <ItemsControl ItemsSource="{Binding Plugins}" IsVisible="{Binding OnPlugin}">
+        <ItemsControl.ItemsPanel><ItemsPanelTemplate><Panel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:PluginSection">
+            <views:PluginView IsVisible="{Binding Showing}"/>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
       <views:ContextView DataContext="{Binding Context}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnContext}"/>
       <views:PreviewView DataContext="{Binding Preview}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnPreview}"/>
       <views:ConsolesView DataContext="{Binding Consoles}" IsVisible="{Binding $parent[views:ProjectView].((vm:ProjectViewModel)DataContext).OnTerminal}"/>
