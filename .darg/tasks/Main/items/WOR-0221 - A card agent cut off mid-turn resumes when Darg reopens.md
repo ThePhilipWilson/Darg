@@ -1,11 +1,12 @@
 # WOR-0221: A card agent cut off mid-turn resumes when Darg reopens
 
-- **Status:** Backlog
+- **Status:** QA Ready
 - **Priority:**
 - **Type:** Bug
 - **Labels:**
 - **Created:** 2026-11-25
 - **Done:**
+- **Moved:** 2026-11-26 10:39:35
 
 ## Description
 
@@ -30,3 +31,17 @@ When Darg closes, crashes or ⟳ Updates while a work or rework agent is mid-tur
 **Questions left:**
 - QA agents cut off mid-turn: resume them too, or leave them forgotten (Run QA starts a fresh one cheaply)? Default here: resume only work and rework.
 - AGE-0002 (a resume Claude refuses starts fresh from the transcript) covers the case where the session can't be resumed; until it lands, a refused resume shows as failed and stays listed.
+
+## How to check
+
+**What changed** (commit `b3d3b8a` on `android`, pushed): when Darg opens, a work or rework agent whose saved transcript stops mid-turn, with a session, on a card still in In Progress or needs more work, now resumes its own session by itself. Its transcript gets "Cut off mid-turn when Darg last closed: resuming its session to carry on." and a "↻ Carry on (Darg closed mid-turn)" message. Darg resumes it once per cut-off: if it is cut off again on that resumed turn, the next start leaves it listed as saved, with a note saying it wasn't resumed a second time. Sending it a message carries it on. These still go as WOR-0183 has it: QA and Improve agents (the default the card asked for), one with no session, one closed by Close or Fettle, one whose card has moved on to QA, attention, done or back to To Do, and an older one a newer agent on the card has replaced.
+
+The cause was `TaskOver` (WOR-0183). It counted any stopped task agent as finished, and a reloaded agent is always `Saved`, so `RefreshCards` forgot it as Darg opened. `CutOffAgentTests` reproduced it: with the old load the work and rework agents were gone after a reopen.
+
+**Try it** (the tests used fake claude; a real session killed mid-turn hasn't been tried):
+1. Publish or run a build with `b3d3b8a`. On a throwaway card in To Do, press ▶ Work on with a task that takes a few minutes (e.g. "read every file under src/Darg.Core and list the public classes").
+2. Once it has made a few tool calls, close Darg (or end it in Task Manager to play a crash), then open it again.
+3. Look for: the agent still in the Agents list, working, on the same chat (its earlier transcript above the "↻ Carry on" line). The card stays in In Progress and the Home tile counts 1 running.
+4. To see the crash-loop guard: close Darg again while that resumed turn is running, then reopen. The agent should be listed, saved, with "Cut off mid-turn again…", and it should not have started.
+
+`pwsh -File tools/test.ps1 -Integration -Filter CutOffAgentTests` replays all of it with fake claude; `.shots/integration/A_work_agent_cut_off_mid_turn_resumes_its_own_session_when_Darg_reopens/resumed.png` is the window after the reopen.
