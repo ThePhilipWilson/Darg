@@ -1,11 +1,12 @@
 # WOR-0229: Build the blocker index without rereading every board on each reload
 
-- **Status:** Backlog
+- **Status:** Done
 - **Priority:**
 - **Type:** Task
 - **Labels:** performance
 - **Created:** 2026-11-25
-- **Done:**
+- **Done:** 2026-11-26
+- **Moved:** 2026-11-26 20:03:13
 
 ## Description
 
