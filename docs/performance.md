@@ -50,3 +50,58 @@ Taken 2026-11-20 from two sources: Philip's real `stalls.log` (17 to 20 Nov, the
 4. **The 10 s stall at `Agent.Begin`**: read its stack from the next stalls.log.
 
 Nothing in the app was changed for these beyond the logging; each is a card of its own.
+
+## Second trace
+
+Taken 2026-11-25 (WOR-0223) from Philip's real `stalls.log` and `perf.log` (and `perf.old.log`, which perf.log rolls into) from 21 Nov 00:00 to 25 Nov 16:00, now with UI-thread stacks, plus one load run for the transcript. No app code was changed. The section times below are **self time**: a section's time less the named sections inside it, so nested ones (`Board.Reload > Agents.RefreshCards > Board.Reload`) aren't counted twice. `analyze.ps1` adds up only the top-level sections, so its totals differ.
+
+### Against the first trace
+
+The first trace's figures (456 stalls, 206 s) were taken partway through 20 Nov; the same log read in full for 17 to 20 Nov gives the left column.
+
+| | 17 to 20 Nov (4 days) | 21 Nov to 25 Nov 16:00 (4.7 days) |
+|---|---|---|
+| Stalls | 529 (132 a day) | 698 (150 a day) |
+| Time frozen | 585 s (146 s a day) | 517 s (111 s a day) |
+| Over 1 s | 77 (19 a day) | 96 (21 a day) |
+| Median, longest | 405 ms, 30.9 s | 329 ms, 12.6 s |
+| In no section | 390 s | 217 s |
+| GC paused in stalls | 17.6 s | 31.2 s |
+
+| Day | Stalls | Frozen | Over 1 s | Longest |
+|---|---|---|---|---|
+| 21 Nov | 48 | 52 s | 11 | 7.1 s |
+| 22 Nov | 103 | 85 s | 15 | 11.3 s |
+| 23 Nov | 158 | 183 s | 41 | 12.6 s |
+| 24 Nov | 137 | 74 s | 17 | 8.1 s |
+| 25 Nov (to 16:00) | 252 | 123 s | 12 | 10.6 s |
+
+So the very long freezes are gone (nothing over 12.6 s, against 30.9 s), but the window still freezes for about two minutes a day, 20 times a day for over a second. The heavy hours are still the ones with many agents running (23 Nov 11:00 to 14:00, 25 Nov 00:00 and 14:00 to 16:00).
+
+**What the stacks say.** 59 stalls were held long enough for a stack (240 s). In 54 of them (216 s) the UI thread was waiting on a file open or read (`CreateFile`, `ReadFile`, `NtQueryDirectoryFile`), and in nearly all of them Darg was reading a whole folder: every report, every card on every board, every artifact. Those folders grow every day (409 reports and 307 cards in this project now), and each open is probably slower still while parallel builds and test suites keep the disk busy (the worst hours line up with them, but nothing in the logs measures the disk). That is why Darg gets slower the longer it is used: the top five hotspots below are all the same mistake, a whole folder read on the UI thread.
+
+**Memory over a day.** No leak. The two longest stretches without a restart or a working-set trim: 21 Nov 01:07 to 22 Nov 03:48 (26.7 h), working set flat at about 478 MB from 04:00 on, GC heap 271 MB; 24 Nov 01:17 to 22:07 (20.8 h), working set 65 MB after a trim, 593 MB by 04:17, flat, then 707 MB from 13:17 (max 771 MB), GC heap 93, 394, then 428 MB (max 492 MB), 101 gen2 collections. It steps up with use and stays flat when idle. The heap is three times the first load run's 132 MB, though, and GC pauses inside stalls doubled (31 s); the transcript (below) is the likely cause.
+
+### The first trace's four hotspots now
+
+1. **Board.Reload and Agents.RefreshCards: still there, worse.** About 100 s (82 s named over 321 stalls, plus 18 s of board-file reads outside any section), worst 6.0 s (a `TurnFinished`); it was 36 s. `RefreshCards` reads every card file on every board twice (`CardBoards`, `DoneCardIds`), and each agent it forgets calls `Board.AgentGone`, which reloads every row, which runs `RefreshCards` again: the log shows `Board.Reload > Agents.RefreshCards > Board.Reload` nested up to 10 deep (22 Nov 21:44, 4.7 s).
+2. **Transcript not virtualised: still there, worse.** The real log can't separate it out: it sits in the 217 s in no section, where stalls under a second get no stack. A load run on 25 Nov (`load.ps1` instance, 4 fake chat agents of about 500 transcript entries each, switching between them 12 times) froze the window **1.6 to 2.7 s per switch**, about 40% of it GC; the GC heap went from 68 to 453 MB, with 18 gen2 collections and 7.1 s of GC pause in that one minute. It was 0.6 to 1 s per switch with the first trace's shorter transcripts.
+3. **Notes.Reload and Reports.Reload: still there, Reports worse.** `Notes.Reload` 29.1 s (24 s before), `Reports.Reload` 33.4 s (12 s before), and the same whole-folder report read now also runs from starting work and from the API's `card` (hotspot 2 below).
+4. **The 10 s stall at `Agent.Begin`: has not recurred, and has a likely cause.** `Agent.Begin`'s worst since 21 Nov is 157 ms. Seven stalls on 17 to 20 Nov held 10.0 to 10.3 s "in no section", five of them right after `AgentSession.Start`, which matches `AgentStore.Flush`'s `Task.Wait` of 10 s; `AgentStore.List` and `Delete` both wait that way. The same wait has a stack now: 25 Nov 14:46, 8.2 s, `MascotViewModel.Retitle > ListChats > AgentStore.List > AgentStore.Flush > Task.Wait`. Likely why it runs to the timeout (from the code, not reproduced): `WriteWaiting` loops until nothing is waiting, so while agents keep saving, the writer task never finishes.
+
+### Hotspots, ranked by time frozen
+
+| # | Hotspot | Frozen, 21 to 25 Nov | Worst | Stack | Suggested fix | Card |
+|---|---|---|---|---|---|---|
+| 1 | Board reload chain: `Board.Reload`, `BoardStore.Load`, `Agents.RefreshCards`, `Board.Apply` | ~100 s, 321 stalls | 6.0 s | `BoardViewModel.Reload > BoardStore.Load > ReadCards > ReadFile`; also `AgentViewModel.set_State > BoardViewModel.ReloadAll` | Read the boards off the UI thread once per change and apply the result; let `RefreshCards` use them; stop `AgentGone` reloading every row from inside `RefreshCards` | WOR-0227 |
+| 2 | Every report read to find one card's: `CardPrompt` (Work on), `Reports.Reload`, API `card` | ~96 s (40.7 + 33.4 + 22.2) | 11.3 s | `CardIndex.ReportsFor > ReportStore.List > File.ReadAllText`, from `BlockedStart.PromptLines`, `MainViewModel.OneCard`, `ReportsViewModel.Reload` | Read only the card's own files (the id is in the name); reload the Reports list off the UI thread, changed files only | WOR-0228 |
+| 3 | `Board.BlockIndex` (new) | 53.6 s, 270 stalls | 10.6 s | `BoardViewModel.BlockIndex > CardIndex.Read > BoardStore.Load > ReadCards > CreateFile` | Build it from the boards already read, or update only the board that changed; never read card files for it on the UI thread | WOR-0229 |
+| 4 | `Artifacts.Refresh` (new) | 34.8 s, 17 stalls | 7.2 s | `ArtifactsViewModel.Refresh > ArtifactStore.List > NtQueryDirectoryFile` | List the artifacts off the UI thread | WOR-0231 |
+| 5 | `Notes.Reload` | 29.1 s, 31 stalls | 4.0 s | `NotesViewModel.Reload > NoteStore.TicketStatuses > BoardStore.ReadCards`; `NoteStore.SyncArchive > NoteStore.List` | Reload off the UI thread; on a board change (`Watch.NotesBoards` fired 2,633 times) reread only the ticketed cards | WOR-0231 |
+| 6 | Agent transcript not virtualised | not separable; 1.6 to 2.7 s a switch in the load run | 2.7 s | `ContentPresenter.UpdateChild`, `TemplateContent.Load`, style matching under a `StackPanel` measure | A virtualising panel, or the newest entries with "show earlier" | WOR-0230 |
+| 7 | `Agents.Start` | 9.0 s, 83 stalls | 1.6 s | none (all under a second) | Add sections inside it to see what costs 100 to 600 ms a start, then move that off the UI thread | |
+| 8 | `AgentStore.List` / `Delete` waiting on the writer | 8.2 s now; about 70 s on 17 to 20 Nov | 10.3 s | `AgentStore.List > Flush > Task.Wait` | Merge waiting records into `List` from memory; drop a waiting save in `Delete` without waiting | WOR-0232 |
+| 9 | `gh` run on the UI thread when Setup opens (new) | 5.0 s, 2 stalls | 3.8 s | `ProjectSetup..ctor > GitHub.Accounts > GitHub.Run > WaitHandle` | Load the accounts in the background | |
+| 10 | Smaller: `Home.Glance` 3.7 s, `ImagePaths.Find` on a tool result 2.8 s, `BoardStore.Move` 2.4 s, `PlanStore.Edit` 1.5 s | 10 s | 2.8 s | file reads and writes, as above | Off the UI thread when each is next touched | |
+
+The transcript is ranked by what could be measured; with long-running agents, switching between them twenty times a day would be 40 s or more, so it may well belong higher. Hotspots 1, 2 and 3 are about 250 s of the 517 s, and none of the top five needs anything new: each is a folder read moved off the UI thread, or not done at all.
