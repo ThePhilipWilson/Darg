@@ -18,13 +18,15 @@ public sealed class TileHead : Panel
     Control? Left => Children.Count > 0 ? Children[0] : null;
     Control? Right => Children.Count > 1 ? Children[1] : null;
 
-    /// <summary>The width the left part can't go below: its first visible item, whole.</summary>
+    /// <summary>The width the left part can't go below: its first visible item, whole, and the gap a wrapping panel
+    /// keeps after it (WOR-0222 moved that gap from the id's margin to the panel's ItemSpacing; counted here as before,
+    /// else in a narrow sub-column the id just fits and the rest of the left part piles up under it in a thin strip).</summary>
     static double MustFit(Control left)
     {
         var first = left is Panel p ? p.Children.FirstOrDefault(c => c.IsVisible) : left;
         if (first is null) return 0;
         first.Measure(Size.Infinity);
-        return first.DesiredSize.Width;
+        return first.DesiredSize.Width + (left is WrapPanel w ? w.ItemSpacing : 0);
     }
 
     protected override Size MeasureOverride(Size available)

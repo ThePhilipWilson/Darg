@@ -107,21 +107,24 @@
                so at a narrow column nothing is squeezed into its neighbour. WOR-0214: where the id wouldn't fit
                beside them whole (a state sub-column), the buttons go on a line of their own under it -->
           <views:TileHead>
-            <WrapPanel VerticalAlignment="Center">
-              <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}" Margin="0,1,6,1" VerticalAlignment="Center"/>
-              <TextBlock Classes="dim" FontSize="10" Text="{Binding BoardName}" IsVisible="{Binding ShowsBoard}" Margin="0,1,6,1"
+            <!-- WOR-0222: the gap is the panel's ItemSpacing, not a right margin on each item, so the last item on a
+                 line takes no room it doesn't draw in: with a 6 px margin after it, a Bug pill needed 1 px more than a
+                 290 px column has and dropped to a line of its own -->
+            <WrapPanel VerticalAlignment="Center" ItemSpacing="6">
+              <TextBlock Classes="dim mono" FontSize="11" Text="{Binding Id}" Margin="0,1" VerticalAlignment="Center"/>
+              <TextBlock Classes="dim" FontSize="10" Text="{Binding BoardName}" IsVisible="{Binding ShowsBoard}" Margin="0,1"
                          VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BoardName, StringFormat='On the board {0}'}"/>
               <TextBlock Classes="quality" Classes.zero="{Binding Quality.Zero}" Classes.amber="{Binding Quality.Amber}" Classes.green="{Binding Quality.Green}"
-                         FontSize="11" Text="{Binding Quality.Text}" Margin="0,1,8,1" VerticalAlignment="Center"
+                         FontSize="11" Text="{Binding Quality.Text}" Margin="0,1,2,1" VerticalAlignment="Center"
                          ToolTip.Tip="{Binding Quality.Tip}" AutomationProperties.Name="{Binding Quality.Tip}"/>
-              <Button Classes="workon" Margin="0,1,6,1" VerticalAlignment="Center" Content="✦ Improve" Command="{Binding ImproveCommand}" IsVisible="{Binding ShowImprove}"
+              <Button Classes="workon" Margin="0,1" VerticalAlignment="Center" Content="✦ Improve" Command="{Binding ImproveCommand}" IsVisible="{Binding ShowImprove}"
                       AutomationProperties.Name="Improve card" ToolTip.Tip="An agent fills this thin card out: what's wanted, where, done when"/>
               <Border IsVisible="{Binding ShowsKind}" Classes="kind" Classes.bug="{Binding IsBug}"
-                      CornerRadius="8" Padding="6,0" Margin="0,1,6,1" VerticalAlignment="Center" ToolTip.Tip="Its type">
+                      CornerRadius="8" Padding="6,0" Margin="0,1" VerticalAlignment="Center" ToolTip.Tip="Its type">
                 <TextBlock Text="{Binding Kind}" FontSize="10"/>
               </Border>
               <Border IsVisible="{Binding HasPriority}" Background="{DynamicResource AccentSoft}" CornerRadius="8" Padding="6,0"
-                      Margin="0,1,6,1" VerticalAlignment="Center">
+                      Margin="0,1" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Priority}" FontSize="10" Foreground="{DynamicResource Accent}"/>
               </Border>
             </WrapPanel>
@@ -496,6 +499,10 @@
                                IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                   </StackPanel>
                 </Border>
+                <!-- WOR-0222: the two ways of showing the cards share the DockPanel's last place, which is the one it
+                     fills. Docked as a child before it, the plain list was only as wide as its widest card, so a column
+                     of short cards drew them narrower than the rest -->
+                <Panel>
                 <!-- WOR-0195: virtualized, so a big column makes and draws the cards on screen, not all of them -->
                   <ItemsControl ItemsSource="{Binding Cards}" ItemTemplate="{StaticResource CardTile}" IsVisible="{Binding Unsplit}">
                     <ItemsControl.Template>
@@ -536,6 +543,7 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                </Panel>
               </DockPanel>
             </Border>
             </Panel>
