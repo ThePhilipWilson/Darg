@@ -295,7 +295,7 @@
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:QueueViewModel">
-              <Border Classes="queuelane" Tag="{Binding}" BorderBrush="{DynamicResource Accent}" BorderThickness="2" CornerRadius="10" Padding="8,6"
+              <Border Classes="queuelane list" Tag="{Binding Key}" BorderBrush="{DynamicResource Accent}" BorderThickness="2" CornerRadius="10" Padding="8,6"
                       Background="{DynamicResource Bg}" AutomationProperties.Name="{Binding Name, StringFormat='Queue {0}'}">
                 <StackPanel Spacing="4">
                   <DockPanel>
@@ -337,7 +337,7 @@
                   <!-- folded: the cards' ids in order on one line -->
                   <TextBlock Classes="dim" Text="{Binding Line}" IsVisible="{Binding IsFolded}" Margin="26,0,0,0" TextTrimming="CharacterEllipsis"/>
                   <StackPanel IsVisible="{Binding IsOpen}" Spacing="4">
-                    <TextBlock Classes="dim" Text="No cards in it yet: add them by id below, or from a card's menu." IsVisible="{Binding IsEmpty}" Margin="4,0"/>
+                    <TextBlock Classes="dim" Text="No cards in it yet: Ctrl+click cards and drag them here, or right-click a card to add it." IsVisible="{Binding IsEmpty}" Margin="4,0"/>
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding !IsEmpty}">
                       <ItemsControl ItemsSource="{Binding Cards}">
                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -378,11 +378,6 @@
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
                     </ScrollViewer>
-                    <DockPanel>
-                      <Button DockPanel.Dock="Left" Content="Add" Command="{Binding AddCardsCommand}" Margin="0,0,6,0"/>
-                      <TextBox Text="{Binding AddText}" PlaceholderText="Add cards by id (their open blockers come too)" MaxWidth="420" HorizontalAlignment="Left"
-                               views:EnterSends.Command="{Binding AddCardsCommand}" AutomationProperties.Name="{Binding Name, StringFormat='Add cards to {0}'}"/>
-                    </DockPanel>
                   </StackPanel>
                 </StackPanel>
               </Border>

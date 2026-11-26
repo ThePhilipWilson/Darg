@@ -26,7 +26,9 @@ public partial class BoardView : UserControl
             // each row is a board: a card dropped on another row's list goes to that board
             drop: (items, list, before) =>
             {
-                if (DataContext is BoardViewModel board && board.ListByKey(list) is { } l)
+                if (list.StartsWith("queue:") && DataContext is BoardViewModel qb)
+                    qb.Queues?.DropOnKey(list, items.OfType<CardViewModel>().Select(c => c.Id).ToList());
+                else if (DataContext is BoardViewModel board && board.ListByKey(list) is { } l)
                     l.Board.Drop(items.OfType<CardViewModel>().ToList(), l, (before as CardViewModel)?.Id);
             },
             click: (item, keys) => { if (item is CardViewModel card) card.Board.Click(card, keys); },

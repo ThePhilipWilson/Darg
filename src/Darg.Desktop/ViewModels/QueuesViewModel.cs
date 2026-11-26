@@ -254,13 +254,29 @@ public partial class QueuesViewModel : ObservableObject
         _queues.Where(q => q.Has(id)).Select(q => $"⏵ {q.Name} {q.Cards.FindIndex(c => c.Equals(id, StringComparison.OrdinalIgnoreCase)) + 1}").ToList();
 
     /// <summary>A card's menu entries: add to each queue it isn't in, take out of each it is, or a new queue from it.</summary>
-    public IEnumerable<MoveTarget> TargetsFor(string id)
+    /// <param name="carried">The cards the menu acts on, read when an entry is chosen: the card, or every picked card when it is one of them (WOR-0241).</param>
+    public IEnumerable<MoveTarget> TargetsFor(string id, Func<IReadOnlyList<string>>? carried = null)
     {
+        IReadOnlyList<string> Ids() => carried?.Invoke() is { Count: > 0 } c ? c : [id];
         foreach (var q in _queues)
             yield return q.Has(id)
-                ? new MoveTarget($"⏵ Take out of queue {q.Name}", new RelayCommand(() => Remove(q, id)))
-                : new MoveTarget($"⏵ Add to queue {q.Name}", new RelayCommand(() => Add(q, [id])));
-        yield return new MoveTarget("⏵ New queue from this card", new RelayCommand(() => Make(null, null, [id])));
+                ? new MoveTarget($"⏵ Take out of queue {q.Name}", new RelayCommand(() => { foreach (var x in Ids()) Remove(q, x); }))
+                : new MoveTarget($"⏵ Add to queue {q.Name}", new RelayCommand(() => DropOn(q, Ids())));
+        yield return new MoveTarget("⏵ New queue from this card", new RelayCommand(() => Make(null, null, Ids())));
+    }
+
+    /// <summary>Cards dropped on a queue's lane (or added from a menu): added in order, each with its open blockers, and the lane says what went in.</summary>
+    public void DropOn(CardQueue q, IReadOnlyList<string> ids)
+    {
+        var added = Add(q, ids);
+        if (Row(q) is { } row)
+            row.Doing = added.Count == 0 ? "Added nothing: those are in the queue already, or no board has them." : $"Added {string.Join(", ", added)}.";
+    }
+
+    /// <summary>A lane's drop target key to its queue.</summary>
+    public void DropOnKey(string key, IReadOnlyList<string> ids)
+    {
+        if (Queues.FirstOrDefault(r => r.Key == key) is { } row) DropOn(row.Queue, ids);
     }
 
     QueueViewModel? Row(CardQueue q) => Queues.FirstOrDefault(r => r.Queue == q);
@@ -289,7 +305,8 @@ public partial class QueueViewModel(QueuesViewModel owner, CardQueue queue) : Ob
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(Arrow), nameof(IsFolded))] public partial bool IsOpen { get; set; } = true;
     public bool IsFolded => !IsOpen;
     public string Arrow => IsOpen ? "▾" : "▸";
-    [ObservableProperty] public partial string AddText { get; set; } = "";
+    /// <summary>The lane's drop-target key (DragLift lists are tagged by a string): cards dropped on it join the queue.</summary>
+    public string Key => "queue:" + Name;
     /// <summary>The cards' ids in order, for the folded lane: "1 T-0002 → 2 T-0001".</summary>
     [ObservableProperty] public partial string Line { get; set; } = "";
     public ObservableCollection<QueueCardViewModel> Cards { get; } = [];
@@ -375,17 +392,7 @@ public partial class QueueViewModel(QueuesViewModel owner, CardQueue queue) : Ob
         IsRenaming = false;
         RenameError = "";
         OnPropertyChanged(nameof(Name));
-    }
-
-    /// <summary>The box under the cards: ids typed (spaces or commas), each added with its open blockers.</summary>
-    [RelayCommand]
-    void AddCards()
-    {
-        var ids = Blockers.ParseIds(AddText);
-        if (ids.Count == 0) return;
-        var added = owner.Add(Queue, ids);
-        Doing = added.Count == 0 ? "Added nothing: those are in the queue already, or no board has them." : $"Added {string.Join(", ", added)}.";
-        AddText = "";
+        OnPropertyChanged(nameof(Key));
     }
 
     internal void Up(string id) => owner.Shift(Queue, id, -1);

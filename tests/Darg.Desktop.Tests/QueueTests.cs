@@ -363,4 +363,41 @@ public class QueueTests
         Assert.Null(app.Agents.ForCard(free.Id));
         Assert.False(board.HasPicked);
     }
+
+    /// <summary>WOR-0241: no add-by-id box on a lane; Ctrl+picked cards join a queue from a right-click (every picked card, not just
+    /// the one clicked) or by being dropped on its lane, which is a drop target of the drag.</summary>
+    [AvaloniaFact]
+    public async Task Picked_cards_join_a_queue_from_the_menu_or_a_lane_drop_and_there_is_no_add_by_id_box()
+    {
+        using var app = DargApp.Make();
+        var seed = app.Card("seed", "Backlog");
+        var a = app.Card("alpha", "Backlog");
+        var b = app.Card("beta", "Backlog");
+        var c = app.Card("gamma", "To Do");
+        var d = app.Card("delta", "To Do");
+        await app.Start();
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await app.Api("queue-new", new { project = "proj", name = "Q", cards = seed.Id });
+        var board = app.Board;
+        await app.Until(() => board.LaneTile(seed.Id) is not null && InLists(app, a.Id) is not null && InLists(app, d.Id) is not null, "tiles");
+        await DargApp.Settle(200);
+
+        // no text box for ids, and the lane is a drop target keyed by its queue
+        Assert.DoesNotContain(app.Window.GetVisualDescendants().OfType<TextBox>(), t => t.Text is not null && (t.Name?.Contains("queue") == true || Avalonia.Automation.AutomationProperties.GetName(t)?.StartsWith("Add cards to") == true));
+        var lane = app.Window.GetVisualDescendants().OfType<Border>().First(x => x.Classes.Contains("queuelane"));
+        Assert.True(lane.Classes.Contains("list"));
+        Assert.Equal("queue:Q", lane.Tag);
+
+        // Ctrl+click two cards, right-click a third picked one: all three go in
+        foreach (var t in new[] { a, b, c }) { var tile = InLists(app, t.Id)!; tile.Board.Click(tile, Avalonia.Input.KeyModifiers.Control); }
+        Assert.Equal("3 picked", board.PickedText);
+        InLists(app, b.Id)!.MoveTargets.First(m => m.Label == "⏵ Add to queue Q").Command.Execute(null);
+        Assert.Equal([seed.Id, a.Id, b.Id, c.Id], Queue(app).Cards.OrderBy(x => x == seed.Id ? 0 : 1).ThenBy(x => x).ToList());
+        Assert.DoesNotContain(d.Id, Queue(app).Cards);
+        await app.Until(() => app.Project.Queues!.Queues[0].Doing.StartsWith("Added", StringComparison.Ordinal), "the lane saying what went in");
+
+        // a drop on the lane (what DragLift calls) adds the dropped card
+        app.Project.Queues!.DropOnKey("queue:Q", [d.Id]);
+        Assert.Contains(d.Id, Queue(app).Cards);
+    }
 }
