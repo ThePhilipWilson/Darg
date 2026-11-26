@@ -8,29 +8,38 @@
     <!-- agent list -->
     <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0">
       <DockPanel>
-        <StackPanel DockPanel.Dock="Bottom" Margin="10" Spacing="6">
-          <TextBox Text="{Binding NewPrompt}" PlaceholderText="What should a new agent do?" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64"
-                   views:EnterSends.Command="{Binding StartAgentCommand}" AutomationProperties.Name="New agent prompt"/>
-          <TextBlock Classes="dim small" Text="{Binding Folder, StringFormat='Runs in {0}'}" TextWrapping="Wrap" IsVisible="{Binding !HasRepoChoice}"/>
-          <!-- a project with several repos: pick which one the agent starts in; it is given the others too -->
-          <DockPanel IsVisible="{Binding HasRepoChoice}">
-            <TextBlock DockPanel.Dock="Left" Classes="dim small" Text="Runs in" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox ItemsSource="{Binding RepoChoices}" SelectedItem="{Binding SelectedRepo}" HorizontalAlignment="Stretch"
-                      ToolTip.Tip="{Binding Folder, StringFormat='Starts in {0}; the other repos are added too'}"
-                      AutomationProperties.Name="Agent repo">
-              <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:RepoChoice"><TextBlock Text="{Binding Name}"/></DataTemplate></ComboBox.ItemTemplate>
-            </ComboBox>
-          </DockPanel>
-          <DockPanel>
-            <Button DockPanel.Dock="Right" Content="◎ Context" Command="{Binding ViewDefaultContextCommand}" Margin="6,0,0,0" Padding="8,4"
-                    ToolTip.Tip="Show what a new agent here starts with by default: the arguments Darg adds and the CLAUDE.md files Claude Code loads"
-                    AutomationProperties.Name="View default Claude context"/>
-            <Button DockPanel.Dock="Right" Content="✎ Profiles" Command="{Binding EditProfilesCommand}" Margin="6,0,0,0" Padding="8,4"
-                    ToolTip.Tip="Model profiles: which model and effort a new agent starts on, by rule or picked by Haiku from the task (profiles.md)"
-                    AutomationProperties.Name="Edit model profiles"/>
-            <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="+ New agent" Command="{Binding StartAgentCommand}"/>
-          </DockPanel>
-        </StackPanel>
+        <!-- the new-agent box is a popup (WOR-0240): + New agent opens it, starting an agent closes it -->
+        <Button x:Name="NewAgentButton" DockPanel.Dock="Bottom" Classes="primary" Margin="10" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                Content="+ New agent" AutomationProperties.Name="New agent">
+          <Button.Flyout>
+            <Flyout Placement="TopEdgeAlignedLeft" ShowMode="Standard">
+              <StackPanel Width="340" Spacing="6">
+                <TextBox Text="{Binding NewPrompt}" PlaceholderText="What should a new agent do?" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="96"
+                         views:EnterSends.Command="{Binding StartAgentCommand}" AutomationProperties.Name="New agent prompt"/>
+                <TextBlock Classes="dim small" Text="{Binding Folder, StringFormat='Runs in {0}'}" TextWrapping="Wrap" IsVisible="{Binding !HasRepoChoice}"/>
+                <!-- a project with several repos: pick which one the agent starts in; it is given the others too -->
+                <DockPanel IsVisible="{Binding HasRepoChoice}">
+                  <TextBlock DockPanel.Dock="Left" Classes="dim small" Text="Runs in" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <ComboBox ItemsSource="{Binding RepoChoices}" SelectedItem="{Binding SelectedRepo}" HorizontalAlignment="Stretch"
+                            ToolTip.Tip="{Binding Folder, StringFormat='Starts in {0}; the other repos are added too'}"
+                            AutomationProperties.Name="Agent repo">
+                    <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:RepoChoice"><TextBlock Text="{Binding Name}"/></DataTemplate></ComboBox.ItemTemplate>
+                  </ComboBox>
+                </DockPanel>
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Content="◎ Context" Command="{Binding ViewDefaultContextCommand}" Margin="6,0,0,0" Padding="8,4"
+                          ToolTip.Tip="Show what a new agent here starts with by default: the arguments Darg adds and the CLAUDE.md files Claude Code loads"
+                          AutomationProperties.Name="View default Claude context"/>
+                  <Button DockPanel.Dock="Right" Content="✎ Profiles" Command="{Binding EditProfilesCommand}" Margin="6,0,0,0" Padding="8,4"
+                          ToolTip.Tip="Model profiles: which model and effort a new agent starts on, by rule or picked by Haiku from the task (profiles.md)"
+                          AutomationProperties.Name="Edit model profiles"/>
+                  <Button Classes="primary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Content="Start" Command="{Binding StartAgentCommand}"
+                          AutomationProperties.Name="Start new agent"/>
+                </DockPanel>
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
         <ScrollViewer>
         <StackPanel>
         <DockPanel Margin="12,6,8,0">

@@ -66,8 +66,19 @@ public class EnterSendsTests
         await app.Api("show", new { project = "proj", section = "Agents" });
         await DargApp.Settle();
 
-        var prompt = Box(app, b => Avalonia.Automation.AutomationProperties.GetName(b) == "New agent prompt");
+        // WOR-0240: the box is in a popup, closed until + New agent opens it
+        var open = app.Window.GetVisualDescendants().OfType<Button>().First(b =>
+            b.IsEffectivelyVisible && Avalonia.Automation.AutomationProperties.GetName(b) == "New agent");
+        Assert.DoesNotContain(app.Window.GetVisualDescendants().OfType<TextBox>(),
+            b => Avalonia.Automation.AutomationProperties.GetName(b) == "New agent prompt"); // not inline any more
+        var flyout = (Flyout)open.Flyout!;
+        flyout.ShowAt(open);
+        await DargApp.Settle();
+        var prompt = ((Control)flyout.Content!).GetVisualDescendants().OfType<TextBox>()
+            .First(b => Avalonia.Automation.AutomationProperties.GetName(b) == "New agent prompt");
         await Exercise(app, prompt, () => app.Agents.Agents.Count > 0, "the new agent box");
+        await DargApp.Settle();
+        Assert.False(flyout.IsOpen, "the popup stayed open after the agent started");
         await app.Until(() => app.Prompts().Count > 0, "the new agent's prompt to reach claude");
         Assert.Contains("first line\nsecond\nthird", Lines(app.Prompts()[0]));
 

@@ -570,7 +570,10 @@ public partial class AgentsViewModel : ObservableObject
         if (prompt.Length == 0) return;
         Start(prompt, Folder, purpose: AgentPurposes.Chat);
         NewPrompt = "";
+        NewAgentStarted?.Invoke(); // the popup box closes (WOR-0240)
     }
+    /// <summary>Raised when the new-agent box starts an agent, so its popup closes.</summary>
+    public event Action? NewAgentStarted;
 
     /// <param name="job">What it's for, which picks its model profile; a chat with the prompt when not given.</param>
     /// <param name="id">The agent's id, when its prompt has to name it (a card agent's report does); a new one otherwise.</param>

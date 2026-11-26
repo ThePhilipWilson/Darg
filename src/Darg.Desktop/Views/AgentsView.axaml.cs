@@ -25,11 +25,13 @@ public partial class AgentsView : UserControl
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (_vm is not null) _vm.PropertyChanged -= Changed;
+        if (_vm is not null) { _vm.PropertyChanged -= Changed; _vm.NewAgentStarted -= CloseNewAgent; }
         _vm = DataContext as AgentsViewModel;
-        if (_vm is not null) _vm.PropertyChanged += Changed;
+        if (_vm is not null) { _vm.PropertyChanged += Changed; _vm.NewAgentStarted += CloseNewAgent; }
         _follow.Reset();
     }
+
+    void CloseNewAgent() => NewAgentButton.Flyout?.Hide();
 
     void Changed(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
