@@ -1,11 +1,12 @@
 # WOR-0231: Reload Artifacts and Notes off the UI thread
 
-- **Status:** Backlog
+- **Status:** QA Ready
 - **Priority:**
 - **Type:** Task
 - **Labels:** performance
 - **Created:** 2026-11-25
 - **Done:**
+- **Moved:** 2026-11-26 19:14:18
 
 ## Description
 
@@ -21,3 +22,16 @@ Hotspots 4 and 5 of the second trace (`docs/performance.md`, "Second trace" (WOR
 - A board change rereads only the statuses of the cards that notes are ticketed to, not every card.
 - The existing Notes and Artifacts tests pass, plus one per section that fails if the reload reads on the UI thread (for example through `StallWatch` or a file-read counter).
 - A week of stalls.log after the fix shows no `Artifacts.Refresh` or `Notes.Reload` stall over 200 ms (noted in the doc's Second trace part).
+
+## How to check
+
+**What changed** (commit `4e76e82` on `android`, pushed): Artifacts and Notes now read their folders on the thread pool through `BackgroundRead` (Desktop) and show the result on the UI thread in one go. The notes wall reads in one call (`NoteStore.ReadWall`) and asks only for its tickets' card statuses, opening only the files named for those cards. The board watcher reloads the wall only when one of those cards' files changes. Home's artifact tile now uses the Artifacts section's last read instead of listing the folder every 3 s. `Artifacts.Show` opens a page that's already listed at once (Back/Forward relies on that) and reads the folder again only for a page not listed yet.
+
+**Already checked:** the whole suite passes (969 unit, 287 integration). `OffThreadReloadTests` fails with the read put back on the UI thread, and its Notes test also fails with the board filter turned off.
+
+**What's left to check:**
+1. In the published copy, after ⟳ Update or `pwsh -File tools/publish.ps1` from a terminal:
+   - Notes: make a ticket from a note, move that card to Done on the board, and see the note go to the archive within a second or so.
+   - Artifacts: have an agent write a page and see it appear in Artifacts and on Home's tile.
+   - Back/Forward between two artifacts.
+2. The card's last Done when: from 26 Nov, a week of stalls.log with no `Artifacts.Refresh` or `Notes.Reload` stall over 200 ms. Check with `pwsh -File tools/perf/analyze.ps1 -Since 2026-11-26`, then note the result under "Hotspots 4 and 5, fixed (WOR-0231, 26 Nov)" in `docs/performance.md`. Those two section names now time only the showing, not the reading.
