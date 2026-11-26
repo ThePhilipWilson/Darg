@@ -1616,6 +1616,12 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>Whether it waits on the person for an answer to a question of its own (AskUserQuestion) it can still take.</summary>
     public bool AsksQuestion => Open && Items.OfType<QuestionItem>().Any(q => q.Pending);
 
+    /// <summary>WOR-0243: what it waits on the person for and can still take, oldest first: its questions (AskUserQuestion)
+    /// and permission asks, the transcript's own items, so its card's panel shows them with the same buttons and a pick
+    /// there answers the agent as one in its chat does.</summary>
+    public IReadOnlyList<TranscriptItem> PendingAsks => !Open ? [] :
+        Items.Where(i => i is QuestionItem { Pending: true } or PermissionItem { Pending: true }).ToList();
+
     /// <summary>Its card's decision was answered on the card while it was asking in its chat too, as a rule the same
     /// question (WOR-0225): each question still waiting is settled with <paramref name="message"/> rather than left
     /// open on Needs you, where answering it again would only start it on the work Darg has already done.</summary>

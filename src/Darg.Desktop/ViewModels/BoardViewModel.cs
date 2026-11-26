@@ -909,6 +909,12 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public void AgentGone(string cardId)
     {
         RedrawLater();
+        CardAgentChanged(cardId);
+    }
+
+    /// <summary>A card's agent changed state (WOR-0243): started or stopped asking, so its open panel shows what it asks now.</summary>
+    public void CardAgentChanged(string cardId)
+    {
         if (Root.Editor is { } e && e.CardId == cardId) e.AgentChanged();
     }
 
@@ -1791,6 +1797,16 @@ public sealed record DecisionChoice(DecisionOption Option, IRelayCommand Command
     public string ActionText => Option.ActionText;
 }
 
+/// <summary>WOR-0243: one thing a card's agent is asking, shown in the card's panel: the transcript's own item (drawn by
+/// its template in App.axaml, so a pick answers the agent), under a line naming the agent, which opens it.</summary>
+public sealed class CardAsk(AgentViewModel agent, TranscriptItem item, BoardViewModel board)
+{
+    public AgentViewModel Agent { get; } = agent;
+    public TranscriptItem Item { get; } = item;
+    public string Header => (Item is PermissionItem ? "Its agent asks to go on" : "Its agent asks") + " · open its chat";
+    public IRelayCommand OpenAgentCommand { get; } = new RelayCommand(() => { board.Root.Editor = null; board.OpenAgent?.Invoke(agent); });
+}
+
 /// <summary>A picture in a card's decision box (WOR-0147): the copy drawn there and the file it came from, which a
 /// click shows at full size (WOR-0167).</summary>
 public sealed record DecisionPicture(Avalonia.Media.Imaging.Bitmap Picture, string File);
@@ -1910,6 +1926,21 @@ public partial class CardEditor : ObservableObject
     /// the description while the card is in For Human Attention.</summary>
     public CardDecision? Decision { get; }
     public bool ShowDecision => Decision is not null && InAttention;
+
+    /// <summary>WOR-0243: what the card's agents are asking the person now (their AskUserQuestion questions and permission
+    /// asks), in whatever column the card is: shown at the top as the decision is, answered there as in the agent's chat.
+    /// Left out under a card decision, which settles the agent's own question when it is answered (WOR-0225).</summary>
+    public IReadOnlyList<CardAsk> AgentAsks { get; private set; } = [];
+    public bool ShowAgentAsks => AgentAsks.Count > 0 && !ShowDecision;
+
+    void RefreshAgentAsks()
+    {
+        var asks = _card is null ? [] : (_board.CardAgents?.Invoke(_card.Id) ?? [])
+            .SelectMany(a => a.PendingAsks.Select(i => new CardAsk(a, i, _board))).ToList();
+        if (asks.Select(a => a.Item).SequenceEqual(AgentAsks.Select(a => a.Item))) return;
+        AgentAsks = asks;
+        OnPropertyChanged(nameof(AgentAsks)); OnPropertyChanged(nameof(ShowAgentAsks));
+    }
 
     /// <summary>WOR-0216: why a card in Needs more work came back: the newest dated entry of its QA notes, read when the panel
     /// opened and again on every board read. Null in any other column or when the card has no QA notes.</summary>
@@ -2054,6 +2085,7 @@ public partial class CardEditor : ObservableObject
         FlowTargets = MakeFlowTargets();
         InitBlockers();
         InitStory();
+        RefreshAgentAsks();
     }
 
     List<MoveTarget> MakeFlowTargets() => _card is not { } card || HasAgent || card.InDone ? [] : _board.FlowList().Select(f => new MoveTarget("▶ " + f.Name, new RelayCommand(() =>
@@ -2065,6 +2097,7 @@ public partial class CardEditor : ObservableObject
     /// <summary>The card's agent came or went: Work on and the flow buttons follow (what's typed in the panel stays).</summary>
     public void AgentChanged()
     {
+        RefreshAgentAsks();
         FlowTargets = MakeFlowTargets();
         OnPropertyChanged(nameof(FlowTargets));
         OnPropertyChanged(nameof(CanWorkOn));

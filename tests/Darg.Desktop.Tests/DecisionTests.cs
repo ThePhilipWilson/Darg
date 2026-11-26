@@ -425,6 +425,19 @@ public class DecisionTests
     static bool AskPending(AgentViewModel agent) => agent.Items.OfType<QuestionItem>().Any(q => q.Pending);
 
     [AvaloniaFact]
+    public async Task A_card_with_a_decision_shows_it_and_not_its_askers_question_too()
+    {
+        using var app = DargApp.Make();
+        var (card, asker) = await QaAsksInChatToo(app);
+        await app.Api("show", new { project = "proj", section = "Board", card = card.Id });
+
+        var editor = app.Board.Editor!;
+        Assert.True(editor.ShowDecision);
+        Assert.NotEmpty(editor.AgentAsks); // WOR-0243: the asker's question is there, but the card's decision stands for it
+        Assert.False(editor.ShowAgentAsks);
+    }
+
+    [AvaloniaFact]
     public async Task Send_back_on_the_card_settles_the_askers_own_question_and_starts_a_rework_agent()
     {
         using var app = DargApp.Make();

@@ -186,6 +186,9 @@
               </StackPanel>
               <TextBlock Classes="dim" FontSize="10" Text="{Binding Agent.Activity, FallbackValue=''}" TextTrimming="CharacterEllipsis"
                          IsVisible="{Binding Agent.Working, FallbackValue=False}"/>
+              <!-- WOR-0243: what it asks, on the tile; the card's panel has its options -->
+              <TextBlock FontSize="11" Text="{Binding Agent.Activity, FallbackValue=''}" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource Accent}" IsVisible="{Binding Agent.NeedsYou, FallbackValue=False}"/>
             </StackPanel>
           </Button>
         </StackPanel>
@@ -634,6 +637,21 @@
                          IsVisible="{Binding DecisionAskedBy, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
             </StackPanel>
           </Border>
+          <!-- WOR-0243: what the card's agent is asking now, in any column, with the buttons its chat has: a pick answers it -->
+          <ItemsControl ItemsSource="{Binding AgentAsks}" IsVisible="{Binding ShowAgentAsks}" AutomationProperties.Name="Its agent asks">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="10"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:CardAsk">
+                <StackPanel Spacing="4">
+                  <Button Classes="blocklink" Command="{Binding OpenAgentCommand}" ToolTip.Tip="Open the agent's chat"
+                          AutomationProperties.Name="Open the asking agent">
+                    <TextBlock Classes="small" Foreground="{DynamicResource Accent}" Text="{Binding Header}" TextWrapping="Wrap"/>
+                  </Button>
+                  <ContentControl Content="{Binding Item}"/>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
           <!-- WOR-0216: in Needs more work, why it was sent back: the newest QA notes entry -->
           <Border IsVisible="{Binding ShowSendBack}" BorderBrush="{DynamicResource Warn}" BorderThickness="1" CornerRadius="8"
                   Background="{DynamicResource Panel2}" Padding="12,10" AutomationProperties.Name="Why it was sent back">
