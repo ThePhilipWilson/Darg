@@ -3,11 +3,15 @@
 # every gap over -StallMs in the UI thread's heartbeat, with what ran in it. The agents are fake_claude.py, which
 # streams tool calls at -Rate a second for -Seconds (-Touch: rewriting its card every FAKE_TOUCH_EVERY s); -Real
 # uses the real claude (it costs sessions). -Switch then flips sections and agents, -Scroll scrolls the open
-# transcript through UI Automation. Toasts show for real when the fake turns end. Build first: dotnet build.
+# transcript through UI Automation; -Rounds repeats the agent switches. -Transcripts n starts no work: it saves
+# -Cards chat agents of n entries each (as the fake's steps: a text and a Read with a -Result-sized result) to switch
+# between (WOR-0230: pwsh -File tools/perf/load.ps1 -Cards 4 -Transcripts 500 -Switch -Rounds 3 -Section Agents -Wait 0).
+# Toasts show for real when the fake turns end. Build first: dotnet build.
 #   pwsh -File tools/perf/load.ps1 -Cards 5 -Section Board -Touch -StallMs 100
 param([string]$Board = "$(Split-Path (git -C $PSScriptRoot rev-parse --path-format=absolute --git-common-dir))/.darg/tasks", # the main checkout's, from a worktree too
       [int]$Cards = 5, [int]$Wait = 40, [string]$Section = 'Board', [switch]$Real, [switch]$Keep,
-      [double]$Rate = 5, [int]$Seconds = 30, [int]$Result = 4000, [switch]$Touch, [switch]$Switch, [switch]$Scroll, [int]$StallMs = 200)
+      [double]$Rate = 5, [int]$Seconds = 30, [int]$Result = 4000, [switch]$Touch, [switch]$Switch, [switch]$Scroll, [int]$StallMs = 200, [int]$Rounds = 1,
+      [int]$Transcripts = 0)
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 $wt = (Resolve-Path "$here/../..").Path
@@ -25,6 +29,24 @@ Remove-Item -Force -ErrorAction SilentlyContinue "$home2/stalls.log", "$home2/cr
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$home2/agents", "$home2/proj/tasks"
 # a fresh copy of the board each run, so the same cards are free to start
 Copy-Item -Recurse -Force -LiteralPath $Board -Destination "$home2/proj/tasks"
+$seeded = @()
+if ($Transcripts -gt 0) {
+    New-Item -ItemType Directory -Force "$home2/agents/perf" | Out-Null
+    $big = "x" * $Result
+    for ($a = 0; $a -lt $Cards; $a++) {
+        $id = '{0:x10}' -f (0xa0000 + $a)
+        $items = [Collections.Generic.List[object]]::new()
+        $items.Add(@{ kind = "user"; text = "Long chat ${a}: keep going" })
+        for ($n = 0; $items.Count -lt $Transcripts; $n++) {
+            $items.Add(@{ kind = "text"; text = "Step ${n}: " + ("looking at the code " * 15) })
+            $items.Add(@{ kind = "tool"; name = "Read"; summary = "src/file$n.cs"; result = $big })
+        }
+        $t = (Get-Date).AddMinutes(-30 + $a).ToString("o")
+        @{ id = $id; name = "Long chat $a"; cwd = "$r/proj/repo"; project = "perf"; purpose = "chat"; sessionId = "session-$id"
+           created = $t; updated = $t; items = $items } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$home2/agents/perf/$id.json" -Encoding utf8
+        $seeded += $id
+    }
+}
 $main = (Get-ChildItem "$home2/proj/tasks" -Directory | Select-Object -First 1).FullName
 $env:DARG_HOME = $home2
 $env:DARG_SECTION = $Section
@@ -49,6 +71,7 @@ try {
     $token = $token.Trim()
     Start-Sleep -Seconds 4  # let it settle: startup stalls aren't what's measured
 
+    if (-not $seeded) {
     # the first cards by id (on the Workbench board, done ones: start visible ones by hand with the API to watch them)
     $ids = @(Get-ChildItem "$main/items" -Filter *.md | ForEach-Object { ($_.BaseName -split ' - ')[0] } | Sort-Object | Select-Object -First $Cards)
     "starting $($ids -join ' ') on port $port at $(Get-Date -Format HH:mm:ss.fff)"
@@ -56,6 +79,7 @@ try {
     $r = Invoke-RestMethod -Method Post -Uri "http://localhost:$port/api/$token/work-on" -ContentType 'application/json' `
         -Body (@{ project = 'perf'; cards = ($ids -join ' ') } | ConvertTo-Json)
     "work-on returned in $($sw.ElapsedMilliseconds) ms: $r"
+    }
     Start-Sleep -Seconds $Wait
     if ($Switch) {
         function Api($name, $body) {
@@ -65,9 +89,10 @@ try {
             Start-Sleep -Milliseconds 1500
         }
         $list = (Invoke-WebRequest -Method Post -Uri "http://localhost:$port/api/$token/agents" -ContentType 'application/json' -Body '{"project":"perf"}').Content
-        $agentIds = @($list | Select-String -AllMatches '"id":\s*"([0-9a-f]{10})"' | ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value })
+        $agentIds = if ($seeded) { $seeded } else { @($list | Select-String -AllMatches '"id":\s*"([0-9a-f]{10})"' | ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value }) }
         foreach ($s in 'Board', 'Home', 'Agents', 'Board', 'Notes', 'Agents') { Api 'show' @{ project = 'perf'; section = $s } }
-        foreach ($a in $agentIds) { Api 'show' @{ project = 'perf'; agent = $a } }
+        # -Rounds: show each agent that many times over (WOR-0230 measured 4 agents x 3 = 12 switches)
+        for ($round = 0; $round -lt $Rounds; $round++) { foreach ($a in $agentIds) { Api 'show' @{ project = 'perf'; agent = $a } } }
     }
     if ($Scroll) {
         # scroll the open transcript top to bottom through UI Automation (the scroll viewer with the most to scroll)

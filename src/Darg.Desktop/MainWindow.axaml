@@ -253,8 +253,8 @@
           </Border>
           <Border IsVisible="{Binding !ShowNotifications}"><ScrollViewer x:Name="MascotScroll" MaxHeight="380" IsVisible="{Binding Mascot.HasChat}">
             <!-- folded: tool steps are one quiet line each, opened on click (WOR-0089); the Agents view has the full detail -->
-            <ItemsControl Classes="folded" ItemsSource="{Binding Mascot.Items}" Margin="12,10" FontSize="13">
-              <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl Classes="folded transcript" ItemsSource="{Binding Mascot.Items}" Margin="12,10" FontSize="13" AutomationProperties.Name="Fettle transcript">
+              <ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
             </ItemsControl>
           </ScrollViewer></Border>
         </DockPanel>

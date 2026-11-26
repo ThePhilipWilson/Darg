@@ -570,6 +570,14 @@
     <Style Selector="ItemsControl.folded StackPanel.tooldetail.open">
       <Setter Property="IsVisible" Value="True"/>
     </Style>
+    <!-- a transcript (agents, Fettle, a planner's chat) is virtualised (WOR-0230) and VirtualizingStackPanel has no
+         Spacing, so each entry's container carries the gap; Fettle's box is tighter -->
+    <Style Selector="ItemsControl.transcript > ContentPresenter">
+      <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+    <Style Selector="ItemsControl.transcript.folded > ContentPresenter">
+      <Setter Property="Margin" Value="0,0,0,8"/>
+    </Style>
     <Style Selector="Button.primary">
       <Setter Property="Background" Value="{DynamicResource Accent}"/>
       <Setter Property="Foreground" Value="{DynamicResource OnAccent}"/>

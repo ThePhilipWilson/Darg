@@ -173,8 +173,9 @@
       </Border>
 
       <ScrollViewer Grid.Row="1" x:Name="Scroll">
-        <ItemsControl ItemsSource="{Binding Items}" Margin="18,14" MaxWidth="980" HorizontalAlignment="Left">
-          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="10"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+        <!-- virtualised (WOR-0230): only the entries on screen are built, so switching agents doesn't build a whole long transcript -->
+        <ItemsControl Classes="transcript" ItemsSource="{Binding Items}" Margin="18,14" MaxWidth="980" HorizontalAlignment="Left" AutomationProperties.Name="Transcript">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
         </ItemsControl>
       </ScrollViewer>
 

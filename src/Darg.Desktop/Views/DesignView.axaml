@@ -401,8 +401,8 @@
           </StackPanel>
         </Border>
         <ScrollViewer x:Name="ChatScroll">
-          <ItemsControl ItemsSource="{Binding Planner.Items, FallbackValue={x:Null}}" Margin="12,10">
-            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Spacing="10"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl Classes="transcript" ItemsSource="{Binding Planner.Items, FallbackValue={x:Null}}" Margin="12,10">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           </ItemsControl>
         </ScrollViewer>
       </DockPanel>
