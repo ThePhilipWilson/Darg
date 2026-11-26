@@ -1,11 +1,12 @@
 # WOR-0223: Measure where Darg is still slow, rank it and card the worst
 
-- **Status:** Backlog
+- **Status:** Done
 - **Priority:**
 - **Type:** Task
 - **Labels:** performance
 - **Created:** 2026-11-25
-- **Done:**
+- **Done:** 2026-11-26
+- **Moved:** 2026-11-26 09:31:35
 
 ## Description
 
