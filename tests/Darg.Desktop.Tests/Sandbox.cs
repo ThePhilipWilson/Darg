@@ -13,6 +13,11 @@ public static class Sandbox
     /// <summary>.shots/integration: a folder per test, holding its instance, its project and its pictures.</summary>
     public static string Root { get; private set; } = "";
 
+    /// <summary>What this run's tests share (the app's own home, the fake ~/.claude, claude.cmd and gh.cmd, the template
+    /// repo, the run's lock): Root itself, or Root/_shard&lt;n&gt; when tools/test.ps1 runs the suite as several processes at
+    /// once (DARG_TEST_SHARD, WOR-0226), each with the tests of its own classes. The tests' own folders stay in Root.</summary>
+    public static string RunFolder { get; private set; } = "";
+
     /// <summary>Every notification the app raised since the current test began.</summary>
     public static List<Notifier.Notification> Notifications { get; } = [];
 
@@ -25,13 +30,15 @@ public static class Sandbox
         Repo = FindRepo();
         Root = Path.Combine(Repo, ".shots", "integration");
         Directory.CreateDirectory(Root);
+        var shard = Environment.GetEnvironmentVariable("DARG_TEST_SHARD"); // read before ClearInherited clears it
+        RunFolder = string.IsNullOrWhiteSpace(shard) ? Root : Directory.CreateDirectory(Path.Combine(Root, "_shard" + shard.Trim())).FullName;
         TakeFolder();
         ClearInherited();
-        var appHome = Directory.CreateDirectory(Path.Combine(Root, "_app")).FullName;
+        var appHome = Directory.CreateDirectory(Path.Combine(RunFolder, "_app")).FullName;
         Environment.SetEnvironmentVariable("DARG_HOME", appHome);
 
         // the person's own ~/.claude stays out of it: no real timings in the header, settings or CLAUDE.md read
-        UserHome.Folder = Directory.CreateDirectory(Path.Combine(Root, "_user")).FullName;
+        UserHome.Folder = Directory.CreateDirectory(Path.Combine(RunFolder, "_user")).FullName;
         Environment.SetEnvironmentVariable("CLAUDE_CONFIG_DIR", Directory.CreateDirectory(Path.Combine(UserHome.Folder, ".claude")).FullName);
         Environment.SetEnvironmentVariable("ANTHROPIC_MODEL", null);
         Environment.SetEnvironmentVariable("CLAUDE_DRAW_PORT", "9"); // nothing listens: the real claude-draw daemon is left alone
@@ -42,12 +49,12 @@ public static class Sandbox
         string claude;
         if (OperatingSystem.IsWindows())
         {
-            claude = Path.Combine(Root, "claude.cmd");
+            claude = Path.Combine(RunFolder, "claude.cmd");
             File.WriteAllText(claude, $"@\"{python}\" \"{fake}\" %*\r\n");
         }
         else
         {
-            claude = Path.Combine(Root, "claude");
+            claude = Path.Combine(RunFolder, "claude");
             File.WriteAllText(claude, $"#!/bin/sh\nexec \"{python}\" \"{fake}\" \"$@\"\n");
             File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
@@ -58,12 +65,12 @@ public static class Sandbox
         string gh;
         if (OperatingSystem.IsWindows())
         {
-            gh = Path.Combine(Root, "gh.cmd");
+            gh = Path.Combine(RunFolder, "gh.cmd");
             File.WriteAllText(gh, $"@\"{python}\" \"{fakeGh}\" %*\r\n");
         }
         else
         {
-            gh = Path.Combine(Root, "gh");
+            gh = Path.Combine(RunFolder, "gh");
             File.WriteAllText(gh, $"#!/bin/sh\nexec \"{python}\" \"{fakeGh}\" \"$@\"\n");
             File.SetUnixFileMode(gh, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
@@ -100,7 +107,7 @@ public static class Sandbox
     /// waits for it (saying whose it is) and gives up after ten minutes. The lock goes when the process does.</summary>
     static void TakeFolder()
     {
-        var path = Path.Combine(Root, ".lock");
+        var path = Path.Combine(RunFolder, ".lock");
         var end = DateTime.UtcNow.AddMinutes(10);
         var said = false;
         while (true)
@@ -118,7 +125,7 @@ public static class Sandbox
             {
                 var who = Holder(path);
                 if (DateTime.UtcNow > end)
-                    throw new InvalidOperationException($"Another integration test run has had {Root} for ten minutes ({who}). Not running alongside it.");
+                    throw new InvalidOperationException($"Another integration test run has had {RunFolder} for ten minutes ({who}). Not running alongside it.");
                 if (!said) { Console.Error.WriteLine($"Waiting for another integration test run in this folder to finish ({who})."); said = true; }
                 Thread.Sleep(1000);
             }

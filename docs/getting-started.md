@@ -47,6 +47,8 @@ Instances cannot see each other, by design: the work PC and home PC each run the
 | `DARG_LIVE_TREE`, `_BRANCH`, `_SCRIPT`, `_HOST`, `_REPO`, `_GH`, `_FORGE` | Set by `tools/live.ps1` and the live tests. Don't set by hand; `tools/test.ps1` clears them. |
 | `DARG_TEST_PYTHON` | Name the Python for the fake claude in integration tests. |
 | `DARG_TEST_SLOTS`, `DARG_TEST_COMMIT_PCT` | How many `tools/test.ps1` runs go at once on the machine (default 2), and the committed-memory percentage a run waits below before it builds (default 85). |
+| `DARG_TEST_SHARDS` | How many processes `tools/test.ps1` splits the whole integration suite across, each with its share of the test classes (default 2; `1` runs it as one). A `-Filter` run is always one. |
+| `DARG_TEST_SHARD` | Set by `tools/test.ps1` on each of those processes (`1`, `2`…) so its sandbox gets a folder of its own. Don't set by hand. |
 | `DARG_REMOTE_PORT` | The port of the [phone server](REMOTE.md) (default 47818; `0` for any free one). |
 | `DARG_TEST_QR_PYTHON` | A Python with OpenCV (`cv2`) so the pairing-QR test decodes the QR; without it only its shape is checked ([REMOTE.md](REMOTE.md)). |
 | `DARG_ANDROID_ROOT` | Where `tools/android-setup.ps1` and `tools/android.ps1` keep the Android dotnet, SDK and emulator (default `D:\Android`); see [The phone app](#the-phone-app). |

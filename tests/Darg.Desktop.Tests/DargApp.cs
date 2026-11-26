@@ -256,7 +256,7 @@ public sealed class DargApp : IDisposable
     /// test's folder: three git processes a test cost 0.3 to 1.9 s, about two minutes a run (WOR-0226).</summary>
     static readonly Lazy<string> TemplateRepo = new(() =>
     {
-        var repo = Path.Combine(Sandbox.Root, "_template", "repo");
+        var repo = Path.Combine(Sandbox.RunFolder, "_template", "repo");
         Wipe(Path.GetDirectoryName(repo)!);
         Directory.CreateDirectory(repo);
         Git(repo, "init", "-q", "-b", "main");

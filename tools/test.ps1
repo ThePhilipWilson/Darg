@@ -1,6 +1,7 @@
 ﻿# Darg's whole test suite (WOR-0127): builds everything (so a XAML or app compile error fails too), then runs
 #   unit tests         tests/Darg.Core.Tests      Core, no UI
-#   integration tests  tests/Darg.Desktop.Tests   the real app headless on a throwaway instance, fake claude
+#   integration tests  tests/Darg.Desktop.Tests   the real app headless on a throwaway instance, fake claude; the whole
+#                      suite as DARG_TEST_SHARDS processes at once (default 2; 1 for one), a -Filter run as one
 # The integration tests leave a folder per test in .shots/integration/<test>: its instance, board files,
 # fake-claude.jsonl (what each agent was started with and sent) and PNGs of what the window showed.
 # Exits non-zero if anything fails, and if no test ran at all (a -Filter that matches nothing is a failure).
@@ -91,9 +92,70 @@ try {
         $trx = Join-Path $results "$name.trx"
         $script:ran[$name] = if (Test-Path -LiteralPath $trx) { [int]([xml](Get-Content -LiteralPath $trx -Raw)).TestRun.ResultSummary.Counters.total } else { 0 }
     }
+    # The whole integration suite runs as DARG_TEST_SHARDS processes at once (default 2, WOR-0226): its tests run one
+    # after another within a process (one app, one DARG_HOME), so two processes, each with its own share of the test
+    # classes and its own sandbox folder (Sandbox.RunFolder), take about half the time. The classes are shared out by
+    # how long each took last time (.shots/integration-times.json, written after every sharded run), else by how many
+    # tests each has; the last shard runs every test not in the others, so a class the split didn't see still runs.
+    function Invoke-Shards([string]$project, [int]$count) {
+        Write-Host "`n== integration ($count processes) ==" -ForegroundColor Cyan
+        $timesFile = Join-Path $shots 'integration-times.json'
+        $times = @{}
+        if (Test-Path -LiteralPath $timesFile) { try { (Get-Content -LiteralPath $timesFile -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $times[$_.Name] = [double]$_.Value } } catch { } }
+        $classes = @{}
+        foreach ($f in Get-ChildItem -LiteralPath "$repo/tests/$project" -Filter *.cs) {
+            $text = Get-Content -LiteralPath $f.FullName -Raw
+            $tests = ([regex]::Matches($text, '\[Avalonia(Fact|Theory)|\[InlineData')).Count
+            if ($tests -eq 0) { continue }
+            foreach ($m in [regex]::Matches($text, '(?m)^\s*public\s+(?:sealed\s+|static\s+)*class\s+(\w+)')) { $classes[$m.Groups[1].Value] = $tests }
+        }
+        $loads = @(0.0) * $count; $parts = @(); for ($i = 0; $i -lt $count; $i++) { $parts += , [System.Collections.Generic.List[string]]::new() }
+        $order = $classes.Keys | Sort-Object { if ($times.ContainsKey($_)) { $times[$_] } else { 2.5 * $classes[$_] } } -Descending
+        foreach ($c in $order) {
+            $w = if ($times.ContainsKey($c)) { $times[$c] } else { 2.5 * $classes[$c] }
+            $i = [array]::IndexOf($loads, ($loads | Measure-Object -Minimum).Minimum)
+            $parts[$i].Add($c); $loads[$i] += $w
+        }
+        $named = @(); for ($i = 0; $i -lt $count - 1; $i++) { $named += $parts[$i] }
+        for ($i = 0; $i -lt $count; $i++) { Write-Host ("shard {0}: {1} classes, about {2:N0} s" -f ($i + 1), $parts[$i].Count, $loads[$i]) }
+        Write-Host "Each shard's output shows when it has finished."
+        $runs = @()
+        for ($i = 0; $i -lt $count; $i++) {
+            $n = $i + 1
+            $filter = if ($i -lt $count - 1) { ($parts[$i] | ForEach-Object { "FullyQualifiedName~.$_." }) -join '|' }
+                      elseif ($named.Count) { ($named | ForEach-Object { "FullyQualifiedName!~.$_." }) -join '&' }
+                      else { 'FullyQualifiedName~.' }
+            $a = @('test', "`"$repo/tests/$project`"", '--no-build', '-nologo', '--results-directory', "`"$results`"",
+                '--logger', "`"trx;LogFileName=integration-$n.trx`"", '--filter', "`"$filter`"")
+            $env:DARG_TEST_SHARD = "$n"
+            $out = Join-Path $results "integration-$n.out"
+            New-Item -ItemType Directory -Force $results | Out-Null
+            $runs += [pscustomobject]@{ N = $n; Out = $out; P = (Start-Process dotnet -ArgumentList $a -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError "$out.err") }
+            Remove-Item Env:DARG_TEST_SHARD
+        }
+        $total = 0; $newTimes = @{}
+        foreach ($r in $runs) {
+            $r.P.WaitForExit()
+            Write-Host "`n-- integration shard $($r.N) of $count --" -ForegroundColor Cyan
+            Get-Content -LiteralPath $r.Out, "$($r.Out).err" -ErrorAction SilentlyContinue | Where-Object { $_.Trim() } | Write-Host
+            if ($r.P.ExitCode -ne 0) { $script:failed += "integration shard $($r.N)" }
+            $trx = Join-Path $results "integration-$($r.N).trx"
+            if (-not (Test-Path -LiteralPath $trx)) { continue }
+            $x = [xml](Get-Content -LiteralPath $trx -Raw)
+            $total += [int]$x.TestRun.ResultSummary.Counters.total
+            foreach ($t in $x.TestRun.Results.UnitTestResult) {
+                $c = ($t.testName -split '\(')[0] -replace '\.[^.]+$', '' -replace '^.*\.', ''
+                $newTimes[$c] = [double]$newTimes[$c] + [TimeSpan]::Parse($t.duration).TotalSeconds
+            }
+        }
+        $script:ran['integration'] = $total
+        if ($newTimes.Count) { $newTimes | ConvertTo-Json | Set-Content -LiteralPath $timesFile -Encoding utf8 }
+    }
+
     if ($both -or $Unit) { Invoke-Suite 'unit' 'Darg.Core.Tests' }
     if ($both -or $Integration) {
-        Invoke-Suite 'integration' 'Darg.Desktop.Tests'
+        $shards = if ($env:DARG_TEST_SHARDS -as [int]) { [math]::Max(1, [int]$env:DARG_TEST_SHARDS) } else { 2 }
+        if ($Filter -or $shards -eq 1) { Invoke-Suite 'integration' 'Darg.Desktop.Tests' } else { Invoke-Shards 'Darg.Desktop.Tests' $shards }
         Write-Host "Integration folders and pictures: $repo/.shots/integration"
     }
 
