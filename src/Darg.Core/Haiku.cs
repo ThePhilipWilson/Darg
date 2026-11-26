@@ -19,8 +19,9 @@ public static class Haiku
 
     /// <summary>An empty folder of its own that every question is asked from (WOR-0219), so the answer doesn't depend on
     /// where Darg was started: claude loads the CLAUDE.md files, memory and project hooks of the folder it starts in, and
-    /// with Darg's own repo around it a card placing's answer swung from 1 in 10 right to 10 in 10. Null when it can't be
-    /// made, and then claude starts where Darg is.</summary>
+    /// with Darg's own repo around it a card placing's answer swung from 1 in 10 right to 10 in 10 (measured before
+    /// <see cref="Args"/> read none of the person's settings; the folder still keeps a repo's git status out of the
+    /// question). Null when it can't be made, and then claude starts where Darg is.</summary>
     public static string? Folder()
     {
         try { return Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "darg-haiku")).FullName; }

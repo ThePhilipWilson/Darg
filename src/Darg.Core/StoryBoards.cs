@@ -30,7 +30,10 @@ public static class StoryBoards
     /// decided before answering on the last line: asked for the name alone, it left a card plainly part of a story on the
     /// default board on up to 9 tries in 10, swayed by whatever else it had loaded (measured 2026-11-26: the live test's
     /// merge card reached its board on 1 of 10 from one folder and 10 of 10 from another). Reasoning first, story cards
-    /// reached their board on 35 of 36 tries across both folders, and the cards that fit no story stayed on 54 of 54.</summary>
+    /// reached their board on 35 of 36 tries across both folders, and the cards that fit no story stayed on 54 of 54.
+    /// What swayed it was mostly the person's CLAUDE.md and settings, which Haiku has read none of since WOR-0224's
+    /// <c>--setting-sources ""</c>: with that, the name-alone prompt also moved story cards on 22 of 24 tries and this one
+    /// on 40 of 42, so reasoning first is now a guard against the next thing to sway it more than the fix.</summary>
     public static string Prompt(Card card, IReadOnlyList<(string Name, IReadOnlyList<string> Titles)> stories)
     {
         var description = card.Description.Trim();
