@@ -189,6 +189,14 @@ public partial class QueuesViewModel : ObservableObject
         Saved();
     }
 
+    /// <summary>Set how many cards a queue keeps at work at once (1 to <see cref="CardQueue.MaxBatch"/>).</summary>
+    public int SetBatch(CardQueue q, int batch)
+    {
+        q.Batch = Math.Clamp(batch, 1, CardQueue.MaxBatch);
+        Saved();
+        return q.Batch;
+    }
+
     /// <summary>A change to a queue: kept on disk, shown, and looked at again at once.</summary>
     void Saved()
     {
@@ -224,6 +232,15 @@ public partial class QueuesViewModel : ObservableObject
         {
             var before = (q.Started.Count, q.Released.Count, q.Paused);
             var step = QueueRun.Next(q, Card, AgentOf, _index);
+            var began = new List<string>();
+            // a batch queue fills up in one look: go on while each start works, at most a batch's worth
+            while (step is QueueStep.Start first && q.Batch > 1 && began.Count < q.Batch)
+            {
+                if (Start?.Invoke(first.Id) is { } failed) { QueueRun.Pause(q, $"Couldn't start {first.Id}: {failed}.", first.Id); step = new QueueStep.Pause(first.Id, q.Why!); break; }
+                QueueRun.Started(q, first.Id);
+                began.Add(first.Id);
+                step = QueueRun.Next(q, Card, AgentOf, _index);
+            }
             switch (step)
             {
                 case QueueStep.Start s:
@@ -238,7 +255,8 @@ public partial class QueuesViewModel : ObservableObject
                     break;
             }
             Row(q)?.Said(step);
-            dirty |= before != (q.Started.Count, q.Released.Count, q.Paused);
+            if (began.Count > 0 && Row(q) is { } started) started.Doing = $"Started {string.Join(", ", began)}. " + started.Doing;
+            dirty |= began.Count > 0 || before != (q.Started.Count, q.Released.Count, q.Paused);
         }
         if (dirty)
         {
@@ -402,7 +420,8 @@ public partial class QueueViewModel(QueuesViewModel owner, CardQueue queue) : Ob
         RefreshShown();
         var states = Queue.Cards.Select(id => (Id: id, Card: owner.Card(id), State: QueueRun.StateOf(Queue, id, owner.Card(id), owner.AgentOf(id)))).ToList();
         var done = states.Count(s => s.State == "done");
-        Summary = $"{done} of {Queue.Cards.Count} done";
+        Summary = $"{done} of {Queue.Cards.Count} done" + (Queue.Batch > 1 ? $" · {Queue.Batch} at once" : "");
+        if (BatchText != Queue.Batch.ToString()) BatchText = Queue.Batch.ToString();
         if (Queue.Paused && Doing.Length == 0) Doing = Queue.Why ?? "Not running yet: press Run to start it.";
         ListSync.Sync(Cards, states.Select((s, i) =>
         {
@@ -413,6 +432,13 @@ public partial class QueueViewModel(QueuesViewModel owner, CardQueue queue) : Ob
         Line = string.Join("  →  ", Cards.Select(c => $"{c.Place} {c.Id}"));
         foreach (var n in new[] { nameof(Name), nameof(RunText), nameof(RunTip), nameof(IsPaused), nameof(Failed), nameof(IsEmpty), nameof(DeleteQuestion) })
             OnPropertyChanged(n);
+    }
+
+    /// <summary>The batch box: how many cards at work at once; a number out of range is taken to the nearest, anything else put back.</summary>
+    [ObservableProperty] public partial string BatchText { get; set; } = "1";
+    partial void OnBatchTextChanged(string value)
+    {
+        if (int.TryParse(value, out var n) && n >= 1 && n != Queue.Batch) owner.SetBatch(Queue, n);
     }
 
     [RelayCommand] void Toggle() { Doing = ""; owner.Toggle(Queue); }

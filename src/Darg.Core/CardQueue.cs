@@ -26,6 +26,11 @@ public sealed class CardQueue
     /// <summary>For a card that reached QA: whether its QA check blocks the next card, as the quick check said.</summary>
     public Dictionary<string, QaGate> Gates { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>How many cards the queue keeps at work at once (WOR-0244): 1, one at a time as before; more, and as soon as
+    /// any leaves the working state (QA, attention, done, failed or stopped) the next waiting card starts, so the batch stays full.</summary>
+    public int Batch { get; set; } = 1;
+    public const int MaxBatch = 50;
+
     [JsonIgnore] public bool HasRun => Started.Count > 0 || Why is not null;
 
     public bool Has(string id) => Cards.Contains(id, StringComparer.OrdinalIgnoreCase);
@@ -72,6 +77,7 @@ public static class QueueRun
         IReadOnlyDictionary<string, BoardCard> index)
     {
         if (q.Paused) return new QueueStep.Held(q.Why ?? "Not running yet: press Run to start it.");
+        if (q.Batch > 1) return NextBatch(q, find, agent, index);
         // first the cards already started: one still at work holds the queue
         foreach (var id in q.Started.ToList())
         {
@@ -102,6 +108,28 @@ public static class QueueRun
         return waiting.Count > 0
             ? new QueueStep.Wait("The rest wait on blockers: " + string.Join("; ", waiting.Select(w => $"{w.Id} on {w.On}")) + ".")
             : new QueueStep.Finished();
+    }
+
+    /// <summary>A batch queue's next step (WOR-0244): every started card not at work has left the batch (a card in QA,
+    /// waiting on the person, done, failed or stopped is moved on from, so a failure pauses nothing and no QA check is
+    /// asked), and while fewer than <see cref="CardQueue.Batch"/> are at work the next card free of blockers starts.</summary>
+    static QueueStep NextBatch(CardQueue q, Func<string, BoardCard?> find, Func<string, QueueAgent> agent,
+        IReadOnlyDictionary<string, BoardCard> index)
+    {
+        var working = 0;
+        foreach (var id in q.Started.ToList())
+        {
+            if (q.IsReleased(id)) continue;
+            if (q.Has(id) && find(id) is { Done: false, InAttention: false, InQa: false } && agent(id) == QueueAgent.Working) working++;
+            else q.Release(id);
+        }
+        if (working >= q.Batch) return new QueueStep.Wait($"{working} of {q.Batch} at work.");
+        var start = NextCard(q, find, agent, index, adopt: true, out var waiting);
+        if (start is not null)
+            return q.IsStarted(start) ? NextBatch(q, find, agent, index) : new QueueStep.Start(start);
+        var blocked = waiting.Count > 0 ? "the rest wait on blockers: " + string.Join("; ", waiting.Select(w => $"{w.Id} on {w.On}")) + "." : "no more to start.";
+        if (working > 0) return new QueueStep.Wait($"{working} at work; {blocked}");
+        return waiting.Count > 0 ? new QueueStep.Wait("The rest wait on blockers: " + string.Join("; ", waiting.Select(w => $"{w.Id} on {w.On}")) + ".") : new QueueStep.Finished();
     }
 
     /// <summary>The first card in the queue's order still to start: not started, on a board, not done, in QA or waiting on
@@ -151,7 +179,7 @@ public static class QueueRun
         if (a == QueueAgent.Working) return "working";
         if (a == QueueAgent.Asking || c.InAttention) return "waits on you";
         if (c.InQa) return q.Gates.TryGetValue(id, out var g) ? g.Blocking ? "in QA, next waits" : "in QA" : "in QA";
-        if (q.IsReleased(id)) return "moved on";
+        if (q.IsReleased(id)) return a == QueueAgent.Failed ? "failed" : a == QueueAgent.Stopped ? "stopped" : "moved on";
         return q.IsStarted(id) ? "stopped" : "queued";
     }
 }

@@ -315,7 +315,11 @@
                                IsVisible="{Binding ShowsName}" ToolTip.Tip="Double-click to rename"/>
                     <TextBox DockPanel.Dock="Left" Classes="rename" Tag="{Binding}" Text="{Binding RenameText}" Width="200" Margin="0,0,10,0" IsVisible="{Binding IsRenaming}"
                              views:EnterSends.Command="{Binding CommitRenameCommand}" AutomationProperties.Name="{Binding Name, StringFormat='Rename queue {0}'}"/>
-                    <TextBlock DockPanel.Dock="Left" Classes="dim" Text="{Binding Summary}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock DockPanel.Dock="Left" Classes="dim" Text="{Binding Summary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock DockPanel.Dock="Left" Classes="dim" Text="at once:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <TextBox DockPanel.Dock="Left" Text="{Binding BatchText}" Width="52" MinHeight="0" Padding="6,2" Margin="0,0,10,0" VerticalAlignment="Center"
+                             ToolTip.Tip="How many cards the queue keeps at work at once: 1 is one at a time; more, and each time one leaves work (QA, done, failed or stopped) the next starts"
+                             AutomationProperties.Name="{Binding Name, StringFormat='Cards at once in queue {0}'}"/>
                     <Button DockPanel.Dock="Right" Classes="head" Opacity="1" Content="⋯" Margin="6,0,0,0" ToolTip.Tip="Rename or delete this queue"
                             AutomationProperties.Name="{Binding Name, StringFormat='Queue {0} menu'}">
                       <Button.Flyout>

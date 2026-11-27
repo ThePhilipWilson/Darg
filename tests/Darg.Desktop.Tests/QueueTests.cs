@@ -108,6 +108,36 @@ public class QueueTests
         }
     }
 
+    /// <summary>WOR-0244: a queue with a batch of 2 starts two cards in one go, holds the third while both are at work and
+    /// starts it once one moves to QA, with no QA check asked.</summary>
+    [AvaloniaFact]
+    public async Task A_batch_queue_starts_N_cards_together_and_the_next_when_one_leaves_work()
+    {
+        using var app = DargApp.Make();
+        using var turns = app.HoldTurns();
+        var a = app.Card("batch one", "Backlog");
+        var b = app.Card("batch two", "Backlog");
+        var c = app.Card("batch three", "Backlog");
+        await app.Start();
+        var asked = new List<string>();
+        app.Project.Queues!.Ask = prompt => { asked.Add(prompt); return Task.FromResult<string?>("BLOCKING: x"); };
+        await app.Api("show", new { project = "proj", section = "Board" });
+        await app.Api("queue-new", new { project = "proj", name = "Bulk" });
+        Assert.Equal("Bulk keeps 2 at work at once.", await app.Api("queue-batch", new { project = "proj", queue = "Bulk", batch = 2 }));
+        Assert.Equal(2, (int)JsonNode.Parse(await app.Api("queues", new { project = "proj" }))!.AsArray().Single()!["batch"]!);
+        await app.Api("queue-run", new { project = "proj", queue = "Bulk" });
+        await app.Until(() => Live(app, a.Id) is not null && Live(app, b.Id) is not null, "both batch cards to start");
+        await DargApp.Settle(1500);
+        Assert.Null(Live(app, c.Id));
+        Assert.Contains("2 at once", app.Project.Queues!.Queues.Single().Summary);
+
+        BoardStore.Move(app.BoardFolder, a.Id, app.ColumnId("QA Ready"));
+        await app.Until(() => Live(app, c.Id) is not null, "the third card to start once one left work", 40);
+        Assert.Empty(asked);
+        Assert.False(Queue(app).Paused);
+        turns.Release();
+    }
+
     [AvaloniaFact]
     public async Task A_card_that_fails_to_start_pauses_the_queue_and_Resume_goes_on_to_the_next()
     {

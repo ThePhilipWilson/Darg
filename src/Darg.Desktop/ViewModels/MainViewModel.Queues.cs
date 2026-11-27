@@ -24,6 +24,14 @@ public partial class MainViewModel
             a => { var (qs, q) = Queue(a); var gone = a.List("cards").Where(id => qs.Remove(q, id)).ToList(); return gone.Count == 0 ? $"None of those is in {q.Name}." : $"Took {string.Join(", ", gone)} out of {q.Name}."; });
         Add("queue-run", "run a queue, or carry on after a pause (moving on past the card that failed), as its ▶ Run / Resume does; {pause: true} pauses it: " +
                          "{project, queue, pause?}. Running starts agents: only when Philip asks.", RunQueue);
+        Add("queue-batch", "set how many cards a queue keeps at work at once: {project, queue, batch} (1 to 50; 1 is one at a time). With more, as soon as one leaves " +
+                           "work (QA, attention, done, failed or stopped) the next waiting card with no open blocker starts.",
+            a =>
+            {
+                var (qs, q) = Queue(a);
+                if (!int.TryParse(a.Need("batch"), out var n) || n < 1) throw new ApiError("batch is a number from 1.");
+                return $"{q.Name} keeps {qs.SetBatch(q, n)} at work at once.";
+            });
         Add("queue-delete", "delete a queue: {project, queue, cards?}. Its cards stay on their boards; with cards: true its unfinished cards are " +
                             "deleted too (each to its board's .deleted folder; done ones stay). Agents at work carry on. Deleting cards: only when Philip asks.",
             a =>
@@ -84,6 +92,7 @@ public partial class MainViewModel
     {
         ["name"] = q.Name,
         ["paused"] = q.Paused,
+        ["batch"] = q.Batch,
         ["why"] = q.Why,
         ["doing"] = qs.Queues.FirstOrDefault(r => r.Queue == q)?.Doing,
         ["cards"] = new JsonArray([.. q.Cards.Select(id => (JsonNode)new JsonObject

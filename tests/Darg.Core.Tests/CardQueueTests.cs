@@ -103,6 +103,55 @@ public sealed class CardQueueTests : IDisposable
         Assert.Equal(new QueueStep.Start("A-3"), w.Next(q));
     }
 
+    /// <summary>WOR-0244: a batch of 3 keeps 3 cards at work; a card leaving work (QA, failed, done) lets the next start at
+    /// once, with no QA check and no pause; a card with an open blocker is passed over until it clears.</summary>
+    [Fact]
+    public void A_batch_queue_keeps_N_at_work_and_starts_the_next_as_soon_as_one_leaves()
+    {
+        var w = new World(C("A-1"), C("A-2"), C("A-3"), C("A-4", blockedBy: ["A-3"]), C("A-5"), C("A-6"));
+        var q = new CardQueue { Name = "q", Cards = ["A-1", "A-2", "A-3", "A-4", "A-5", "A-6"], Batch = 3 };
+        QueueRun.Resume(q);
+        void Begin(string id) { QueueRun.Started(q, id); w.Move(id, "In Progress"); w.Agents[id] = QueueAgent.Working; }
+        foreach (var id in new[] { "A-1", "A-2", "A-3" }) { Assert.Equal(new QueueStep.Start(id), w.Next(q)); Begin(id); }
+        Assert.IsType<QueueStep.Wait>(w.Next(q)); // full
+
+        // A-2 reaches QA: no check is asked, the next free card (A-4 waits on A-3, so A-5) starts
+        w.Move("A-2", "QA Ready");
+        Assert.Equal(new QueueStep.Start("A-5"), w.Next(q));
+        Begin("A-5");
+        // A-1's agent fails: it leaves the batch, nothing pauses; A-4 still waits on A-3, so A-6
+        w.Agents["A-1"] = QueueAgent.Failed;
+        Assert.Equal(new QueueStep.Start("A-6"), w.Next(q));
+        Begin("A-6");
+        Assert.False(q.Paused);
+        Assert.Equal("failed", QueueRun.StateOf(q, "A-1", w.Cards["A-1"], QueueAgent.Failed));
+        var wait = Assert.IsType<QueueStep.Wait>(w.Next(q));
+        Assert.Contains("3 of 3", wait.Why);
+
+        // A-3 done: A-4 is free and starts
+        w.Move("A-3", "Done"); w.Agents.Remove("A-3");
+        Assert.Equal(new QueueStep.Start("A-4"), w.Next(q));
+        Begin("A-4");
+        foreach (var id in new[] { "A-4", "A-5", "A-6" }) w.Move(id, "Done");
+        Assert.IsType<QueueStep.Finished>(w.Next(q));
+    }
+
+    [Fact]
+    public void A_batch_queue_holds_when_every_card_left_waits_on_a_blocker_and_keeps_its_batch_in_the_file()
+    {
+        var w = new World(C("A-1"), C("A-2", blockedBy: ["A-1"]), C("A-3", blockedBy: ["A-1"]));
+        var q = new CardQueue { Name = "q", Cards = ["A-1", "A-2", "A-3"], Batch = 5 };
+        QueueRun.Resume(q);
+        Assert.Equal(new QueueStep.Start("A-1"), w.Next(q));
+        QueueRun.Started(q, "A-1"); w.Move("A-1", "In Progress"); w.Agents["A-1"] = QueueAgent.Working;
+        var wait = Assert.IsType<QueueStep.Wait>(w.Next(q));
+        Assert.Contains("A-2 on A-1", wait.Why);
+        var file = Path.Combine(_root, "q", "queues.json");
+        QueueStore.Save(file, [q]);
+        Assert.Equal(5, QueueStore.Load(file).Single().Batch);
+        Assert.Equal(1, new CardQueue().Batch);
+    }
+
     [Fact]
     public void Waiting_on_the_person_holds_its_place_and_the_queue_goes_on()
     {
