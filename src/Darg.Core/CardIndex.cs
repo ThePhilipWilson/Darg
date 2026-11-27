@@ -95,12 +95,28 @@ public static partial class CardIndex
     [System.Text.RegularExpressions.GeneratedRegex(@"\n##[ \t]+QA[ \t]+notes(?:[ \t]*[:(\-–—][^\n]*|[ \t]*)(?=\n|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex QaHeadingRx();
 
-    /// <summary>The reports filed for the card, newest first: the reports folder's, then its archive's (top level and each story's).</summary>
+    /// <summary>The reports filed for the card, newest first: the reports folder's, then its archive's (top level and each story's).
+    /// Opens only the files whose names may be the card's (<see cref="ReportCache.MayBeFor"/>), through the cache, so it
+    /// costs a listing of the folders, not a read of every report in them (WOR-0228).</summary>
     public static List<AgentReport> ReportsFor(string reportsFolder, string cardId)
     {
-        var all = ReportStore.List(reportsFolder)
-            .Concat(ReportStore.List(ReportArchive.Folder(reportsFolder)))
-            .Concat(ReportArchive.List(reportsFolder));
+        var all = new List<AgentReport>();
+        void From(string dir, string story)
+        {
+            if (!Directory.Exists(dir)) return;
+            try
+            {
+                foreach (var f in Directory.EnumerateFiles(dir, "*.md"))
+                    if (ReportCache.MayBeFor(Path.GetFileName(f), cardId) && ReportCache.Get(f) is { } r)
+                        all.Add(story.Length > 0 ? r with { Story = story } : r);
+            }
+            catch (Exception x) when (x is IOException or UnauthorizedAccessException) { }
+        }
+        From(reportsFolder, "");
+        var archive = ReportArchive.Folder(reportsFolder);
+        From(archive, "");
+        if (Directory.Exists(archive))
+            foreach (var d in Directory.GetDirectories(archive)) From(d, Path.GetFileName(d));
         return all.Where(r => r.Card.Equals(cardId, StringComparison.OrdinalIgnoreCase))
             .DistinctBy(r => Path.GetFullPath(r.File), StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(r => r.Date, StringComparer.Ordinal).ThenByDescending(r => r.Id, StringComparer.Ordinal).ToList();

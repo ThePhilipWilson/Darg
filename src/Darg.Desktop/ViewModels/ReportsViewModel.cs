@@ -99,9 +99,9 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
     public string? LatestFor(string card) => (_all.FirstOrDefault(r => r.Card == card) ?? _archived.FirstOrDefault(r => r.Card == card))?.File;
 
     /// <summary>Select a report by file, showing the list unfiltered if it was hidden.</summary>
-    public void Show(string file)
+    public async Task Show(string file)
     {
-        Reload();
+        await ReloadAsync();
         UnreadOnly = false;
         ShowArchived = _archived.Any(r => r.File == file);
         KindIndex = 0;
@@ -182,12 +182,59 @@ public partial class ReportsViewModel : ObservableObject, IDisposable
 
     List<AgentReport> _all = [];
 
-    public void Reload()
+    /// <summary>Read the folder again, off the UI thread (WOR-0228: reading it here held the window seconds at a time once
+    /// it had hundreds of reports), then show it. Asked again while a read is under way, it reads once more after that one.</summary>
+    public void Reload() => _ = ReloadAsync();
+
+    Task? _loading;
+    bool _again;
+    TaskCompletionSource? _next;
+
+    /// <summary>Done once a read started after this call has been shown.</summary>
+    public Task ReloadAsync()
     {
+        if (_loading is { IsCompleted: false })
+        {
+            _again = true;
+            return (_next ??= new TaskCompletionSource()).Task;
+        }
+        return _loading = LoadAll();
+    }
+
+    async Task LoadAll()
+    {
+        do
+        {
+            _again = false;
+            var waiting = _next;
+            _next = null;
+            try { await LoadOnce(); }
+            finally { waiting?.TrySetResult(); }
+        } while (_again);
+    }
+
+    async Task LoadOnce()
+    {
+        var folder = Folder;
+        var storyMap = StoryMap;
+        List<AgentReport> all, archived;
+        Dictionary<string, string>? map = null;
+        try
+        {
+            // reports come through ReportCache, so only files that changed since the last read are opened
+            (all, archived, map) = await Task.Run(() =>
+            {
+                Dictionary<string, string>? m = null;
+                try { m = new Dictionary<string, string>(storyMap?.Invoke() ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                return (ReportStore.List(folder), ReportArchive.List(folder), m);
+            });
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Can't read {folder}: {e.Message}"; return; }
         using var timing = StallWatch.Shared.Section("Reports.Reload");
-        _all = ReportStore.List(Folder);
-        _archived = ReportArchive.List(Folder);
-        try { _map = new Dictionary<string, string>(StoryMap?.Invoke() ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase); } catch (IOException) { }
+        _all = all;
+        _archived = archived;
+        if (map is not null) _map = map;
         OnPropertyChanged(nameof(ArchiveToggleText));
         if (ShowArchived && _archived.Count == 0) ShowArchived = false;
         Apply();

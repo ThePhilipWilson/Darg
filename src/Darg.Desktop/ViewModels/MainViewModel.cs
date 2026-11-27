@@ -658,7 +658,7 @@ public partial class ProjectViewModel : ObservableObject
             {
                 AgentFor = id => Agents?.ForCard(id),
                 ReportsFolder = Reports?.Folder,
-                OpenReport = file => { if (Reports is null) return; Reports.Show(file); Section = Section.Reports; },
+                OpenReport = file => { if (Reports is null) return; _ = Reports.Show(file); Section = Section.Reports; },
                 OpenCard = id => { if (Board?.OpenById(id) != true) return false; Section = Section.Board; return true; },
                 SendBack = (id, notes) => Board?.SendBackById(id, notes),
                 BoardsChanged = () => Board?.ReloadAll(),
@@ -849,7 +849,7 @@ public partial class ProjectViewModel : ObservableObject
                     .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() => Agents.CardFinished(card.Id)), TaskScheduler.Default);
             };
             Board.ReportFor = id => Reports!.LatestFor(id);
-            Board.OpenReport = file => { Reports!.Show(file); Section = Section.Reports; };
+            Board.OpenReport = file => { _ = Reports!.Show(file); Section = Section.Reports; };
             Reports!.ApproveCard = Board.Approve;
             Reports.CleanUpDone = () =>
             {

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -42,11 +43,7 @@ public static class ReportArchive
         if (!Directory.Exists(root)) return [];
         var all = new List<AgentReport>();
         foreach (var dir in Directory.GetDirectories(root))
-            foreach (var f in Directory.GetFiles(dir, "*.md"))
-            {
-                try { all.Add(ReportStore.Parse(File.ReadAllText(f), f) with { Story = Path.GetFileName(dir) }); }
-                catch (IOException) { }
-            }
+            all.AddRange(ReportCache.Folder(dir).Select(r => r with { Story = Path.GetFileName(dir) }));
         return all.OrderByDescending(r => r.Date, StringComparer.Ordinal).ThenByDescending(r => r.Id, StringComparer.Ordinal).ToList();
     }
 
@@ -84,6 +81,72 @@ public static class ReportArchive
     }
 }
 
+/// <summary>Reports as last read, by file (WOR-0228): a report is opened and parsed again only when its size or last
+/// write time has changed, so listing a folder of hundreds of reports costs a directory listing and a look at each
+/// file's times, not reading every one. Shared by every caller, on any thread.</summary>
+public static partial class ReportCache
+{
+    sealed record Entry(DateTime Written, long Length, AgentReport Report);
+    static readonly ConcurrentDictionary<string, Entry> Entries = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Raised with each file actually opened (not answered from the cache), for the tests.</summary>
+    internal static event Action<string>? Opened;
+
+    /// <summary>The report in <paramref name="file"/>, read again only if it changed since it was last read; null when it
+    /// is gone or can't be read (being written: the reports watcher brings it in when it lands).</summary>
+    public static AgentReport? Get(string file)
+    {
+        try
+        {
+            var before = new FileInfo(file);
+            if (!before.Exists) { Entries.TryRemove(file, out _); return null; }
+            var (written, length) = (before.LastWriteTimeUtc, before.Length);
+            if (Entries.TryGetValue(file, out var e) && e.Written == written && e.Length == length) return e.Report;
+            Opened?.Invoke(file);
+            var report = ReportStore.Parse(File.ReadAllText(file), file);
+            // kept only if it didn't change while being read, so a half-written file is read again once it lands
+            var after = new FileInfo(file);
+            if (after.Exists && after.LastWriteTimeUtc == written && after.Length == length) Entries[file] = new Entry(written, length, report);
+            return report;
+        }
+        catch (Exception x) when (x is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    /// <summary>Every report directly in <paramref name="folder"/>, in no order; forgets the files no longer there.</summary>
+    public static List<AgentReport> Folder(string folder)
+    {
+        if (!Directory.Exists(folder)) return [];
+        var files = Directory.GetFiles(folder, "*.md");
+        var all = new List<AgentReport>(files.Length);
+        foreach (var f in files) if (Get(f) is { } r) all.Add(r);
+        // a report moved to the archive or deleted: drop what was kept of it
+        var present = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
+        var dir = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        foreach (var key in Entries.Keys)
+            if (!present.Contains(key) && Path.GetDirectoryName(Path.GetFullPath(key)) is { } d && d.Equals(dir, StringComparison.OrdinalIgnoreCase))
+                Entries.TryRemove(key, out _);
+        return all;
+    }
+
+    /// <summary>Whether a report's file name may be the card's (WOR-0228): it names the card (<c>&lt;stamp&gt;-&lt;card&gt;.md</c>,
+    /// <c>-qa.md</c> or another suffix), or it names no card at all (a report named by hand), which is then opened to see.
+    /// A name carrying only other cards' ids is the other cards'.</summary>
+    public static bool MayBeFor(string fileName, string cardId)
+    {
+        var name = Path.GetFileNameWithoutExtension(fileName);
+        var any = false;
+        foreach (Match m in CardIdRx().Matches(name))
+        {
+            if (m.Value.Equals(cardId, StringComparison.OrdinalIgnoreCase)) return true;
+            any = true;
+        }
+        return !any;
+    }
+
+    [GeneratedRegex(@"(?<![A-Za-z0-9])[A-Za-z][A-Za-z0-9]*-\d+(?!\d)")]
+    private static partial Regex CardIdRx();
+}
+
 /// <summary>The three kinds of report the Reports section divides into (WOR-0091).</summary>
 public enum ReportKind { Finished, Investigation, Qa }
 
@@ -103,13 +166,8 @@ public static partial class ReportStore
     public static List<AgentReport> List(string folder)
     {
         if (!Directory.Exists(folder)) return [];
-        var all = new List<AgentReport>();
-        foreach (var f in Directory.GetFiles(folder, "*.md"))
-        {
-            try { all.Add(Parse(System.IO.File.ReadAllText(f), f)); }
-            catch (IOException) { } // being written: the watcher brings it in when it lands
-        }
-        return all.OrderByDescending(r => r.Date, StringComparer.Ordinal).ThenByDescending(r => r.Id, StringComparer.Ordinal).ToList();
+        // read through the cache: only reports that changed since the last listing are opened (WOR-0228)
+        return ReportCache.Folder(folder).OrderByDescending(r => r.Date, StringComparer.Ordinal).ThenByDescending(r => r.Id, StringComparer.Ordinal).ToList();
     }
 
     public static AgentReport Parse(string text, string file)
