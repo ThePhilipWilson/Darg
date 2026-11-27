@@ -152,8 +152,10 @@ public class AllBoardTests
             var name = Shown(app).Single(b => b.DataContext is CardViewModel c && c.Id == id && b.Text == c.BoardName);
             Assert.True(RightEdge(name) <= box.Bounds.Width + 0.5, $"{id}'s board name is cut at the edge: {RightEdge(name)} of {box.Bounds.Width}");
         }
-        Assert.True(HeadOf(IdOf(qa.Id))?.Stacked == true, "Run QA and Work on go under the id in a sub-column");
         app.Shot("narrow-sub-column");
+        var head = HeadOf(IdOf(qa.Id))!;
+        Assert.True(head.Stacked, $"Run QA and Work on go under the id in a sub-column: head {head.Bounds}, "
+            + string.Join(" | ", head.Children.Select(c => $"{c.GetType().Name} {c.Bounds} wants {c.DesiredSize.Width:0.#}")));
 
         board.Tabs.Single(t => t.Name == "Main").PickCommand.Execute(null);
         Assert.EndsWith(" · board Main", app.Main.FooterLine);

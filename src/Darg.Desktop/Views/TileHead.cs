@@ -1,11 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 
 namespace Darg.Desktop.Views;
 
 /// <summary>A card tile's top line (WOR-0214): its first child (the id, star, type…, a wrapping panel) on the left
-/// and its second (Run QA, Work on) on the right, as long as the first child's first item (the card's id) fits
-/// beside them whole. In a narrower tile (a state sub-column, a squeezed column) the buttons go on a line of their
+/// and its second (Run QA, Work on) on the right, as long as the first child's first item (the card's id) and each
+/// of its items that can't trim fit beside them whole (<see cref="MustFit"/>). In a narrower tile (a state sub-column, a squeezed column) the buttons go on a line of their
 /// own under it, so the id, which is what tells cards apart, is never cut.</summary>
 public sealed class TileHead : Panel
 {
@@ -19,14 +20,21 @@ public sealed class TileHead : Panel
     Control? Right => Children.Count > 1 ? Children[1] : null;
 
     /// <summary>The width the left part can't go below: its first visible item, whole, and the gap a wrapping panel
-    /// keeps after it (WOR-0222 moved that gap from the id's margin to the panel's ItemSpacing; counted here as before,
-    /// else in a narrow sub-column the id just fits and the rest of the left part piles up under it in a thin strip).</summary>
+    /// keeps after it; and every other item that can't trim (✦ Improve, a type or priority pill), whole, since a
+    /// wrapping panel clips an item wider than its line. A trimming text (the board name) fits any width.
+    /// WOR-0222: once the header's buttons were trimmed to fit a Feature pill, the id alone fit beside Run QA and
+    /// Work on in a narrow sub-column, and ✦ Improve, wrapped under it in a strip as wide as the id, was cut.</summary>
     static double MustFit(Control left)
     {
-        var first = left is Panel p ? p.Children.FirstOrDefault(c => c.IsVisible) : left;
-        if (first is null) return 0;
-        first.Measure(Size.Infinity);
-        return first.DesiredSize.Width + (left is WrapPanel w ? w.ItemSpacing : 0);
+        if (left is not Panel p) { left.Measure(Size.Infinity); return left.DesiredSize.Width; }
+        var shown = p.Children.Where(c => c.IsVisible).ToList();
+        if (shown.Count == 0) return 0;
+        double Whole(Control c) { c.Measure(Size.Infinity); return c.DesiredSize.Width; }
+        var need = Whole(shown[0]) + (p is WrapPanel w ? w.ItemSpacing : 0);
+        foreach (var c in shown.Skip(1))
+            if (c is not TextBlock { TextTrimming: var t } || t == TextTrimming.None)
+                need = Math.Max(need, Whole(c));
+        return need;
     }
 
     protected override Size MeasureOverride(Size available)

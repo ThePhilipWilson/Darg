@@ -49,14 +49,18 @@ public class TileWidthTests
         Assert.Equal("", app.Crashes());
     }
 
-    /// <summary>A thin Bug card in a 290 px column: id, star, ✦ Improve and the Bug pill fit beside ▶ Work on on one
-    /// line. They missed by 1 px, the 6 px right margin after the last item.</summary>
-    [AvaloniaFact]
-    public async Task A_thin_bugs_pill_stays_on_its_ids_line()
+    /// <summary>A thin card in a 290 px column: id, star, ✦ Improve and its type's pill fit beside ▶ Work on on one
+    /// line. A Bug's missed by 1 px, the 6 px right margin after the last item; then Story's by 2 px and Feature's by
+    /// 12, until the header's gaps and its buttons' padding were trimmed.</summary>
+    [AvaloniaTheory]
+    [InlineData("Bug")]
+    [InlineData("Story")]
+    [InlineData("Feature")]
+    public async Task A_thin_cards_type_pill_stays_on_its_ids_line(string type)
     {
         using var app = DargApp.Make();
         var board = BoardStore.CreateBoard(app.Boards, "Wide", DargApp.Columns, "WOR");
-        var bug = BoardStore.Create(board, "Agents on In Progress cards stop and don't restart", "Cards in In Progress stop.", type: "Bug");
+        var bug = BoardStore.Create(board, "Agents on In Progress cards stop and don't restart", "Cards in In Progress stop.", type: type);
         await app.Start();
         await app.Api("show", new { project = "proj", section = "Board" });
         app.Board.Tabs.Single(t => t.Name == "Wide").PickCommand.Execute(null);
@@ -64,18 +68,18 @@ public class TileWidthTests
 
         var tile = Tiles(app).Single(t => ((CardViewModel)t.DataContext!).Id == bug.Id);
         var vm = (CardViewModel)tile.DataContext!;
-        Assert.True(vm.ShowImprove && vm.CanStart && vm.IsBug, "the card shows ✦ Improve, ▶ Work on and its Bug pill");
+        Assert.True(vm.ShowImprove && vm.CanStart && vm.ShowsKind, $"the card shows ✦ Improve, ▶ Work on and its {type} pill");
         var head = tile.GetVisualDescendants().OfType<Views.TileHead>().Single();
         Assert.False(head.Stacked);
         Rect Box(Control c) => new(c.TranslatePoint(default, tile)!.Value, c.Bounds.Size);
         var id = tile.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == bug.Id);
         var pill = tile.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("kind"));
         var improve = tile.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "✦ Improve");
-        app.Shot("bug-header");
+        app.Shot($"{type.ToLowerInvariant()}-header");
         string Parts() => $"tile {tile.Bounds.Width:0.#}, head {head.Bounds}, left {head.Children[0].Bounds}, right {head.Children[1].Bounds}; "
             + string.Join(" | ", ((Panel)head.Children[0]).Children.Where(c => c.IsVisible).Select(c => $"{c.GetType().Name} {Box(c)} wants {c.DesiredSize.Width:0.#}"));
-        Assert.True(Box(pill).Top < Box(id).Bottom, $"the Bug pill {Box(pill)} is on a line under the id {Box(id)}: {Parts()}");
-        Assert.True(Box(pill).Left > Box(improve).Right, $"the Bug pill {Box(pill)} comes after ✦ Improve {Box(improve)}");
+        Assert.True(Box(pill).Top < Box(id).Bottom, $"the {type} pill {Box(pill)} is on a line under the id {Box(id)}: {Parts()}");
+        Assert.True(Box(pill).Left > Box(improve).Right, $"the {type} pill {Box(pill)} comes after ✦ Improve {Box(improve)}");
         Assert.Equal("", app.Crashes());
     }
 }
