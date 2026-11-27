@@ -23,6 +23,11 @@ public partial class AgentsViewModel : ObservableObject
         SelectedRepo = RepoChoices.FirstOrDefault();
         Agents.CollectionChanged += (_, _) => { Resort(); CountRunning(); };
         foreach (var r in AgentStore.List(_store)) Add(new AgentViewModel(r, _store), select: false);
+        // agents waiting to start when Darg last closed wait again, first asked first (WOR-0245)
+        // once the agents cut off mid-turn have resumed (RefreshCards, as the boards are read), so they count; a project
+        // with no boards has none to resume
+        _pending.AddRange(Agents.Where(a => a.IsPending).OrderBy(a => a.Created));
+        if (_pending.Count > 0) Dispatcher.UIThread.Post(() => { if (CardStillWorked is null) Fill(); }, DispatcherPriority.Background);
         Selected = Agents.FirstOrDefault();
         ReloadFlows();
         // older agents were named by cutting off their first message: give those a proper title
@@ -58,9 +63,10 @@ public partial class AgentsViewModel : ObservableObject
     {
         AgentState.NeedsYou => 0,
         AgentState.Starting or AgentState.Working => 1,
-        AgentState.Exited => 2,
-        AgentState.Idle => a.TurnFailed ? 2 : 3,
-        _ => 4, // saved
+        AgentState.Pending => 2, // after the ones at work, before how others ended
+        AgentState.Exited => 3,
+        AgentState.Idle => a.TurnFailed ? 3 : 4,
+        _ => 5, // saved
     };
 
     /// <summary>Set by the project: each card's board by card id (<c>BoardViewModel.CardBoards</c>).</summary>
@@ -160,6 +166,7 @@ public partial class AgentsViewModel : ObservableObject
         a.End();
         AgentStore.Delete(_store, a.Id);
         Agents.Remove(a);
+        Fill(); // a pending one forgotten leaves the line; one at work forgotten makes room
         AnyOutOfUsage = Agents.Any(x => x.CanContinueAfterReset);
         if (Selected == a) Selected = Agents.FirstOrDefault();
         if (Shown == a) Shown = Selected;
@@ -343,6 +350,7 @@ public partial class AgentsViewModel : ObservableObject
             if (_goWhenFinished.Contains(agent.Id) && Finished(agent) || TaskOver(agent)) Dispatcher.UIThread.Post(() => { if (Agents.Contains(agent) && (Finished(agent) && _goWhenFinished.Contains(agent.Id) || TaskOver(agent))) Forget(agent); });
             NeedingYou = Agents.Any(a => a.State == AgentState.NeedsYou);
             CountRunning();
+            Fill(); // one stopped: the next pending one starts (WOR-0245)
             if (agent.State == AgentState.NeedsYou) AgentNeedsYou?.Invoke(agent);
             // news from an agent that isn't the one open here stays marked in the list until it's looked at
             if (agent != Shown && agent.State is AgentState.NeedsYou or AgentState.Idle or AgentState.Exited) agent.Unseen = true;
@@ -390,6 +398,7 @@ public partial class AgentsViewModel : ObservableObject
         var done = DoneCardIds?.Invoke(); // every board's, not only the one shown: an agent's card may be on another (WOR-0153)
         foreach (var a in Agents) if (a.CardId is not null) a.CardDone = done?.Contains(a.CardId) == true;
         ResumeCutOff();
+        Fill(); // after the resumes: they are at work, and count against the cap (WOR-0245)
         // a task agent that isn't running has finished its task, ended or cut off: it leaves the list (a failed one stays)
         foreach (var a in Agents.Where(TaskOver).ToList()) Forget(a);
     }
@@ -412,7 +421,44 @@ public partial class AgentsViewModel : ObservableObject
     /// One waiting on the person isn't counted: it has the "!" instead.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AnyRunning))] public partial int RunningCount { get; set; }
     public bool AnyRunning => RunningCount > 0;
-    void CountRunning() => RunningCount = Agents.Count(a => a.Working);
+    void CountRunning() => RunningCount = Running();
+    /// <summary>The project's agents at work: starting (a model being picked too) or mid-turn. What its cap counts (WOR-0245).</summary>
+    int Running() => Agents.Count(a => a.Working);
+
+    // ---- The project's cap (WOR-0245, AgentCap): agents asked for past it wait here, first asked first started.
+    readonly List<AgentViewModel> _pending = [];
+    bool _filling;
+
+    /// <summary>The agents waiting to start, in the order they will.</summary>
+    public IReadOnlyList<AgentViewModel> Pending => _pending.Where(a => a.IsPending).ToList();
+
+    /// <summary>Start pending agents while the project has room under its cap (all of them with no cap), and tell the rest
+    /// their place in line. Run whenever an agent's state changes, one is forgotten, or the cap changes.</summary>
+    void Fill()
+    {
+        if (_filling || _closed) return;
+        _filling = true;
+        try
+        {
+            _pending.RemoveAll(a => !a.IsPending || !Agents.Contains(a));
+            for (var free = AgentCap.Free(project.MaxAgents, Running()); free > 0 && _pending.Count > 0; free--)
+            {
+                var next = _pending[0];
+                _pending.RemoveAt(0);
+                next.Go(); // starting from here, so it counts as at work at once
+            }
+            var running = Running();
+            for (var i = 0; i < _pending.Count; i++)
+            {
+                _pending[i].PendingPlace = i + 1;
+                _pending[i].Activity = AgentCap.Why(project.MaxAgents, running);
+            }
+        }
+        finally { _filling = false; }
+    }
+
+    /// <summary>The project's cap was changed (Setup, or the API's max-agents): raised or taken off, waiting agents start now.</summary>
+    public void CapChanged() => Fill();
     public event Action<AgentViewModel>? AgentNeedsYou;
     /// <summary>Something the person needs to hear about (a question, a permission ask, or the end of a long turn;
     /// see <see cref="Decisions"/>): (agent, what happened, detail).</summary>
@@ -427,7 +473,7 @@ public partial class AgentsViewModel : ObservableObject
     /// <summary>A QA agent (Run QA) is at work on the card, or waiting on the person: one that has finished its turn
     /// doesn't count, so Run QA is offered again (WOR-0110).</summary>
     public bool QaRunningFor(string cardId) =>
-        Agents.Any(a => a.CardId == cardId && a.Purpose == AgentPurposes.Qa && a.State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou);
+        Agents.Any(a => a.CardId == cardId && a.Purpose == AgentPurposes.Qa && a.State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou or AgentState.Pending);
 
     /// <summary>The flows this project can run: the shared ones (the instance's flows folder) and its own, read again on Reload.</summary>
     public ObservableCollection<Flow> Flows { get; } = [];
@@ -592,10 +638,14 @@ public partial class AgentsViewModel : ObservableObject
         var forJob = job with { Project = job.Project ?? project.Id };
         var profile = Task.Run(() => ModelProfiles.Pick(ModelProfiles.Load(), forJob));
         var folder = string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd;
+        // the project's cap reached, or others already waiting: it waits its turn (WOR-0245)
+        var wait = AgentCap.MustWait(project.MaxAgents, Running(), _pending.Count(a => a.IsPending));
         var agent = new AgentViewModel(folder, prompt, cardId, name ?? ChatTitle.Guess(prompt),
-            args: [.. ArtifactArgs(id), .. RepoArgs(folder), .. (dirs ?? []).SelectMany(d => new[] { "--add-dir", d })], id: id, profile: profile, mcp: McpLaunch)
+            args: [.. ArtifactArgs(id), .. RepoArgs(folder), .. (dirs ?? []).SelectMany(d => new[] { "--add-dir", d })], id: id, profile: profile, mcp: McpLaunch,
+            pending: wait)
             { StoreFolder = _store, Purpose = purpose };
         Add(agent, select: true);
+        if (wait) { _pending.Add(agent); Fill(); }
         if (cardId is not null && purpose is AgentPurposes.Work or AgentPurposes.Rework or AgentPurposes.Qa) ForgetReplacedBy(agent);
         agent.Save();
         if (name is null) _ = Retitle(agent, prompt); // a card's agent is already named for the card
@@ -677,7 +727,8 @@ public partial class AgentsViewModel : ObservableObject
     }
 }
 
-public enum AgentState { Starting, Working, NeedsYou, Idle, Exited, Saved }
+/// <summary>Pending (WOR-0245): asked for, but waiting to start under its project's cap (<see cref="AgentCap"/>).</summary>
+public enum AgentState { Starting, Working, NeedsYou, Idle, Exited, Saved, Pending }
 
 /// <summary>One agent and its transcript. Session events arrive on a reader thread and are applied on
 /// the UI thread.</summary>
@@ -725,8 +776,12 @@ public partial class AgentViewModel : ObservableObject
     readonly List<string> _args;
     DateTime _created = DateTime.Now;
     public DateTime Created => _created;
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou), nameof(Open), nameof(IsDone), nameof(IsFailed))]
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText), nameof(Working), nameof(NeedsYou), nameof(Open), nameof(IsDone), nameof(IsFailed), nameof(IsPending))]
     public partial AgentState State { get; set; }
+    /// <summary>Waiting to start under its project's cap (WOR-0245): asked for, but no session yet.</summary>
+    public bool IsPending => State == AgentState.Pending;
+    /// <summary>Its place among the project's pending agents, from 1 (set by the project as the line moves); 0: not pending.</summary>
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText))] public partial int PendingPlace { get; set; }
     /// <summary>Darg closed its idle process to free memory (WOR-0209): listed and resumable, not finished.</summary>
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(StateText))] public partial bool Resting { get; set; }
 
@@ -861,7 +916,7 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>Whether the agent still has a claim on its card: at work, waiting on the person, or waiting out a usage limit.
     /// One that has finished its turn, failed, or is only a saved session (closed, resumable) doesn't, so the card
     /// can be worked on, sent back or sent to QA again.</summary>
-    public bool IsLiveOnCard => State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou || ((LimitHit || ContinueAt is not null) && State is AgentState.Idle or AgentState.Saved);
+    public bool IsLiveOnCard => State is AgentState.Starting or AgentState.Working or AgentState.NeedsYou or AgentState.Pending || ((LimitHit || ContinueAt is not null) && State is AgentState.Idle or AgentState.Saved);
     /// <summary>Its turn ended in an error, or its session died or never started.</summary>
     public bool IsFailed => (State == AgentState.Idle && TurnFailed) || State == AgentState.Exited;
     public string StateText => State switch
@@ -869,6 +924,7 @@ public partial class AgentViewModel : ObservableObject
         AgentState.Starting => "starting",
         AgentState.Working => Steps switch { 0 => "working", 1 => "working · 1 step", _ => $"working · {Steps} steps" },
         AgentState.NeedsYou => "needs you",
+        AgentState.Pending => AgentCap.State(PendingPlace),
         AgentState.Idle or AgentState.Saved when ContinueAt is { } at => $"out of usage · carries on {When(at)}",
         AgentState.Idle when LimitHit => "out of usage",
         AgentState.Idle => TurnFailed ? "stopped with an error" : "done",
@@ -1017,9 +1073,11 @@ public partial class AgentViewModel : ObservableObject
     /// <param name="spare">WOR-0235: offered the folder and full arguments its first session would start with, gives back a
     /// session already started with exactly those (a spare, Fettle's), or null to start one as ever.</param>
     public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null, string? shown = null, string? id = null,
-        Task<ProfilePick?>? profile = null, Func<IReadOnlyList<string>>? mcp = null, Func<string, IReadOnlyList<string>, AgentSession?>? spare = null)
+        Task<ProfilePick?>? profile = null, Func<IReadOnlyList<string>>? mcp = null, Func<string, IReadOnlyList<string>, AgentSession?>? spare = null,
+        bool pending = false)
     {
         if (id is not null) Id = id;
+        if (pending) { _slot = new(TaskCreationOptions.RunContinuationsAsynchronously); PendingMessage = prompt; State = AgentState.Pending; }
         McpArgs = mcp;
         _takeSpare = spare;
         _firstClock = new AgentTimings(Id); // from now, so the model pick counts in its first turn (WOR-0206)
@@ -1032,8 +1090,51 @@ public partial class AgentViewModel : ObservableObject
         var visible = shown ?? prompt;
         Name = name ?? (visible.Length > 40 ? visible[..40].TrimEnd() + "…" : visible);
         Items.Add(new UserItem(visible));
-        if (profile is null) Begin(prompt, resume: false);
-        else StartOnProfile(profile, prompt);
+        if (profile is null && _slot is null) Begin(prompt, resume: false);
+        else StartOnProfile(profile ?? Task.FromResult<ProfilePick?>(null), prompt);
+    }
+
+    // ---- Pending (WOR-0245): its project had as many agents at work as its cap allows when it was asked for. It waits,
+    // its model picked meanwhile, until the project lets it go (Go) as others stop; its first message is saved with it,
+    // so a restart keeps it waiting in its place.
+
+    TaskCompletionSource? _slot;   // completed when it may start; null: it was never held, or has been let go
+    /// <summary>The first message it will be sent once it starts; null: not pending.</summary>
+    public string? PendingMessage { get; private set; }
+
+    /// <summary>The project lets it start (a slot came free, or Start now was pressed). It shows as starting at once, so
+    /// the project counts it as at work before its session is up.</summary>
+    public void Go()
+    {
+        if (_slot is not { } slot) return;
+        _slot = null;
+        PendingPlace = 0;
+        if (State == AgentState.Pending) { State = AgentState.Starting; Activity = "Starting…"; }
+        slot.TrySetResult();
+    }
+
+    /// <summary>Start now: the person starts a pending agent past the cap.</summary>
+    [RelayCommand]
+    void StartNow() => Go();
+
+    /// <summary>Wait for <see cref="Go"/>. False: it was ended meanwhile (forgotten, or its project closed).</summary>
+    async Task<bool> WaitForSlot(string message)
+    {
+        if (_slot is not { } slot) return !_ended;
+        PendingMessage = message;
+        State = AgentState.Pending;
+        Save();
+        await slot.Task;
+        PendingMessage = null;
+        return !_ended;
+    }
+
+    /// <summary>A pending agent loaded from an earlier run: it waits again, then sends what it was to start with.</summary>
+    async void WaitAgain(string message)
+    {
+        if (!await WaitForSlot(message)) return;
+        Begin(message, resume: false);
+        Save();
     }
 
     /// <summary>The model profile it started on ("Deep"), if one was picked.</summary>
@@ -1052,7 +1153,8 @@ public partial class AgentViewModel : ObservableObject
     {
         ProfilePick? pick = null;
         _firstClock?.PickStarted();
-        if (!profile.IsCompleted)
+        if (_slot is not null) State = AgentState.Pending; // its model is picked while it waits (WOR-0245)
+        else if (!profile.IsCompleted)
         {
             State = AgentState.Starting;
             Activity = "Picking a model…";
@@ -1073,6 +1175,7 @@ public partial class AgentViewModel : ObservableObject
             Profile = pick.Profile.Name;
             Items.Add(new NoteItem($"Profile {pick.Profile.Name} ({pick.Profile.Summary}) · {pick.Why}", false));
         }
+        if (!await WaitForSlot(prompt)) return;
         Begin(prompt, resume: false);
         Save();
     }
@@ -1088,6 +1191,11 @@ public partial class AgentViewModel : ObservableObject
     /// <summary>Send a message that shows as <paramref name="shown"/> but goes to Claude as <paramref name="sent"/>.</summary>
     public void Say(string shown, string sent)
     {
+        if (State == AgentState.Pending)
+        {
+            Items.Add(new NoteItem("It hasn't started yet: it is waiting for one of this project's agents to stop. Press Start now to start it, then send this.", true));
+            return;
+        }
         Items.Add(new UserItem(shown));
         if (_session is null)
         {
@@ -1118,6 +1226,13 @@ public partial class AgentViewModel : ObservableObject
         Activity = OneLine(Items.OfType<TextItem>().LastOrDefault()?.Text);
         State = AgentState.Saved;
         _autoResumed = r.AutoResumed;
+        // it was waiting to start under its project's cap (WOR-0245): it waits again, in its place
+        if (r.Pending is { } first && SessionId is null)
+        {
+            _slot = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            WaitAgain(first);
+            return;
+        }
         // it was waiting for the usage limit to reset when Darg closed: it still is (or carries on now)
         if (r.ContinueAt is { } at) { LimitHit = true; WaitFor(at); }
         else CutOff = WasCutOff();
@@ -1249,7 +1364,7 @@ public partial class AgentViewModel : ObservableObject
             {
                 Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Purpose = Purpose, Project = Project, Plan = Plan, SessionId = SessionId, Args = [.. _args],
                 Model = _model, Effort = _effort, Mode = _mode, ModelByHand = _modelByHand, EffortByHand = _effortByHand, ContinueAt = ContinueAt, AutoResumed = _autoResumed,
-                NoHooks = NoHooks, Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
+                NoHooks = NoHooks, Pending = PendingMessage, Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
             });
         }
         catch (Exception) { /* a failed save must never take the agent down */ }
@@ -1558,6 +1673,7 @@ public partial class AgentViewModel : ObservableObject
     {
         _ended = true;
         if (stopWaiting) _waitTimer?.Stop(); // ContinueAt stays saved: shown again, it waits again
+        _slot?.TrySetResult(); // a pending one never starts now (let go, it sees it has ended)
         var s = _session;
         if (s is null) return;
         _session = null;

@@ -62,6 +62,9 @@ public sealed class AgentRecord
     /// <summary>Darg resumed it by itself after it was cut off mid-turn (WOR-0221), and that turn hasn't ended yet: cut off
     /// again, it is left saved rather than resumed again, so a crash loop can't keep restarting it.</summary>
     public bool AutoResumed { get; set; }
+    /// <summary>Waiting to start under its project's cap (WOR-0245, <see cref="AgentCap"/>): the first message it will be
+    /// sent when it starts. Loaded again, it waits again, in its place by <see cref="Created"/>. Null: it has started.</summary>
+    public string? Pending { get; set; }
     public DateTime Created { get; set; }
     public DateTime Updated { get; set; }
     public List<ItemRecord> Items { get; set; } = [];

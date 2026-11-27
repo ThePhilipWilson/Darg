@@ -125,6 +125,12 @@
                   IsVisible="{Binding Flow.Running, FallbackValue=False}" ToolTip.Tip="Nothing more is handed on; the agent at work finishes its turn"/>
           <TextBlock Classes="dim small" Foreground="{DynamicResource Accent}" Text="{Binding Flow.Status, StringFormat='Flow · {0}', FallbackValue=''}" VerticalAlignment="Center"/>
         </DockPanel>
+        <!-- waiting to start under the project's cap (WOR-0245): it starts by itself as others stop, or now past the cap -->
+        <DockPanel IsVisible="{Binding IsPending}">
+          <Button DockPanel.Dock="Right" Classes="primary" Content="▶ Start now" Command="{Binding StartNowCommand}" Padding="8,2"
+                  AutomationProperties.Name="Start now" ToolTip.Tip="Start it now, past the project's most agents at once"/>
+          <TextBlock Classes="small" Foreground="{DynamicResource Accent}" Text="{Binding Activity}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+        </DockPanel>
         <!-- out of usage: Darg waits for the limit to reset and then tells the agent to carry on (no AI runs meanwhile) -->
         <DockPanel IsVisible="{Binding LimitHit}">
           <Button DockPanel.Dock="Right" Classes="primary" Content="↻ Continue after reset" Command="{Binding ContinueAfterResetCommand}" Padding="8,2"

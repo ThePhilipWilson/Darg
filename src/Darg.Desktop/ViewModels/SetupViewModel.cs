@@ -100,6 +100,16 @@ public partial class SetupViewModel : ObservableObject
 
     /// <summary>Whether two project settings are the same (so the open project can stay as it is).</summary>
     public static bool Same(ProjectConfig a, ProjectConfig b) => JsonSerializer.Serialize(a) == JsonSerializer.Serialize(b);
+
+    /// <summary>Whether two project settings differ at most in the cap on agents at once (WOR-0245): that one is taken by the
+    /// open project as it is, so changing it never closes the agents it governs.</summary>
+    public static bool SameButCap(ProjectConfig a, ProjectConfig b)
+    {
+        var cap = b.MaxAgents;
+        b.MaxAgents = a.MaxAgents;
+        try { return Same(a, b); }
+        finally { b.MaxAgents = cap; }
+    }
 }
 
 /// <summary>One project's settings, being edited.</summary>
@@ -119,6 +129,8 @@ public partial class ProjectSetup : ObservableObject
     [ObservableProperty] public partial string CommitsText { get; set; }
     /// <summary>The project's plugin folders, one per line (HOM-0001).</summary>
     [ObservableProperty] public partial string PluginsText { get; set; }
+    /// <summary>The most agents at work at once (WOR-0245): a number, or empty for no limit.</summary>
+    [ObservableProperty] public partial string MaxAgentsText { get; set; }
     /// <summary>What was worked out from the folder, for a project just added from one.</summary>
     public string Found { get; init; } = "";
     public bool HasFound => Found.Length > 0;
@@ -139,6 +151,7 @@ public partial class ProjectSetup : ObservableObject
         CommandsText = SavedCommand.Render(p.Commands);
         CommitsText = Core.Commits.Render(p.Commits);
         PluginsText = string.Join(Environment.NewLine, p.Plugins ?? []);
+        MaxAgentsText = AgentCap.Render(p.MaxAgents);
         _keep = p;
         foreach (var f in Core.Features.All) Features.Add(new FeatureTick(f, p.Uses(f)));
         Swatches = SetupViewModel.Palette.Select(c => new SwatchChoice(new SolidColorBrush(Avalonia.Media.Color.Parse(c)), new RelayCommand(() => Color = c))).ToList();
@@ -161,6 +174,7 @@ public partial class ProjectSetup : ObservableObject
             Commits = Core.Commits.ParseText(CommitsText),
             Preview = _keep.Preview, // not editable here yet: set in instance.json
             Mcp = _keep.Mcp, // ticked on the Context page (WOR-0208)
+            MaxAgents = AgentCap.Parse(MaxAgentsText),
             Plugins = PluginsText.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) is { Length: > 0 } plugins ? plugins.ToList() : null,
             // every feature ticked is stored as "all", so features added later are on by default
             Features = on.Count == Core.Features.All.Length ? [] : on,

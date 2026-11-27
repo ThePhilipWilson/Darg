@@ -156,6 +156,9 @@ public sealed class ProjectConfig
     /// <summary>The MCP servers its agents start (WOR-0208, <see cref="McpServers"/>): those ticked on its Context page, with
     /// their definitions kept, and those on by default it unticked. Not set: only the ones on by default.</summary>
     public McpChoice? Mcp { get; set; }
+    /// <summary>The most agents of this project at work at once (WOR-0245, <see cref="AgentCap"/>): one more waits, pending,
+    /// and starts by itself once one stops. Null or 0: no cap.</summary>
+    public int? MaxAgents { get; set; }
 
     public string? NotesFolder() => Notes ?? (Boards is null ? null : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(Boards))!, "notes"));
     /// <summary>Features this project uses; an empty list means all of them.</summary>

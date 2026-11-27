@@ -103,6 +103,8 @@ public partial class MainViewModel
                      "{} says which is on. Only when Philip asks.", SetThemeApi);
         Add("optimise-tokens", "the header's Optimise tokens toggle: {on: true|false} turns it on (every agent one model down and at no more than " +
                                "medium effort, running ones from their next turn) or off; {} says whether it's on. Only when Philip asks.", OptimiseTokensApi);
+        Add("max-agents", "a project's most agents at work at once (WOR-0245; Setup's box): {project} says it and how many are at work and waiting; " +
+                          "{project, max} sets it (0 or none: no limit). Past it, a new agent waits to start, then starts by itself as one stops. Only when Philip asks.", MaxAgentsApi);
         Add("push", "phone notifications through ntfy (AND-0006): {} says how they stand; {topic: new} turns them on with a fresh secret topic " +
                     "(or {topic, server?, token?} for a given one), {off: true} turns them off. Philip subscribes to the topic in the ntfy app; a card waiting on a decision " +
                     "shows its options as buttons there. Only when Philip asks.", PushApi);
@@ -146,6 +148,23 @@ public partial class MainViewModel
         };
         var why = SetOptimiseTokens(on);
         return $"Optimise tokens is {(on ? "on" : "off")}." + (why is null ? "" : $" Couldn't save it: {why}");
+    }
+
+    string MaxAgentsApi(ApiArgs a)
+    {
+        var p = FindProject(a);
+        if (a.Get("max") is { } text)
+        {
+            var t = text.Trim();
+            var max = AgentCap.Parse(t);
+            if (max is null && !(t is "" or "0" || t.Equals("none", StringComparison.OrdinalIgnoreCase)))
+                throw new ApiError($"max takes a whole number (0 or none for no limit), not \"{text}\".");
+            if (SetMaxAgents(p, max) is { } why) throw new ApiError(why);
+        }
+        var cap = AgentCap.Of(p.Config.MaxAgents);
+        var running = p.Agents?.RunningCount ?? 0;
+        var waiting = p.Agents?.Pending.Count ?? 0;
+        return $"{p.Name}: {(cap is { } c ? $"at most {c} {(c == 1 ? "agent" : "agents")} at once" : "no limit on agents at once")}; {running} at work, {waiting} waiting to start.";
     }
 
     ProjectViewModel FindProject(ApiArgs a)
@@ -621,6 +640,8 @@ public partial class MainViewModel
     {
         var (_, agent) = FindAgent(a.Need("id"));
         var text = a.Need("text");
+        if (agent.IsPending)
+            throw new ApiError($"\"{agent.Name}\" hasn't started yet ({agent.StateText}): it starts once one of the project's agents stops. Send when it has started.");
         if (agent.State is AgentState.Starting or AgentState.Working && !string.Equals(a.Get("queue"), "true", StringComparison.OrdinalIgnoreCase))
             throw new ApiError($"\"{agent.Name}\" is mid-turn ({agent.StateText}); send when it's done, or with queue true for it to read mid-turn.");
         agent.Say(text, text);

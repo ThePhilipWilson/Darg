@@ -2,7 +2,7 @@ namespace Darg.Core;
 
 /// <summary>Where a card stands, beyond its column (WOR-0214): what the board's split view sorts a column's cards into,
 /// a narrow sub-column per state. In the order the sub-columns are drawn, left to right.</summary>
-public enum CardState { Blocked, Ready, Working, RunningQa, NeedsYou, Failed }
+public enum CardState { Blocked, Ready, Waiting, Working, RunningQa, NeedsYou, Failed }
 
 /// <summary>A card's state, worked out each time from what is live (its agent, a QA run, its blockers, its column), never
 /// stored; the split view's sub-columns, one per state a column has cards in; and the merged columns of the All board.</summary>
@@ -10,9 +10,12 @@ public static class CardStates
 {
     /// <summary>A card's state. An agent asking (a question, a permission) comes first, then a QA run at work, then any
     /// other agent at work; with none at work, a card in the attention column waits on you, a failed agent says so, an
-    /// open blocker holds it, and anything else is ready.</summary>
-    public static CardState Of(bool agentWorking, bool agentNeedsYou, bool agentFailed, bool qaRunning, bool inAttention, bool blocked) =>
+    /// open blocker holds it, and anything else is ready. An agent waiting to start under the project's cap (WOR-0245)
+    /// is the card's state while it waits.</summary>
+    public static CardState Of(bool agentWorking, bool agentNeedsYou, bool agentFailed, bool qaRunning, bool inAttention, bool blocked,
+        bool agentWaiting = false) =>
         agentNeedsYou ? CardState.NeedsYou
+        : agentWaiting ? CardState.Waiting
         : qaRunning ? CardState.RunningQa
         : agentWorking ? CardState.Working
         : inAttention ? CardState.NeedsYou
@@ -26,6 +29,7 @@ public static class CardStates
     {
         CardState.Blocked => "Blocked",
         CardState.Ready => kind == "qa" ? "QA ready" : "Ready to go",
+        CardState.Waiting => "Waiting to start",
         CardState.Working => "Agent working",
         CardState.RunningQa => "Running QA",
         CardState.NeedsYou => "Needs you",

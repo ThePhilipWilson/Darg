@@ -1722,7 +1722,7 @@ public sealed partial class CardViewModel : ObservableObject
     public bool ShowImprove => CanStart && Quality.Stars < TicketScore.Max;
     /// <summary>Where it stands for the split view (WOR-0214), from its agent, a QA run, its column and its blockers as they are now.</summary>
     public CardState State => CardStates.Of(Agent?.Working == true, Agent?.NeedsYou == true, Agent?.IsFailed == true,
-        Board.QaRunning?.Invoke(Id) == true, Board.InAttention(Card), HasBlockers);
+        Board.QaRunning?.Invoke(Id) == true, Board.InAttention(Card), HasBlockers, Agent?.IsPending == true);
     /// <summary>Its board's name, on its tile on the All board.</summary>
     public string BoardName => Board.SelectedBoard ?? "";
     [ObservableProperty] public partial bool ShowsBoard { get; set; }

@@ -350,6 +350,28 @@ public partial class MainViewModel : ObservableObject
         return settings.Save() is { } why ? $"Showing {theme.Name}, but couldn't save it: {why}" : null;
     }
 
+    /// <summary>A project's cap on agents at once (WOR-0245), set and saved to instance.json; its waiting agents start now if
+    /// it was raised or taken off. Null when saved, else why it wasn't (the cap still holds for this run).</summary>
+    public string? SetMaxAgents(ProjectViewModel p, int? max)
+    {
+        p.Config.MaxAgents = AgentCap.Of(max);
+        p.Agents?.CapChanged();
+        try
+        {
+            var config = InstanceConfig.Load();
+            if (config.Projects.FirstOrDefault(c => string.Equals(c.Id, p.Config.Id, StringComparison.OrdinalIgnoreCase)) is { } saved)
+            {
+                saved.MaxAgents = p.Config.MaxAgents;
+                config.Save();
+            }
+            return null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            return $"Couldn't save it: {e.Message}";
+        }
+    }
+
     /// <summary>A project tab dragged to a new place: the order is saved, so it opens that way next time.</summary>
     public void MoveProject(int from, int to)
     {
@@ -368,7 +390,12 @@ public partial class MainViewModel : ObservableObject
         var old = Projects.ToDictionary(p => p.Config.Id, StringComparer.OrdinalIgnoreCase);
         var keep = new List<ProjectViewModel>();
         foreach (var c in config.Projects)
-            keep.Add(old.TryGetValue(c.Id, out var vm) && SetupViewModel.Same(vm.Config, c) ? vm : Make(c));
+        {
+            if (!old.TryGetValue(c.Id, out var vm) || !SetupViewModel.SameButCap(vm.Config, c)) { keep.Add(Make(c)); continue; }
+            // only its cap on agents at once changed (WOR-0245): the open project takes it, its agents carry on
+            if (vm.Config.MaxAgents != c.MaxAgents) { vm.Config.MaxAgents = c.MaxAgents; vm.Agents?.CapChanged(); }
+            keep.Add(vm);
+        }
         foreach (var gone in Projects.Where(p => !keep.Contains(p)).ToList()) gone.Close();
         var selectedId = Selected?.Config.Id;
         Projects.Clear();

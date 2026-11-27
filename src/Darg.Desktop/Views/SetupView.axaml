@@ -104,6 +104,12 @@
         </StackPanel>
 
         <StackPanel Spacing="4">
+          <TextBlock Text="Most agents at work at once. One more asked for (Work on, Work All, a queue, a flow, Improve, QA, a chat) waits, shown as waiting to start, and starts by itself when one stops, first asked first. Agents waiting on you don't count. Empty: no limit." Classes="dim small" TextWrapping="Wrap"/>
+          <TextBox Text="{Binding MaxAgentsText}" Width="80" HorizontalAlignment="Left" PlaceholderText="no limit"
+                   AutomationProperties.Name="Most agents at once"/>
+        </StackPanel>
+
+        <StackPanel Spacing="4">
           <TextBlock Text="Plugins, one folder per line. Each folder holds a plugin.json and a page; it shows as a section on this project's rail." Classes="dim small" TextWrapping="Wrap"/>
           <TextBox Text="{Binding PluginsText}" Classes="mono" AcceptsReturn="True" MinHeight="34"
                    PlaceholderText="D:/Projects/home/darg-plugins/disk"/>
