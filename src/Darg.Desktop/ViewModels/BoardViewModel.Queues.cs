@@ -17,23 +17,32 @@ public partial class BoardViewModel
     /// <summary>Start an agent on a queued card as Work on does, on whichever of the project's boards holds it, without
     /// changing the board on screen: it moves to its board's working column if it was in the backlog or the first column.
     /// Null when started, else why not.</summary>
-    public string? StartQueued(string id)
+    public string? StartQueued(string id, string? profile = null, string? flowName = null)
     {
         if (_project.Boards is null || WorkOn is null) return "the project has no boards or agents";
         if (AgentFor?.Invoke(id) is not null) return null; // at work already: the queue waits on it
         if (CardIndex.Find(_project.Boards, id) is not { } found) return "no board has it";
+        // a queue's flow runs in place of the single agent (WOR-0246): the flow file is read again, as the card menu's Run flow does (its handler reloads the files)
+        Flow? flow = null;
+        if (flowName is not null)
+        {
+            flow = FlowList().FirstOrDefault(f => f.Name.Equals(flowName, StringComparison.OrdinalIgnoreCase));
+            if (flow is null || RunFlow is null) return $"no flow {flowName}";
+        }
         // a board on screen starts it as its own Work on does, and redraws
         var row = Root.Rows.FirstOrDefault(r => r.SelectedBoard == found.Board);
         if (row?._board?.AllCards.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase)) is { } card)
         {
-            row.StartWork(card, [], show: false, reload: true);
+            if (flow is not null) row.StartFlow(card, flow, show: false);
+            else row.StartWork(card, [], show: false, reload: true, profile);
             return AgentFor?.Invoke(id) is null ? "no agent started" : null;
         }
         var folder = Path.Combine(_project.Boards, found.Board);
         try
         {
             var board = BoardStore.Load(folder);
-            WorkOn(found.Card, found.File, [], false);
+            if (flow is not null) RunFlow!(found.Card, found.File, flow, false);
+            else WorkOn(found.Card, found.File, [], false, profile);
             var working = BulkStart.Working(board.Columns);
             var place = BoardStore.PlaceOf(found.Card.Status, board.Columns);
             if (working is not null && (place == Core.Board.Backlog || place == board.Columns[0].Id) && place != working.Id)

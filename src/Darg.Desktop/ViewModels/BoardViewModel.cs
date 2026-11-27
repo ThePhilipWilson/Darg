@@ -49,7 +49,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     public Func<string, bool>? QaRunning { get => _parent is null ? field : _parent.QaRunning; set; }
     /// <summary>Set by the project: start an agent on a card. Passed: the card's file path, the ids of cards
     /// other agents are being started on at the same time, and whether to show the agent.</summary>
-    public Action<Card, string, IReadOnlyList<string>, bool>? WorkOn { get => _parent is null ? field : _parent.WorkOn; set; }
+    public Action<Card, string, IReadOnlyList<string>, bool, string?>? WorkOn { get => _parent is null ? field : _parent.WorkOn; set; }
     /// <summary>Set by the project: start an agent that QAs a card in QA (WOR-0108): the card's file path.</summary>
     public Action<Card, string>? RunQa { get => _parent is null ? field : _parent.RunQa; set; }
     /// <summary>Picked card ids. Only ever cards that are showing: a filter that hides one unpicks it, so a
@@ -61,7 +61,7 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     /// <summary>Set by the project: the flows a card can be run through.</summary>
     public Func<IReadOnlyList<Flow>>? Flows { get => _parent is null ? field : _parent.Flows; set; }
     /// <summary>Set by the project: run a flow on a card (passed the card's file path).</summary>
-    public Action<Card, string, Flow>? RunFlow { get => _parent is null ? field : _parent.RunFlow; set; }
+    public Action<Card, string, Flow, bool>? RunFlow { get => _parent is null ? field : _parent.RunFlow; set; }
     /// <summary>Set by the project: show an agent.</summary>
     public Action<AgentViewModel>? OpenAgent { get => _parent is null ? field : _parent.OpenAgent; set; }
     /// <summary>Set by the project: start an agent and show it. Passed: the prompt, its folder, its name and more
@@ -1357,13 +1357,13 @@ public partial class BoardViewModel : ObservableObject, IDisposable
         return true;
     }
 
-    void StartWork(Card card, IReadOnlyList<string> alongside, bool show, bool reload)
+    void StartWork(Card card, IReadOnlyList<string> alongside, bool show, bool reload, string? profile = null)
     {
         if (Folder is null || _board is null || WorkOn is null) return;
         using var timing = StallWatch.Shared.Section("StartWork");
         var working = _board.Columns.FirstOrDefault(c => c.Name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) ?? _board.Columns.FirstOrDefault();
         var place = BoardStore.PlaceOf(card.Status, _board.Columns);
-        WorkOn(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)), alongside, show);
+        WorkOn(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)), alongside, show, profile);
         if (working is not null && (place == Board.Backlog || place == _board.Columns[0].Id) && place != working.Id)
             Move(card.Id, working.Id, reload: reload);
         else if (reload) Reload();
@@ -1393,14 +1393,17 @@ public partial class BoardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Run a flow on a card: like Work on, it goes to the working column if it was waiting.</summary>
-    public void StartFlow(CardViewModel card, Flow flow)
+    public void StartFlow(CardViewModel card, Flow flow) => StartFlow(card.Card, flow, show: true);
+
+    /// <summary>Run a flow on a card; <paramref name="show"/> takes the screen to the Agents section (a queue's doesn't, WOR-0246).</summary>
+    void StartFlow(Card card, Flow flow, bool show)
     {
         if (Folder is null || _board is null || RunFlow is null) return;
         var working = _board.Columns.FirstOrDefault(c => c.Name.Equals("In Progress", StringComparison.OrdinalIgnoreCase)) ?? _board.Columns.FirstOrDefault();
-        var place = BoardStore.PlaceOf(card.Card.Status, _board.Columns);
-        RunFlow(card.Card, Path.GetFullPath(Path.Combine(Folder, "items", card.Card.File)), flow);
+        var place = BoardStore.PlaceOf(card.Status, _board.Columns);
+        RunFlow(card, Path.GetFullPath(Path.Combine(Folder, "items", card.File)), flow, show);
         if (working is not null && (place == Board.Backlog || place == _board.Columns[0].Id) && place != working.Id)
-            Move(card.Card.Id, working.Id);
+            Move(card.Id, working.Id);
         else Reload();
     }
 

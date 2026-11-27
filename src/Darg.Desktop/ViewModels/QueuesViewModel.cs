@@ -24,6 +24,9 @@ public partial class QueuesViewModel : ObservableObject
     /// <summary>Start an agent on a card as Work on does (the board's <see cref="BoardViewModel.StartQueued"/>): null
     /// when started, else why not.</summary>
     public Func<string, string?>? Start { get; set; }
+    /// <summary>Start a card for a queue that names a profile or a flow (WOR-0246): the card, the profile, the flow; null when
+    /// started, else why not. Without it (or for a queue that names neither) <see cref="Start"/> is used.</summary>
+    public Func<string, string?, string?, string?>? StartWith { get; set; }
     /// <summary>The board redraws its tiles (their queue chips and menus, and which cards sit in the lanes).</summary>
     public Action? Changed { get; set; }
     /// <summary>A queued card's full tile from the board on screen (WOR-0220), or null when its board isn't showing.</summary>
@@ -61,6 +64,19 @@ public partial class QueuesViewModel : ObservableObject
     [ObservableProperty] public partial string NewName { get; set; } = "";
     [ObservableProperty] public partial string? MakeFrom { get; set; }
     [ObservableProperty] public partial string Error { get; set; } = "";
+    /// <summary>What a queue can work its cards with (WOR-0246): the default agent, each model profile, each flow. Read again
+    /// whenever the form opens or a lane's box is, since profiles.md and the flow files are edited outside.</summary>
+    public ObservableCollection<string> WithChoices { get; } = [QueueWith.Default];
+    [ObservableProperty] public partial string NewWith { get; set; } = QueueWith.Default;
+    public IReadOnlyList<string> ProfileNames() => ModelProfiles.Load().Profiles.Select(p => p.Name).ToList();
+    public IReadOnlyList<string> FlowNames() => _agents.Flows.Select(f => f.Name).ToList();
+    public void RefreshChoices()
+    {
+        var now = QueueWith.Choices(ProfileNames(), FlowNames());
+        // a queue naming something that has gone still shows it, so its box isn't blank
+        foreach (var q in _queues) if (QueueWith.Label(q) is var l && !now.Contains(l, StringComparer.OrdinalIgnoreCase)) now.Add(l);
+        ListSync.Sync(WithChoices, now);
+    }
     public string MakeHint => MakeFrom is null ? "An empty queue: add cards from their menus." : $"Filled with {MakeFrom}'s open cards, each after what it waits on.";
     partial void OnMakeFromChanged(string? value) => OnPropertyChanged(nameof(MakeHint));
 
@@ -96,6 +112,8 @@ public partial class QueuesViewModel : ObservableObject
         MakeFrom = board;
         NewName = QueueStore.NameFor(board, _queues);
         Error = "";
+        NewWith = QueueWith.Default;
+        RefreshChoices();
         IsMaking = true;
     }
 
@@ -104,17 +122,18 @@ public partial class QueuesViewModel : ObservableObject
     [RelayCommand]
     void MakeNew()
     {
-        try { Make(NewName, MakeFrom, null); IsMaking = false; Error = ""; }
+        try { var with = QueueWith.Parse(NewWith) ?? (null, null); Make(NewName, MakeFrom, null, with.Item1, with.Item2); IsMaking = false; Error = ""; }
         catch (InvalidOperationException e) { Error = e.Message; }
     }
 
     /// <summary>Make a queue: named (unique), filled from a board's open cards in dependency order, or from the cards given
     /// (each with its open blockers ahead of it). It waits for Run. Says what it made.</summary>
-    public CardQueue Make(string? name, string? board, IReadOnlyList<string>? cards)
+    public CardQueue Make(string? name, string? board, IReadOnlyList<string>? cards, string? profile = null, string? flow = null)
     {
+        if (QueueWith.Resolve(profile, flow, ProfileNames(), FlowNames(), out var useProfile, out var useFlow) is { } bad) throw new InvalidOperationException(bad);
         var all = CardIndex.Read(_config.Boards);
         var index = Blockers.Index(all);
-        var q = new CardQueue { Name = QueueStore.NameFor(name, _queues) };
+        var q = new CardQueue { Name = QueueStore.NameFor(name, _queues), Profile = useProfile, Flow = useFlow };
         if (cards is { Count: > 0 }) QueueOrder.Add(q, cards, index);
         else if (board is not null)
         {
@@ -126,6 +145,18 @@ public partial class QueuesViewModel : ObservableObject
         _index = index;
         Saved();
         return q;
+    }
+
+    /// <summary>Set what a queue works its cards with (WOR-0246): a profile or a flow by name, neither for the default agent.
+    /// Applies to cards it starts from now on; one already at work carries on as it was. Null when set, else why not.</summary>
+    public string? SetWith(CardQueue q, string? profile, string? flow)
+    {
+        if (QueueWith.Resolve(profile, flow, ProfileNames(), FlowNames(), out var useProfile, out var useFlow) is { } bad) return bad;
+        if (q.Profile == useProfile && q.Flow == useFlow) return null;
+        q.Profile = useProfile;
+        q.Flow = useFlow;
+        Saved();
+        return null;
     }
 
     /// <summary>Add cards to a queue, each with its open blockers ahead of it. Says which went in.</summary>
@@ -244,7 +275,8 @@ public partial class QueuesViewModel : ObservableObject
             switch (step)
             {
                 case QueueStep.Start s:
-                    if (Start?.Invoke(s.Id) is { } why) QueueRun.Pause(q, $"Couldn't start {s.Id}: {why}.", s.Id);
+                    var why = q.Profile is not null || q.Flow is not null ? (StartWith ?? ((id, _, _) => Start?.Invoke(id))).Invoke(s.Id, q.Profile, q.Flow) : Start?.Invoke(s.Id);
+                    if (why is not null) QueueRun.Pause(q, $"Couldn't start {s.Id}: {why}.", s.Id);
                     else QueueRun.Started(q, s.Id);
                     break;
                 case QueueStep.CheckQa c:
@@ -399,6 +431,25 @@ public partial class QueueViewModel(QueuesViewModel owner, CardQueue queue) : Ob
     public string DeleteText => AskingDelete == Deleting.WithCards ? "Delete queue and cards" : "Delete queue";
     static string Plural(int n, string what) => n == 1 ? $"1 {what}" : $"{n} {what}s";
 
+    /// <summary>What the queue works its cards with (WOR-0246), as the lane's box shows and sets it: "Default agent",
+    /// "Profile Quick" or "Flow designer-engineer-qa".</summary>
+    public string With
+    {
+        get => QueueWith.Label(Queue);
+        set
+        {
+            if (QueueWith.Parse(value) is not { } w || value == With) return;
+            WithError = owner.SetWith(Queue, w.Profile, w.Flow) ?? "";
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(WithTip));
+        }
+    }
+    [ObservableProperty] public partial string WithError { get; set; } = "";
+    public string WithTip => Queue.Flow is { } f ? $"Every card this queue starts runs the flow {f}" : Queue.Profile is { } p ? $"Every card this queue starts is worked on the model profile {p}" : "Cards are worked by the usual agent, its profile picked by the rules";
+    public IEnumerable<string> WithChoices => owner.WithChoices;
+    /// <summary>The box opened: read the profiles and flows again.</summary>
+    public void RefreshWith() => owner.RefreshChoices();
+
     /// <summary>What the queue's last step said, in words.</summary>
     public void Said(QueueStep step) => Doing = step switch
     {
@@ -430,7 +481,7 @@ public partial class QueueViewModel(QueuesViewModel owner, CardQueue queue) : Ob
                 ?? new QueueCardViewModel(this, i + 1, s.Id, s.Card, s.State, tile, states.Count);
         }).ToList());
         Line = string.Join("  →  ", Cards.Select(c => $"{c.Place} {c.Id}"));
-        foreach (var n in new[] { nameof(Name), nameof(RunText), nameof(RunTip), nameof(IsPaused), nameof(Failed), nameof(IsEmpty), nameof(DeleteQuestion) })
+        foreach (var n in new[] { nameof(Name), nameof(With), nameof(WithTip), nameof(RunText), nameof(RunTip), nameof(IsPaused), nameof(Failed), nameof(IsEmpty), nameof(DeleteQuestion) })
             OnPropertyChanged(n);
     }
 

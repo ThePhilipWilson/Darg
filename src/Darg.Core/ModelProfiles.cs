@@ -40,7 +40,7 @@ public sealed record ProfileSet(IReadOnlyList<ModelProfile> Profiles, IReadOnlyL
 /// <param name="Kind">One of <see cref="JobKinds"/>.</param>
 /// <param name="Text">The task in plain words (a card's title and description, not the house rules around it).</param>
 public sealed record AgentJob(string Kind, string Text, string? CardType = null, IReadOnlyList<string>? Labels = null,
-    string? Role = null, string? Project = null);
+    string? Role = null, string? Project = null, string? Profile = null);
 
 public static class JobKinds
 {
@@ -187,6 +187,8 @@ public static partial class ModelProfiles
     public static async Task<ProfilePick?> Pick(ProfileSet set, AgentJob job, TimeSpan? timeout = null)
     {
         if (set.Profiles.Count == 0) return null;
+        // a profile named for the job (a queue's, WOR-0246) beats the rules and Haiku; one that no longer exists falls through to them
+        if (set.Find(job.Profile) is { } named) return new ProfilePick(named, "set on the queue");
         if (ByRule(set, job) is { } byRule) return byRule;
         if (set.AskHaiku && set.Profiles.Count > 1 && job.Text.Trim().Length > 0)
         {

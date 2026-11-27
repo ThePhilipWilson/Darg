@@ -293,6 +293,8 @@
           <Button DockPanel.Dock="Right" Classes="primary" Content="Make" Command="{Binding MakeNewCommand}" Margin="6,0,0,0" AutomationProperties.Name="Make queue"/>
           <TextBox DockPanel.Dock="Left" Text="{Binding NewName}" PlaceholderText="Queue name" Width="220"
                    views:EnterSends.Command="{Binding MakeNewCommand}" AutomationProperties.Name="Queue name"/>
+          <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding WithChoices}" SelectedItem="{Binding NewWith}" Margin="8,0,0,0" MinWidth="170"
+                    ToolTip.Tip="What works this queue's cards: the usual agent, a model profile or a flow" AutomationProperties.Name="Queue works with"/>
           <TextBlock Classes="dim" Text="{Binding MakeHint}" VerticalAlignment="Center" Margin="10,0,0,0" TextTrimming="CharacterEllipsis"/>
         </DockPanel>
         <TextBlock Classes="bad" Text="{Binding Error}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
@@ -320,6 +322,8 @@
                     <TextBox DockPanel.Dock="Left" Text="{Binding BatchText}" Width="52" MinHeight="0" Padding="6,2" Margin="0,0,10,0" VerticalAlignment="Center"
                              ToolTip.Tip="How many cards the queue keeps at work at once: 1 is one at a time; more, and each time one leaves work (QA, done, failed or stopped) the next starts"
                              AutomationProperties.Name="{Binding Name, StringFormat='Cards at once in queue {0}'}"/>
+                    <ComboBox DockPanel.Dock="Left" Classes="queuewith" Tag="{Binding}" DropDownOpened="OnWithOpened" ItemsSource="{Binding WithChoices}" SelectedItem="{Binding With}" Margin="0,0,10,0" MinWidth="150"
+                              ToolTip.Tip="{Binding WithTip}" AutomationProperties.Name="{Binding Name, StringFormat='Queue {0} works with'}"/>
                     <Button DockPanel.Dock="Right" Classes="head" Opacity="1" Content="⋯" Margin="6,0,0,0" ToolTip.Tip="Rename or delete this queue"
                             AutomationProperties.Name="{Binding Name, StringFormat='Queue {0} menu'}">
                       <Button.Flyout>
@@ -336,6 +340,7 @@
                             ToolTip.Tip="{Binding RunTip}" AutomationProperties.Name="{Binding Name, StringFormat='Run or pause queue {0}'}"/>
                     <TextBlock Classes="dim" Classes.bad="{Binding Failed}" Text="{Binding Doing}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Doing}"/>
                   </DockPanel>
+                  <TextBlock Classes="bad" Text="{Binding WithError}" IsVisible="{Binding WithError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                   <TextBlock Classes="bad" Text="{Binding RenameError}" IsVisible="{Binding RenameError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                   <DockPanel IsVisible="{Binding ConfirmingDelete}">
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0">

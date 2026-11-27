@@ -920,7 +920,7 @@ public partial class ProjectViewModel : ObservableObject
             // the card shows the agent's state; when the agent ends, the card drops its link
             void Watch(AgentViewModel a) =>
                 a.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AgentViewModel.State) && a.State == AgentState.Exited) Board.ReloadAll(); };
-            Board.WorkOn = (card, file, alongside, show) =>
+            Board.WorkOn = (card, file, alongside, show, profile) =>
             {
                 using var timing = StallWatch.Shared.Section("Board.WorkOn");
                 var id = AgentsViewModel.NewId();
@@ -928,7 +928,7 @@ public partial class ProjectViewModel : ObservableObject
                 var inQa = Board.InQa(card);
                 // a card QA sent to needs more work: its agent is reworking it, so its return to QA runs QA (WOR-0115)
                 var purpose = inQa ? AgentPurposes.Qa : Board.InRework(card) ? AgentPurposes.Rework : AgentPurposes.Work;
-                Watch(Agents.Start(inQa ? ReportStore.CheckPrompt(Name, card, file) : CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card), id: id, purpose: purpose));
+                Watch(Agents.Start(inQa ? ReportStore.CheckPrompt(Name, card, file) : CardPrompt(card, file, alongside, id), CardFolder(card), cardId: card.Id, name: $"{card.Id} {card.Title}", job: CardJob(card) with { Profile = profile }, id: id, purpose: purpose));
                 if (show) Section = Section.Agents;
             };
             // Run QA (WOR-0108): an agent checks the card from its How to check section; the board stays showing
@@ -986,7 +986,7 @@ public partial class ProjectViewModel : ObservableObject
             // WOR-0212: named queues of cards, worked one at a time; the next starts as the one before finishes
             Queues = new QueuesViewModel(config, Agents)
             {
-                Start = Board.StartQueued, Changed = Board.ReloadAll,
+                Start = id => Board.StartQueued(id), StartWith = Board.StartQueued, Changed = Board.ReloadAll,
                 // WOR-0220: a queue's lane draws its cards' own tiles, and a card on a board not showing opens by id
                 TileFor = Board.LaneTile, OpenCard = id => Board.OpenById(id),
             };
@@ -995,14 +995,14 @@ public partial class ProjectViewModel : ObservableObject
             Queues.ShowingChanged();
             Board.Reloaded += Queues.Look;
             Board.Flows = () => Agents.Flows;
-            Board.RunFlow = (card, file, flow) =>
+            Board.RunFlow = (card, file, flow, show) =>
             {
                 Agents.ReloadFlows(); // its file may have been edited since the board last looked
                 var current = Agents.Flows.FirstOrDefault(f => f.Name == flow.Name) ?? flow;
                 var run = Agents.RunFlow(current, CardPrompt(card, file, []), $"{card.Id} {card.Title}", cwd: CardFolder(card), cardId: card.Id, job: CardJob(card));
                 // each stage is a new agent: the card follows the one at work
                 run.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(FlowRun.Status)) Board.ReloadAll(); };
-                Section = Section.Agents;
+                if (show) Section = Section.Agents;
             };
             // the boards were read before their cards' agents could be looked up
             Board.ReloadAll();

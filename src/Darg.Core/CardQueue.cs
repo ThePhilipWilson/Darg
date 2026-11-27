@@ -31,6 +31,12 @@ public sealed class CardQueue
     public int Batch { get; set; } = 1;
     public const int MaxBatch = 50;
 
+    /// <summary>A model profile (by name) every card this queue starts is worked on, instead of the one the rules or Haiku
+    /// would pick (WOR-0246); null for the usual pick. Never set with <see cref="Flow"/>.</summary>
+    public string? Profile { get; set; }
+    /// <summary>A flow (by name) run on every card this queue starts, instead of a single agent (WOR-0246); null for Work on.</summary>
+    public string? Flow { get; set; }
+
     [JsonIgnore] public bool HasRun => Started.Count > 0 || Why is not null;
 
     public bool Has(string id) => Cards.Contains(id, StringComparer.OrdinalIgnoreCase);
@@ -186,6 +192,56 @@ public static class QueueRun
 
 /// <summary>A queue's order and its dependencies (WOR-0212), worked out from the cards' Blocked by lines with no model:
 /// a card comes after every card it waits on, otherwise in the order given (a board's order: backlog, then its columns).</summary>
+/// <summary>What a queue works its cards with (WOR-0246): the default agent, a model profile or a flow, as the choices a
+/// box offers ("Default agent", "Profile Quick", "Flow designer-engineer-qa").</summary>
+public static class QueueWith
+{
+    public const string Default = "Default agent";
+    const string ProfilePrefix = "Profile ", FlowPrefix = "Flow ";
+
+    public static string Label(string? profile, string? flow) =>
+        flow is { Length: > 0 } ? FlowPrefix + flow : profile is { Length: > 0 } ? ProfilePrefix + profile : Default;
+
+    public static string Label(CardQueue q) => Label(q.Profile, q.Flow);
+
+    /// <summary>The choices: the default, then each profile, then each flow.</summary>
+    public static List<string> Choices(IEnumerable<string> profiles, IEnumerable<string> flows) =>
+        [Default, .. profiles.Select(p => ProfilePrefix + p), .. flows.Select(f => FlowPrefix + f)];
+
+    /// <summary>A choice as the profile and flow it names (one at most); null for a choice that is none of them.</summary>
+    public static (string? Profile, string? Flow)? Parse(string? choice)
+    {
+        var c = choice?.Trim() ?? "";
+        if (c.Length == 0 || c.Equals(Default, StringComparison.OrdinalIgnoreCase)) return (null, null);
+        if (c.StartsWith(ProfilePrefix, StringComparison.OrdinalIgnoreCase) && c.Length > ProfilePrefix.Length) return (c[ProfilePrefix.Length..].Trim(), null);
+        if (c.StartsWith(FlowPrefix, StringComparison.OrdinalIgnoreCase) && c.Length > FlowPrefix.Length) return (null, c[FlowPrefix.Length..].Trim());
+        return null;
+    }
+
+    /// <summary>Check a profile and a flow against what exists: null when fine, with the names as spelt there, else why not
+    /// (both named, or one that doesn't exist).</summary>
+    public static string? Resolve(string? profile, string? flow, IEnumerable<string> profiles, IEnumerable<string> flows, out string? useProfile, out string? useFlow)
+    {
+        useProfile = useFlow = null;
+        profile = string.IsNullOrWhiteSpace(profile) ? null : profile.Trim();
+        flow = string.IsNullOrWhiteSpace(flow) ? null : flow.Trim();
+        if (profile is not null && flow is not null) return "A queue runs a profile or a flow, not both.";
+        if (profile is not null)
+        {
+            useProfile = profiles.FirstOrDefault(p => p.Equals(profile, StringComparison.OrdinalIgnoreCase));
+            if (useProfile is null) return $"No profile \"{profile}\". Profiles: {Names(profiles)}.";
+        }
+        if (flow is not null)
+        {
+            useFlow = flows.FirstOrDefault(f => f.Equals(flow, StringComparison.OrdinalIgnoreCase));
+            if (useFlow is null) return $"No flow \"{flow}\". Flows: {Names(flows)}.";
+        }
+        return null;
+    }
+
+    static string Names(IEnumerable<string> names) => names.Any() ? string.Join(", ", names) : "none";
+}
+
 public static class QueueOrder
 {
     /// <summary>The cards still to work: not done, in QA or waiting on the person.</summary>

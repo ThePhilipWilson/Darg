@@ -342,3 +342,57 @@ public sealed class CardQueueTests : IDisposable
         Assert.False(QueueStore.Move(all, 5, 0));
     }
 }
+
+/// <summary>WOR-0246: what a queue works its cards with.</summary>
+public class QueueWithCoreTests
+{
+    [Fact]
+    public void A_choice_names_the_default_a_profile_or_a_flow_and_round_trips()
+    {
+        Assert.Equal(QueueWith.Default, QueueWith.Label(null, null));
+        Assert.Equal("Profile Deep", QueueWith.Label("Deep", null));
+        Assert.Equal("Flow Review", QueueWith.Label(null, "Review"));
+        Assert.Equal(("Deep", (string?)null), QueueWith.Parse("Profile Deep")!.Value);
+        Assert.Equal(((string?)null, "Review"), QueueWith.Parse("flow Review")!.Value);
+        Assert.Equal(((string?)null, (string?)null), QueueWith.Parse(QueueWith.Default)!.Value);
+        Assert.Null(QueueWith.Parse("Something else"));
+        Assert.Equal([QueueWith.Default, "Profile A", "Flow F"], QueueWith.Choices(["A"], ["F"]));
+    }
+
+    [Fact]
+    public void Resolve_takes_names_as_spelt_and_refuses_unknown_or_both()
+    {
+        Assert.Null(QueueWith.Resolve("deep", null, ["Quick", "Deep"], ["F"], out var p, out var f));
+        Assert.Equal(("Deep", (string?)null), (p, f));
+        Assert.Contains("Quick, Deep", QueueWith.Resolve("nope", null, ["Quick", "Deep"], [], out _, out _));
+        Assert.Contains("none", QueueWith.Resolve(null, "nope", [], [], out _, out _));
+        Assert.Contains("not both", QueueWith.Resolve("Deep", "F", ["Deep"], ["F"], out _, out _));
+        Assert.Null(QueueWith.Resolve(null, null, [], [], out p, out f));
+        Assert.Equal(((string?)null, (string?)null), (p, f));
+    }
+
+    [Fact]
+    public async Task A_profile_named_for_the_job_beats_the_rules_and_a_missing_one_falls_through()
+    {
+        var set = ModelProfiles.Parse("# P\nAsk Haiku: no\n\n## Quick\nModel: haiku\n\n## Deep\nModel: opus\n\n## Rules\n- kind: card -> Quick\n");
+        var job = new AgentJob(JobKinds.Card, "x");
+        Assert.Equal("Quick", (await ModelProfiles.Pick(set, job))!.Profile.Name);
+        Assert.Equal("Deep", (await ModelProfiles.Pick(set, job with { Profile = "deep" }))!.Profile.Name);
+        Assert.Equal("Quick", (await ModelProfiles.Pick(set, job with { Profile = "gone" }))!.Profile.Name);
+    }
+
+    [Fact]
+    public void A_queues_profile_and_flow_are_kept_in_its_file()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "darg-wor0246-" + Guid.NewGuid().ToString("N")[..8], "queues.json");
+        try
+        {
+            QueueStore.Save(file, [new CardQueue { Name = "A", Profile = "Deep" }, new CardQueue { Name = "B", Flow = "Review" }, new CardQueue { Name = "C" }]);
+            var back = QueueStore.Load(file);
+            Assert.Equal(("Deep", (string?)null), (back[0].Profile, back[0].Flow));
+            Assert.Equal(((string?)null, "Review"), (back[1].Profile, back[1].Flow));
+            Assert.Equal(((string?)null, (string?)null), (back[2].Profile, back[2].Flow));
+        }
+        finally { try { Directory.Delete(Path.GetDirectoryName(file)!, true); } catch (IOException) { } }
+    }
+}

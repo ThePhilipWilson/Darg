@@ -13,6 +13,12 @@ public partial class BoardView : UserControl
 {
     static BoardView() => RenameBox.Hook();
 
+    /// <summary>A queue's works-with box opened: read profiles.md and the flow files again (WOR-0246), they're edited outside.</summary>
+    void OnWithOpened(object? sender, EventArgs e)
+    {
+        if ((sender as Avalonia.Controls.Control)?.Tag is QueueViewModel q) q.RefreshWith();
+    }
+
     public BoardView()
     {
         InitializeComponent();
