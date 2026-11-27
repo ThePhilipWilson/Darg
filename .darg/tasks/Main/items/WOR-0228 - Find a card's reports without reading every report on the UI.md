@@ -1,11 +1,12 @@
 # WOR-0228: Find a card's reports without reading every report on the UI thread
 
-- **Status:** Backlog
+- **Status:** Done
 - **Priority:**
 - **Type:** Task
 - **Labels:** performance
 - **Created:** 2026-11-25
-- **Done:**
+- **Done:** 2026-11-27
+- **Moved:** 2026-11-27 11:10:56
 
 ## Description
 
