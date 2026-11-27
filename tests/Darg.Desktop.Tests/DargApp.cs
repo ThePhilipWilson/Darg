@@ -148,14 +148,20 @@ public sealed class DargApp : IDisposable
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
     }
 
-    /// <summary>Wait until something is true, letting the app run meanwhile; fails the test with <paramref name="what"/> if it never is.</summary>
+    /// <summary>Wait until something is true, letting the app run meanwhile; fails the test with <paramref name="what"/> if it never is.
+    /// A condition that reads a file the app is writing at that moment is "not yet" (the IOException of a file in use), not a failure.</summary>
     public static async Task Wait(Func<bool> condition, string what, int seconds = 30)
     {
         var end = DateTime.UtcNow.AddSeconds(seconds);
-        while (!condition())
+        while (!Holds())
         {
             if (DateTime.UtcNow > end) throw new TimeoutException($"Waited {seconds} s for: {what}");
             await Settle(100);
+        }
+        bool Holds()
+        {
+            try { return condition(); }
+            catch (IOException) when (DateTime.UtcNow <= end) { return false; }
         }
     }
 
