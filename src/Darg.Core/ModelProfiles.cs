@@ -194,9 +194,10 @@ public static partial class ModelProfiles
         return true;
     }
 
-    /// <summary>Whether <see cref="Pick"/> asks Haiku for this job (no rule matches, and there is a choice and words to read).</summary>
+    /// <summary>Whether <see cref="Pick"/> asks Haiku for this job (no profile named for it, no rule matches, and there is a
+    /// choice and words to read).</summary>
     public static bool AsksHaiku(ProfileSet set, AgentJob job) =>
-        set.Profiles.Count > 1 && set.AskHaiku && job.Text.Trim().Length > 0 && ByRule(set, job) is null;
+        set.Profiles.Count > 1 && set.AskHaiku && job.Text.Trim().Length > 0 && set.Find(job.Profile) is null && ByRule(set, job) is null;
 
     /// <summary>Pick a new agent's profile off the calling thread, in two steps (WOR-0233): <see cref="ProfilePicking.Waiting"/>
     /// is settled once profiles.md is read, saying whether Haiku is being asked (seconds, during which the agent's claude

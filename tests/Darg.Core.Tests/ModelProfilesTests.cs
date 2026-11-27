@@ -123,6 +123,12 @@ public class ModelProfilesTests
         Assert.False(ModelProfiles.AsksHaiku(set with { AskHaiku = false }, new AgentJob(JobKinds.Chat, "hi")));
         var allOff = ModelProfiles.Parse("## A\nModel: haiku\nHooks: off\n## B\nModel: opus\nHooks: off\n");
         Assert.True(ModelProfiles.AsksHaiku(allOff, new AgentJob(JobKinds.Chat, "hi")));
+        // a queue's profile (WOR-0246) is the pick at once; one that's gone leaves Haiku to pick
+        Assert.False(ModelProfiles.AsksHaiku(set, new AgentJob(JobKinds.Chat, "hi", Profile: "B")));
+        Assert.True(ModelProfiles.AsksHaiku(set, new AgentJob(JobKinds.Chat, "hi", Profile: "Gone")));
+        var named = ModelProfiles.StartPick(new AgentJob(JobKinds.Chat, "hi", Profile: "B"), () => set);
+        Assert.Null(await named.Waiting);
+        Assert.Equal("B", (await named.Result)?.Profile.Name);
 
         var failing = ModelProfiles.StartPick(new AgentJob(JobKinds.Chat, "hi"), () => throw new IOException("unreadable"));
         Assert.Null(await failing.Waiting); // settled even when the read fails, so nothing waits on it for ever
