@@ -612,7 +612,7 @@ public partial class MainViewModel
         try { to = BoardLayouts.Move(p.Config.Boards, id, a.Need("column"), a.Get("before")); }
         catch (ArgumentException e) { throw new ApiError(e.Message); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new ApiError($"Couldn't move {id}: {e.Message}"); }
-        p.Board.ReloadAll(); // the board on screen shows it now, not when the watcher's debounce runs
+        p.Board.ReloadAll(); // the board on screen shows it in the next pass (off the UI thread, WOR-0227), not when the watcher's debounce runs
         // JSON, as the phone's client reads every reply (AND-0003's DargClient refuses one that isn't)
         return Json(new JsonObject { ["id"] = id.Trim().ToUpperInvariant(), ["board"] = to.Board, ["column"] = to.List, ["moved"] = $"Moved {id.Trim().ToUpperInvariant()} to {to.List} on {to.Board}." });
     }

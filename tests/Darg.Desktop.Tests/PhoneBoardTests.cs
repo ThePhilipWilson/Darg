@@ -79,7 +79,8 @@ public class PhoneBoardTests
         Assert.Equal("Backlog", board.Current?.Name); // the phone stays on the list it was on
         Assert.Equal([first.Id, third.Id], board.Current!.Cards.Select(c => c.Id));
         Assert.Equal("In Progress 1", board.Lists.Single(l => l.Name == "In Progress").Label);
-        Assert.Equal([second.Id], app.Board.Lists.Single(l => l.Name == "In Progress").Cards.Select(c => c.Id));
+        // the desktop reads its boards off the UI thread since WOR-0227, so its board shows the move a moment later
+        await app.Until(() => app.Board.Lists.Single(l => l.Name == "In Progress").Cards.Select(c => c.Id).SequenceEqual([second.Id]), "the desktop board showing the move");
         Assert.Contains("Moved", board.Status);
 
         // swiping on to To Do and typing a title adds the card there
