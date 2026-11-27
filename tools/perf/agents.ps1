@@ -162,18 +162,19 @@ if (-not $rows.Count) { return }
 "API time this turn) and Tools+ (the rest of its turn: tools, subagents, its own work)."
 ""
 "-- the sessions: what they were and how they started"
-$sessions | Where-Object { $_.Turns.Count } | ForEach-Object { [pscustomobject]@{ Name = "$(KindOf $_) $(if ($_.Resume) { 'resumed' } else { 'new' })"; S = $_ } } |
+$sessions | Where-Object { $_.Turns.Count } | ForEach-Object { [pscustomobject]@{ Name = "$(KindOf $_) $(if ($_.Resume) { 'resumed' } elseif ($_.Spare) { 'spare' } else { 'new' })"; S = $_ } } |
     Group-Object Name | Sort-Object Count -Descending | ForEach-Object {
         $ids = @($_.Group.S.Agent | Select-Object -Unique)
         '{0,-16} {1,3} sessions, {2,3} turns: {3}{4}' -f $_.Name, $_.Count, ($_.Group | ForEach-Object { $_.S.Turns.Count } | Measure-Object -Sum).Sum,
             (($ids | Select-Object -First 8) -join ' '), $(if ($ids.Count -gt 8) { " +$($ids.Count - 8) more" })
     }
 ""
-"-- medians (first turns of new sessions, of resumed ones, and later turns)"
+"-- medians (first turns of new sessions, of spare ones started ahead, of resumed ones, and later turns)"
 $mhead = '{0,-20} {1,-7} {2,3} {3,7} {4,5} {5,7} {6,5} {7,6} {8,6} {9,7} {10,7} {11,6}'
 $mhead -f 'Turns', 'Kind', 'N', 'Waited', 'Pick', 'Startup', 'Hooks', 'Reply', 'Tool', 'Model', 'Tools+', 'Shown'
 $groups = @(
     @{ Name = 'first turn, new'; Set = @($rows | Where-Object { $_.Turn -eq 1 -and $_.Session -eq 'new' }) }
+    @{ Name = 'first turn, spare'; Set = @($rows | Where-Object { $_.Turn -eq 1 -and $_.Session -eq 'spare' }) } # WOR-0235: a session started ahead
     @{ Name = 'first turn, resumed'; Set = @($rows | Where-Object { $_.Turn -eq 1 -and $_.Session -eq 'resume' }) }
     @{ Name = 'later turns'; Set = @($rows | Where-Object { $_.Turn -gt 1 }) }
 )
