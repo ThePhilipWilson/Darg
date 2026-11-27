@@ -425,6 +425,7 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
         List<string> args = [.. Args(), .. AgentChoices.LaunchArgs(runModel, runEffort, AgentChoices.NewAgentMode)];
         try { args.AddRange(McpFor(project)()); }
         catch (Exception) { args.AddRange(McpServers.LaunchArgs(null)); }
+        if (pick is { Profile.Hooks: false }) args.AddRange(ModelProfiles.NoHooksArgs()); // WOR-0236, where Begin puts them
         return args;
     }
 

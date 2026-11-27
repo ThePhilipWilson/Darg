@@ -66,6 +66,36 @@ public class FettleSpareTests
         Assert.Equal("", app.Crashes());
     });
 
+    [AvaloniaFact] // WOR-0236: a Fettle profile with Hooks: off has its spare started without hooks too, so a chat still takes it
+    public Task A_spare_on_a_hooks_off_profile_starts_without_hooks_and_is_taken() => WithSpares(async () =>
+    {
+        using var app = DargApp.Make();
+        File.WriteAllText(Path.Combine(app.Home, "profiles.md"), """
+            # Model profiles
+            Ask Haiku: no
+
+            ## Fast
+            Model: sonnet
+            Hooks: off
+
+            ## Rules
+            - kind: fettle -> Fast
+            """);
+        await app.Start();
+        var fettle = app.Main.Mascot;
+        await app.Until(() => fettle.Spare is not null && Starts(app).Count == 1, "a spare Fettle session to start");
+        var spare = Starts(app)[0];
+        var args = spare["args"]!.AsArray().Select(a => (string)a!).ToList();
+        Assert.Equal(Path.GetFullPath(ModelProfiles.NoHooksFile), Path.GetFullPath(args[args.IndexOf("--settings") + 1]));
+
+        fettle.Compose = "what's on the board?";
+        fettle.SendCommand.Execute(null);
+        await app.Until(() => app.Prompts().Any(p => p.Contains("what's on the board?")), "the message to reach claude");
+        Assert.Equal(Pid(spare), Pid(app.ClaudeCalls().First(c => (string?)c["kind"] == "message"))); // taken, not replaced
+        Assert.True(fettle.Agent!.NoHooks);
+        Assert.Equal("", app.Crashes());
+    });
+
     [AvaloniaFact]
     public Task A_spare_whose_MCP_ticks_changed_is_replaced_not_used() => WithSpares(async () =>
     {
