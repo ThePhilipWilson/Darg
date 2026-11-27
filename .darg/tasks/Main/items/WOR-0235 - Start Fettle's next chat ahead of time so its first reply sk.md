@@ -1,11 +1,12 @@
 # WOR-0235: Start Fettle's next chat ahead of time so its first reply skips start-up
 
-- **Status:** Backlog
+- **Status:** Done
 - **Priority:**
 - **Type:** Task
 - **Labels:** performance
 - **Created:** 2026-11-25
-- **Done:**
+- **Done:** 2026-11-27
+- **Moved:** 2026-11-27 03:45:00
 
 ## Description
 
