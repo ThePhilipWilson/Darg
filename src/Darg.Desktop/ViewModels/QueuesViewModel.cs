@@ -69,7 +69,7 @@ public partial class QueuesViewModel : ObservableObject
     public ObservableCollection<string> WithChoices { get; } = [QueueWith.Default];
     [ObservableProperty] public partial string NewWith { get; set; } = QueueWith.Default;
     public IReadOnlyList<string> ProfileNames() => ModelProfiles.Load().Profiles.Select(p => p.Name).ToList();
-    public IReadOnlyList<string> FlowNames() => _agents.Flows.Select(f => f.Name).ToList();
+    public IReadOnlyList<string> FlowNames() { _agents.ReloadFlows(); return _agents.Flows.Select(f => f.Name).ToList(); } // the files are edited outside
     public void RefreshChoices()
     {
         var now = QueueWith.Choices(ProfileNames(), FlowNames());
@@ -144,6 +144,7 @@ public partial class QueuesViewModel : ObservableObject
         _queues.Add(q);
         _index = index;
         Saved();
+        RefreshChoices();
         return q;
     }
 
