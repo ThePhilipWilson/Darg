@@ -54,6 +54,9 @@ public sealed class AgentRecord
     /// <summary>The model / effort above was picked by hand, so Optimise tokens leaves it alone (WOR-0159).</summary>
     public bool ModelByHand { get; set; }
     public bool EffortByHand { get; set; }
+    /// <summary>Its profile has <c>Hooks: off</c> (WOR-0236): every session it starts or resumes runs none of the person's
+    /// Claude Code hooks (<see cref="ModelProfiles.NoHooksArgs"/>, asked each start rather than saved in <see cref="Args"/>).</summary>
+    public bool NoHooks { get; set; }
     /// <summary>Out of usage, and set to carry on at this time (when the limit resets); null: not waiting.</summary>
     public DateTimeOffset? ContinueAt { get; set; }
     /// <summary>Darg resumed it by itself after it was cut off mid-turn (WOR-0221), and that turn hasn't ended yet: cut off

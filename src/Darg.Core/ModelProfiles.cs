@@ -3,16 +3,19 @@ using System.Text.RegularExpressions;
 namespace Darg.Core;
 
 /// <summary>A named model and effort for a kind of job ("Quick: haiku, low"), and what it's for, in words
-/// Haiku reads when it picks one.</summary>
-public sealed record ModelProfile(string Name, string Model, string Effort, string UseFor)
+/// Haiku reads when it picks one. <see cref="Hooks"/> false (a <c>Hooks: off</c> line, WOR-0236): its sessions start
+/// without the person's Claude Code hooks (<see cref="ModelProfiles.NoHooksArgs"/>), keeping their permissions.</summary>
+public sealed record ModelProfile(string Name, string Model, string Effort, string UseFor, bool Hooks = true)
 {
-    /// <summary>"opus, effort high"; "your default model" for a profile that leaves both to the person's settings.</summary>
+    /// <summary>"opus, effort high"; "your default model" for a profile that leaves both to the person's settings;
+    /// ", no hooks" after either when its hooks are off.</summary>
     public string Summary
     {
         get
         {
             var model = Model == AgentChoices.Default ? "default model" : Model;
-            return Effort == AgentChoices.Default ? model : $"{model}, effort {Effort}";
+            var text = Effort == AgentChoices.Default ? model : $"{model}, effort {Effort}";
+            return Hooks ? text : text + ", no hooks";
         }
     }
 }
@@ -96,13 +99,15 @@ public static partial class ModelProfiles
         string? otherwise = null;
         string? section = null;
         string model = AgentChoices.Default, effort = AgentChoices.Default, useFor = "";
+        bool hooks = true;
 
         void Close()
         {
             if (section is not null && !section.Equals("Rules", StringComparison.OrdinalIgnoreCase))
-                profiles.Add(new ModelProfile(section, model, effort, useFor));
+                profiles.Add(new ModelProfile(section, model, effort, useFor, hooks));
             model = effort = AgentChoices.Default;
             useFor = "";
+            hooks = true;
         }
 
         foreach (var raw in text.Replace("\r\n", "\n").Split('\n'))
@@ -135,6 +140,7 @@ public static partial class ModelProfiles
                 case "model": model = value.Length == 0 ? AgentChoices.Default : value.ToLowerInvariant(); break;
                 case "effort": effort = value.Length == 0 ? AgentChoices.Default : value.ToLowerInvariant(); break;
                 case "use for": useFor = value; break;
+                case "hooks": hooks = !Off().IsMatch(value); break;
             }
         }
         Close();
@@ -246,6 +252,32 @@ public static partial class ModelProfiles
     private static partial Regex RuleLine();
     [GeneratedRegex(@"^[-*]?\s*([A-Za-z ]+?)\s*:\s*(.*)$")]
     private static partial Regex Field();
+    [GeneratedRegex(@"^(off|no|none|false|skip)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex Off();
+
+    /// <summary>The flags that start a session without the person's Claude Code hooks (WOR-0236): <c>--settings</c> naming a
+    /// file holding <c>{"disableAllHooks": true}</c>, which drops every hook (SessionStart, UserPromptSubmit, PreToolUse, Stop…)
+    /// while their settings, permissions included, are still read (checked on Claude Code 2.1.326: no hook events with it,
+    /// the permission mode still the person's). A file rather than the JSON inline, because a claude that is a .cmd would
+    /// have cmd mangle the quotes. Written again when missing, so a saved agent's resume finds it after temp is cleared.</summary>
+    public static IReadOnlyList<string> NoHooksArgs()
+    {
+        var path = NoHooksFile;
+        try
+        {
+            if (!File.Exists(path) || File.ReadAllText(path) != NoHooksJson)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, NoHooksJson);
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        return ["--settings", path];
+    }
+
+    public static string NoHooksFile => Path.Combine(Path.GetTempPath(), "darg-settings", "no-hooks.json");
+    const string NoHooksJson = """{"disableAllHooks": true}""";
 
     public const string Starter = """
         # Model profiles
@@ -255,6 +287,8 @@ public static partial class ModelProfiles
         effort once it's going.
 
         Model: opus, fable, sonnet, haiku, or default. Effort: low, medium, high, xhigh, max, or default.
+        Hooks: off starts a profile's agents without your Claude Code hooks: they start and finish turns sooner and
+        your permissions still apply, but nothing your hooks do (timers, gates, checks) runs for them.
 
         Ask Haiku: yes
         Otherwise: default

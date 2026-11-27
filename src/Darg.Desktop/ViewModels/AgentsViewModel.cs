@@ -1051,6 +1051,8 @@ public partial class AgentViewModel : ObservableObject
 
     /// <summary>The model profile it started on ("Deep"), if one was picked.</summary>
     [ObservableProperty] public partial string Profile { get; set; } = "";
+    /// <summary>Its profile has <c>Hooks: off</c> (WOR-0236): its sessions start without the person's Claude Code hooks.</summary>
+    public bool NoHooks { get; private set; }
     bool _handPicked, _ended;
     // where its first session may come from ready started (WOR-0235); asked once, by the first Begin
     Func<string, IReadOnlyList<string>, AgentSession?>? _takeSpare;
@@ -1071,6 +1073,8 @@ public partial class AgentViewModel : ObservableObject
         try { pick = await profile; } catch (Exception) { }
         _firstClock?.PickEnded(pick?.Profile.Name, pick?.Why);
         if (_ended) return; // closed or forgotten while it was being picked
+        // hooks go by the profile whatever was picked by hand: the model and effort boxes don't say anything about them
+        if (pick is not null) NoHooks = !pick.Profile.Hooks;
         if (pick is not null && !_handPicked)
         {
             _model = pick.Profile.Model == AgentChoices.Default ? null : pick.Profile.Model;
@@ -1116,7 +1120,7 @@ public partial class AgentViewModel : ObservableObject
         Id = r.Id; Name = r.Name; Cwd = r.Cwd; CardId = r.CardId; Purpose = r.Purpose; SessionId = r.SessionId; Project = r.Project; Plan = r.Plan;
         _args = r.Args; _created = r.Created; StoreFolder = storeFolder;
         _model = r.Model; _effort = r.Effort; _mode = r.Mode;
-        _modelByHand = r.ModelByHand; _effortByHand = r.EffortByHand;
+        _modelByHand = r.ModelByHand; _effortByHand = r.EffortByHand; NoHooks = r.NoHooks;
         NameDefaultModel(AgentChoices.DefaultModel(Cwd));
         _fromSession = true;
         ModelChoice = AgentChoices.Find(ModelChoices, r.Model);
@@ -1203,6 +1207,7 @@ public partial class AgentViewModel : ObservableObject
             try { mcp = McpArgs?.Invoke() ?? McpServers.LaunchArgs(null); }
             catch (Exception) { mcp = McpServers.LaunchArgs(null); }
             args.AddRange(mcp);
+            if (NoHooks) args.AddRange(ModelProfiles.NoHooksArgs());
             if (runModel != _model || runEffort != _effort)
                 Items.Add(new NoteItem($"Optimise tokens is on: starting on {TokenSaver.Describe(runModel, runEffort)} (it was given {TokenSaver.Describe(_model, _effort)})", false));
             AgentSession session;
@@ -1257,7 +1262,7 @@ public partial class AgentViewModel : ObservableObject
             {
                 Id = Id, Name = Name, Cwd = Cwd, CardId = CardId, Purpose = Purpose, Project = Project, Plan = Plan, SessionId = SessionId, Args = [.. _args],
                 Model = _model, Effort = _effort, Mode = _mode, ModelByHand = _modelByHand, EffortByHand = _effortByHand, ContinueAt = ContinueAt, AutoResumed = _autoResumed,
-                Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
+                NoHooks = NoHooks, Created = _created, Updated = DateTime.Now, Items = Items.Select(ToRecord).OfType<ItemRecord>().ToList(),
             });
         }
         catch (Exception) { /* a failed save must never take the agent down */ }

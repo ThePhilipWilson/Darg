@@ -19,6 +19,31 @@ public class ModelProfilesTests
         Assert.Equal(3, set.Rules.Count); // the prose lines in Rules aren't taken for rules
     }
 
+    [Fact] // WOR-0236: a profile can start its agents without the person's hooks; every other keeps them
+    public void HooksOffIsReadPerProfile()
+    {
+        Assert.All(Starter.Profiles, p => Assert.True(p.Hooks)); // the starter's Hooks line is prose, above the profiles
+        var set = ModelProfiles.Parse("""
+            ## Fast
+            Model: sonnet
+            Hooks: off
+            ## Same
+            Model: sonnet
+            Hooks: on
+            ## Plain
+            Model: opus
+            ## No
+            Hooks: No
+            """);
+        Assert.Equal([false, true, true, false], set.Profiles.Select(p => p.Hooks));
+        Assert.Equal("sonnet, no hooks", set.Profiles[0].Summary);
+        Assert.Equal("opus", set.Profiles[2].Summary);
+
+        var args = ModelProfiles.NoHooksArgs();
+        Assert.Equal("--settings", args[0]);
+        Assert.Equal("""{"disableAllHooks": true}""", File.ReadAllText(args[1]));
+    }
+
     [Fact]
     public void RulesMatchInOrder()
     {
