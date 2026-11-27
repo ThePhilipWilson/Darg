@@ -11,8 +11,11 @@ FAKE_STREAM_CHUNK  characters in each streamed piece of text (default 12) when s
               which streams each reply's text as stream_event deltas before the whole message, as the CLI does (WOR-0234);
               FAKE_STREAM_OFF=1 streams nothing, as before, so a load test can compare the two
 FAKE_REPLY    how long each step's text is: "looking at the code " this many times (default 15), for long replies
-FAKE_LOG      a file: each start (its args and folder), each message it is sent and each one-shot question is
-              appended to it as a JSON line, for the integration tests (WOR-0127) to check what an agent was given
+FAKE_LOG      a file: each start (its args and folder), each message it is sent, each control request but initialize
+              (set_model, apply_flag_settings...) and each one-shot question is appended to it as a JSON line, for the
+              integration tests (WOR-0127) to check what an agent was given
+FAKE_PICK_SECONDS  a model pick's question (WOR-0233) waits this long before it answers, then logs "answer", so a
+              test can see what an agent did while its model was being picked
 
 A message can steer the turn (AND-0007), for tests of what Fettle does:
 FAKE_ASK      asks an AskUserQuestion ("Which board?": Main or Elsewhere) before the work, waits for the answer and
@@ -126,6 +129,9 @@ if "--output-format" in args and args[args.index("--output-format") + 1] in ("te
     question = sys.stdin.read()  # a Haiku question (model pick, chat title)
     log("ask", args=args, text=question, cwd=os.getcwd())
     answer = "Standard | ordinary work"
+    if "Pick the profile" in question and float(os.environ.get("FAKE_PICK_SECONDS") or 0) > 0:
+        time.sleep(float(os.environ["FAKE_PICK_SECONDS"]))
+        log("answer", text=answer)
     if args[args.index("--output-format") + 1] == "json":  # as claude -p prints it: the result object on one line
         print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": answer, "duration_ms": 10}))
     else:
@@ -291,6 +297,9 @@ for line in sys.stdin:
     except ValueError:
         continue
     if m.get("type") == "control_request":
+        request = m.get("request") or {}
+        if request.get("subtype") != "initialize":
+            log("control", subtype=request.get("subtype"), request=request)
         emit({"type": "control_response", "response": {"subtype": "success", "request_id": m.get("request_id"), "response": {}}})
     elif m.get("type") == "control_response":  # the host answering a question (FAKE_ASK)
         r = m.get("response") or {}

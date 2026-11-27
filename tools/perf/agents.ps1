@@ -159,7 +159,9 @@ if (-not $rows.Count) { return }
 "first turn. Darg's part: Pick (the model pick) and Shown (the first text's wait between being read and being in the"
 "transcript; logs since WOR-0224). Startup: Claude Code starting before its own clock (node, SessionStart Hooks, MCP"
 "servers, a resume's load). Reply / Tool: from the message to the first reply / tool call. Claude's part: Model (its"
-"API time this turn) and Tools+ (the rest of its turn: tools, subagents, its own work)."
+"API time this turn) and Tools+ (the rest of its turn: tools, subagents, its own work). Since WOR-0233 a new agent's"
+"claude starts while Haiku picks its model, so its first turn's Startup (and Hooks) is only what was left once the pick"
+"ended and its message went."
 ""
 "-- the sessions: what they were and how they started"
 $sessions | Where-Object { $_.Turns.Count } | ForEach-Object { [pscustomobject]@{ Name = "$(KindOf $_) $(if ($_.Resume) { 'resumed' } elseif ($_.Spare) { 'spare' } else { 'new' })"; S = $_ } } |

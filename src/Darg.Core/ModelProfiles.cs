@@ -52,6 +52,18 @@ public static class JobKinds
 /// <summary>The profile picked for a job and why ("rule type: Bug", or Haiku's reason).</summary>
 public sealed record ProfilePick(ModelProfile Profile, string Why);
 
+/// <summary>A pick under way (WOR-0233, <see cref="ModelProfiles.StartPick"/>). <see cref="Waiting"/> settles first: null when
+/// no Haiku is asked (the pick is there or about to be), else what an agent starting meanwhile starts with.</summary>
+public sealed record ProfilePicking(Task<ProfilePick?> Result, Task<HaikuWait?> Waiting)
+{
+    /// <summary>A pick that is (or will be) <paramref name="result"/>, with no Haiku to wait for.</summary>
+    public static ProfilePicking Of(Task<ProfilePick?> result) => new(result, Task.FromResult<HaikuWait?>(null));
+}
+
+/// <summary>Haiku is picking: <see cref="NoHooks"/> when every profile it could pick has <c>Hooks: off</c>, so a session
+/// started meanwhile starts without them too (one started with hooks is started again if the pick has them off).</summary>
+public sealed record HaikuWait(bool NoHooks);
+
 /// <summary>Model profiles (WOR-0034): each new agent starts on the model and effort that suit its job. The first
 /// rule that matches wins; else Haiku reads the task and picks a profile by what each is for; else the
 /// Otherwise profile, else the person's own settings. Kept as profiles.md in the instance folder, written the
@@ -182,6 +194,30 @@ public static partial class ModelProfiles
         return true;
     }
 
+    /// <summary>Whether <see cref="Pick"/> asks Haiku for this job (no rule matches, and there is a choice and words to read).</summary>
+    public static bool AsksHaiku(ProfileSet set, AgentJob job) =>
+        set.Profiles.Count > 1 && set.AskHaiku && job.Text.Trim().Length > 0 && ByRule(set, job) is null;
+
+    /// <summary>Pick a new agent's profile off the calling thread, in two steps (WOR-0233): <see cref="ProfilePicking.Waiting"/>
+    /// is settled once profiles.md is read, saying whether Haiku is being asked (seconds, during which the agent's claude
+    /// can start up), and <see cref="ProfilePicking.Result"/> once the pick is in.</summary>
+    public static ProfilePicking StartPick(AgentJob job, Func<ProfileSet>? load = null, TimeSpan? timeout = null)
+    {
+        var waiting = new TaskCompletionSource<HaikuWait?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var result = Task.Run(async () =>
+        {
+            try
+            {
+                var set = (load ?? (() => Load()))();
+                // a session started while Haiku picks can't take --settings later: without hooks only when every profile is
+                waiting.TrySetResult(AsksHaiku(set, job) ? new HaikuWait(set.Profiles.All(p => !p.Hooks)) : null);
+                return await Pick(set, job, timeout);
+            }
+            finally { waiting.TrySetResult(null); }
+        });
+        return new ProfilePicking(result, waiting.Task);
+    }
+
     /// <summary>The profile for a job: by rule, else Haiku's pick, else Otherwise; null for the person's own
     /// settings (no profiles, or none fits). Never throws.</summary>
     public static async Task<ProfilePick?> Pick(ProfileSet set, AgentJob job, TimeSpan? timeout = null)
@@ -190,7 +226,7 @@ public static partial class ModelProfiles
         // a profile named for the job (a queue's, WOR-0246) beats the rules and Haiku; one that no longer exists falls through to them
         if (set.Find(job.Profile) is { } named) return new ProfilePick(named, "set on the queue");
         if (ByRule(set, job) is { } byRule) return byRule;
-        if (set.AskHaiku && set.Profiles.Count > 1 && job.Text.Trim().Length > 0)
+        if (AsksHaiku(set, job))
         {
             var reply = await Haiku.Ask(AskPrompt(set, job), timeout ?? TimeSpan.FromSeconds(30));
             if (reply is not null && ReadReply(set, reply) is { } picked) return picked;

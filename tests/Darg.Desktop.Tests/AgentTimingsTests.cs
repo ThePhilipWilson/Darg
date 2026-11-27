@@ -22,11 +22,15 @@ public class AgentTimingsTests
         var log = Path.Combine(app.Home, "agents.log");
         Assert.True(File.Exists(log), "agents.log beside perf.log");
         var lines = File.ReadAllLines(log).Where(l => l.Contains($" {agent.Id} +")).ToList();
+        // claude starts while Haiku picks its model, and its message goes once the pick is in (WOR-0233); fake claude's
+        // initialize may land either side of the pick's end, so it is checked apart
         string[] order =
         [
-            "model pick start", "model pick end", "process start", "message sent", "initialized (control)", "hook start SessionStart",
+            "model pick start", "process start", "model pick end", "message sent", "hook start SessionStart",
             "hook end SessionStart", "init · 2 mcp · failed: down-mcp", "first reply", "first tool call Read", "first tool result", "turn end",
         ];
+        Assert.True(lines.FindIndex(l => l.Contains(" · initialized (control)")) > lines.FindIndex(l => l.Contains(" · process start")),
+            string.Join("\n", lines));
         var at = -1;
         foreach (var step in order)
         {

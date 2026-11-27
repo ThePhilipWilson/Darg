@@ -159,10 +159,10 @@ public partial class MascotViewModel(IReadOnlyList<ProjectConfig> projects) : Ob
     }
 
     /// <summary>A new chat's model profile (WOR-0034): by a "kind: fettle" rule, else by what was asked.</summary>
-    Task<ProfilePick?> ProfileFor(string text, string? project = null)
+    ProfilePicking ProfileFor(string text, string? project = null)
     {
         var job = new AgentJob(JobKinds.Fettle, text, Project: project ?? ProjectId);
-        return Task.Run(() => ModelProfiles.Pick(ModelProfiles.Load(), job)); // off the UI thread, as in AgentsViewModel.Start
+        return ModelProfiles.StartPick(job); // off the UI thread, as in AgentsViewModel.Start
     }
 
     AgentViewModel Wire(AgentViewModel a)

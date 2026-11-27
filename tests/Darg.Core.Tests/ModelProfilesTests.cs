@@ -110,6 +110,25 @@ public class ModelProfilesTests
         Assert.Null(await ModelProfiles.Pick(set with { Otherwise = null }, new AgentJob(JobKinds.Chat, "hi")));
     }
 
+    [Fact] // WOR-0233: whether Haiku is asked is known before its pick, and the hooks an agent starts with meanwhile
+    public async Task StartPickSaysFirstWhetherHaikuIsAsked()
+    {
+        var set = ModelProfiles.Parse("Otherwise: B\n## A\nModel: haiku\nHooks: off\n## B\nModel: opus\n## Rules\n- kind: fettle -> A\n");
+        var byRule = ModelProfiles.StartPick(new AgentJob(JobKinds.Fettle, "hi"), () => set);
+        Assert.Null(await byRule.Waiting);
+        Assert.Equal("A", (await byRule.Result)?.Profile.Name);
+
+        Assert.True(ModelProfiles.AsksHaiku(set, new AgentJob(JobKinds.Chat, "hi")));
+        Assert.False(ModelProfiles.AsksHaiku(set, new AgentJob(JobKinds.Chat, " ")));
+        Assert.False(ModelProfiles.AsksHaiku(set with { AskHaiku = false }, new AgentJob(JobKinds.Chat, "hi")));
+        var allOff = ModelProfiles.Parse("## A\nModel: haiku\nHooks: off\n## B\nModel: opus\nHooks: off\n");
+        Assert.True(ModelProfiles.AsksHaiku(allOff, new AgentJob(JobKinds.Chat, "hi")));
+
+        var failing = ModelProfiles.StartPick(new AgentJob(JobKinds.Chat, "hi"), () => throw new IOException("unreadable"));
+        Assert.Null(await failing.Waiting); // settled even when the read fails, so nothing waits on it for ever
+        await Assert.ThrowsAsync<IOException>(() => failing.Result);
+    }
+
     [Fact]
     public void LoadWritesTheStarterOnce()
     {

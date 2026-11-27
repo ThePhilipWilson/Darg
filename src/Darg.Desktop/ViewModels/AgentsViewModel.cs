@@ -628,7 +628,7 @@ public partial class AgentsViewModel : ObservableObject
         {
             // asked by work still queued when the project closed: an agent that never starts, listed nowhere
             var gate = new TaskCompletionSource<ProfilePick?>();
-            var never = new AgentViewModel(project.WorkingFolder(), prompt, cardId, name ?? ChatTitle.Guess(prompt), id: id, profile: gate.Task) { Purpose = purpose };
+            var never = new AgentViewModel(project.WorkingFolder(), prompt, cardId, name ?? ChatTitle.Guess(prompt), id: id, profile: ProfilePicking.Of(gate.Task)) { Purpose = purpose };
             never.Shut();
             gate.SetResult(null);
             return never;
@@ -636,7 +636,7 @@ public partial class AgentsViewModel : ObservableObject
         // off the UI thread: reading profiles.md, and Haiku's pick, whose process start and prompt write are
         // synchronous (one per card when several start at once, WOR-0076)
         var forJob = job with { Project = job.Project ?? project.Id };
-        var profile = Task.Run(() => ModelProfiles.Pick(ModelProfiles.Load(), forJob));
+        var profile = ModelProfiles.StartPick(forJob);
         var folder = string.IsNullOrWhiteSpace(cwd) ? project.WorkingFolder() : cwd;
         // the project's cap reached, or others already waiting: it waits its turn (WOR-0245)
         var wait = AgentCap.MustWait(project.MaxAgents, Running(), _pending.Count(a => a.IsPending));
@@ -1068,12 +1068,13 @@ public partial class AgentViewModel : ObservableObject
 
     /// <param name="shown">What the transcript shows for the first message, when what's sent carries more
     /// (Bench sends a line of context ahead of the person's words).</param>
-    /// <param name="profile">The model profile for its job, still being picked (WOR-0034): the session starts once
-    /// it is in, on that profile's model and effort. Null: start now on the person's own settings.</param>
+    /// <param name="profile">The model profile for its job, still being picked (WOR-0034): the first message goes once
+    /// it is in, on that profile's model and effort (while Haiku picks, the session is already starting, WOR-0233).
+    /// Null: start now on the person's own settings.</param>
     /// <param name="spare">WOR-0235: offered the folder and full arguments its first session would start with, gives back a
     /// session already started with exactly those (a spare, Fettle's), or null to start one as ever.</param>
     public AgentViewModel(string cwd, string prompt, string? cardId = null, string? name = null, IEnumerable<string>? args = null, string? shown = null, string? id = null,
-        Task<ProfilePick?>? profile = null, Func<IReadOnlyList<string>>? mcp = null, Func<string, IReadOnlyList<string>, AgentSession?>? spare = null,
+        ProfilePicking? profile = null, Func<IReadOnlyList<string>>? mcp = null, Func<string, IReadOnlyList<string>, AgentSession?>? spare = null,
         bool pending = false)
     {
         if (id is not null) Id = id;
@@ -1091,7 +1092,7 @@ public partial class AgentViewModel : ObservableObject
         Name = name ?? (visible.Length > 40 ? visible[..40].TrimEnd() + "…" : visible);
         Items.Add(new UserItem(visible));
         if (profile is null && _slot is null) Begin(prompt, resume: false);
-        else StartOnProfile(profile ?? Task.FromResult<ProfilePick?>(null), prompt);
+        else StartOnProfile(profile ?? ProfilePicking.Of(Task.FromResult<ProfilePick?>(null)), prompt);
     }
 
     // ---- Pending (WOR-0245): its project had as many agents at work as its cap allows when it was asked for. It waits,
@@ -1148,22 +1149,44 @@ public partial class AgentViewModel : ObservableObject
     AgentTimings? _firstClock;
 
     /// <summary>Wait for the profile (a rule's is there at once; Haiku's takes a few seconds), take its model
-    /// and effort unless the person picked their own meanwhile, then start.</summary>
-    async void StartOnProfile(Task<ProfilePick?> profile, string prompt)
+    /// and effort unless the person picked their own meanwhile, then send the first message. While Haiku picks,
+    /// claude is already starting (WOR-0233) on the person's own settings: Claude Code starts up (node, SessionStart
+    /// hooks, MCP servers) before any message comes, and takes set_model and apply_flag_settings before the first,
+    /// so the start-up overlaps the pick and the picked model and effort are sent ahead of the held message. A rule's
+    /// pick (known once profiles.md is read) starts it on the profile's own command line as before, so a spare session
+    /// (WOR-0235) still fits and Hooks: off (WOR-0236) is on it from the start.</summary>
+    async void StartOnProfile(ProfilePicking picking, string prompt)
     {
         ProfilePick? pick = null;
-        _firstClock?.PickStarted();
-        if (_slot is not null) State = AgentState.Pending; // its model is picked while it waits (WOR-0245)
-        else if (!profile.IsCompleted)
+        var clock = _firstClock; // Begin hands it to the session
+        clock?.PickStarted();
+        AgentSession? early = null;
+        var earlyNoHooks = false;
+        // a pending agent's model is picked while it waits (WOR-0245), and it starts no claude early: the cap is on processes
+        if (_slot is not null) State = AgentState.Pending;
+        else if (!picking.Result.IsCompleted)
         {
+            _whilePicking = []; // what's sent meanwhile goes after the first message
             State = AgentState.Starting;
             Activity = "Picking a model…";
+            HaikuWait? wait = null;
+            try { wait = await picking.Waiting; } catch (Exception) { }
+            if (wait is not null && !_ended && !_shut && !picking.Result.IsCompleted)
+            {
+                NoHooks = earlyNoHooks = wait.NoHooks;
+                Begin(null, resume: false);
+                early = _session;
+                if (early is null) { _whilePicking = null; return; } // couldn't start claude: it says so, and the pick changes nothing
+                Activity = "Picking a model…";
+            }
         }
-        try { pick = await profile; } catch (Exception) { }
-        _firstClock?.PickEnded(pick?.Profile.Name, pick?.Why);
-        if (_ended) return; // closed or forgotten while it was being picked
+        try { pick = await picking.Result; } catch (Exception) { }
+        clock?.PickEnded(pick?.Profile.Name, pick?.Why);
+        var held = _whilePicking ?? [];
+        _whilePicking = null;
+        if (_ended) return; // closed or forgotten while it was being picked (End ended any claude it had started)
         // hooks go by the profile whatever was picked by hand: the model and effort boxes don't say anything about them
-        if (pick is not null) NoHooks = !pick.Profile.Hooks;
+        NoHooks = pick is not null && !pick.Profile.Hooks;
         if (pick is not null && !_handPicked)
         {
             _model = pick.Profile.Model == AgentChoices.Default ? null : pick.Profile.Model;
@@ -1175,9 +1198,63 @@ public partial class AgentViewModel : ObservableObject
             Profile = pick.Profile.Name;
             Items.Add(new NoteItem($"Profile {pick.Profile.Name} ({pick.Profile.Summary}) · {pick.Why}", false));
         }
-        if (!await WaitForSlot(prompt)) return;
-        Begin(prompt, resume: false);
+        if (early is not null && _session == early && NoHooks != earlyNoHooks)
+        {
+            // the pick's hooks setting differs from what it started with, which only a new process can take (--settings)
+            _session = null;
+            _ = early.DisposeAsync().AsTask();
+            Items.Add(new NoteItem(NoHooks ? "Started again without hooks, as its profile says." : "Started again with hooks, as its profile says.", false));
+            early = null;
+            _firstClock = clock;
+            BeginWith(prompt, held);
+        }
+        else if (early is null)
+        {
+            if (!await WaitForSlot(prompt)) return;
+            BeginWith(prompt, held);
+        }
+        else if (_session is { } session) SendHeld(session, [prompt, .. held]);
+        else if (!_shut)
+        {
+            // its claude ended while the model was picked (an exit that failed already said why)
+            if (!Items.OfType<NoteItem>().Any(n => n.Bad))
+                Items.Add(new NoteItem("Claude ended while its model was being picked, so nothing was sent. Start a new agent.", true));
+            Activity = "Claude ended while its model was being picked.";
+            State = AgentState.Exited;
+        }
         Save();
+    }
+
+    /// <summary>Start its first session with the first message, then what was sent while its model was picked.</summary>
+    void BeginWith(string prompt, List<string> held)
+    {
+        Begin(prompt, resume: false);
+        if (_session is { } session) foreach (var m in held) session.Send(m);
+    }
+
+    /// <summary>The pick is in (WOR-0233): tell the session started early what to run on, then send the message held for it.
+    /// A model or effort picked by hand meanwhile was told to the session at once (<see cref="Picked"/>), so it matches here.</summary>
+    void SendHeld(AgentSession session, IReadOnlyList<string> messages)
+    {
+        var (model, effort) = Running();
+        if (model != _runModel) session.SetModel(model ?? AgentChoices.Default);
+        if (effort != _runEffort) session.SetEffort(effort ?? AgentChoices.Default);
+        (_runModel, _runEffort) = (model, effort);
+        NoteTokenSaver(model, effort);
+        foreach (var m in messages) session.Send(m); // after the set_model and apply_flag_settings: stdin is written in order
+        TurnBegins("Starting…");
+        State = AgentState.Starting;
+    }
+
+    /// <summary>While its model is picked (its first message held): what the person sent meanwhile, sent after that first
+    /// message. Null otherwise.</summary>
+    List<string>? _whilePicking;
+
+    /// <summary>Optimise tokens lowers what it starts on: the transcript says so.</summary>
+    void NoteTokenSaver(string? runModel, string? runEffort)
+    {
+        if (runModel != _model || runEffort != _effort)
+            Items.Add(new NoteItem($"Optimise tokens is on: starting on {TokenSaver.Describe(runModel, runEffort)} (it was given {TokenSaver.Describe(_model, _effort)})", false));
     }
 
     /// <summary>The MCP flags each session it starts or resumes gets (WOR-0208, <see cref="McpServers.LaunchArgs"/>), asked
@@ -1197,6 +1274,7 @@ public partial class AgentViewModel : ObservableObject
             return;
         }
         Items.Add(new UserItem(shown));
+        if (_whilePicking is not null && !_ended) { _whilePicking.Add(sent); return; } // its model is being picked: goes after the first message
         if (_session is null)
         {
             if (SessionId is null) { Items.Add(new NoteItem("This chat has no session to carry on; start a new one.", true)); return; }
@@ -1294,7 +1372,9 @@ public partial class AgentViewModel : ObservableObject
     }
     bool _shut;
 
-    void Begin(string message, bool resume)
+    /// <param name="message">What to send it; null: start the process and send nothing yet (its model is still being
+    /// picked, <see cref="StartOnProfile"/>), so it starts up meanwhile.</param>
+    void Begin(string? message, bool resume)
     {
         if (_shut) { Items.Add(new NoteItem("Not started: its project has closed.", false)); return; }
         Resting = false;
@@ -1310,8 +1390,7 @@ public partial class AgentViewModel : ObservableObject
             catch (Exception) { mcp = McpServers.LaunchArgs(null); }
             args.AddRange(mcp);
             if (NoHooks) args.AddRange(ModelProfiles.NoHooksArgs());
-            if (runModel != _model || runEffort != _effort)
-                Items.Add(new NoteItem($"Optimise tokens is on: starting on {TokenSaver.Describe(runModel, runEffort)} (it was given {TokenSaver.Describe(_model, _effort)})", false));
+            if (message is not null) NoteTokenSaver(runModel, runEffort); // held: said once the pick says what it runs on
             AgentSession session;
             var clock = _firstClock ?? new AgentTimings(Id);
             _firstClock = null;
@@ -1336,8 +1415,11 @@ public partial class AgentViewModel : ObservableObject
             });
             inbox.Pace = () => StreamInbox.PaceFor(Volatile.Read(ref _streamedLength)); // asked on the reading thread
             session.Event += inbox.Add;
-            session.Send(message); // queued: it never waits for claude to read (WOR-0076)
-            TurnBegins("Starting…");
+            if (message is not null)
+            {
+                session.Send(message); // queued: it never waits for claude to read (WOR-0076)
+                TurnBegins("Starting…");
+            }
             State = AgentState.Starting;
         }
         catch (Exception e)
@@ -1599,6 +1681,7 @@ public partial class AgentViewModel : ObservableObject
         if (Wrap is not null) { Say(text, Wrap(text)); return; } // a Bench chat: it hears where Philip is
         _autoResumed = false; // the person's own turn: cut off, it is resumed again (WOR-0221)
         Items.Add(new UserItem(text));
+        if (_whilePicking is not null && !_ended) { _whilePicking.Add(text); return; } // its model is being picked: goes after the first message
         if (_session is null)
         {
             // a saved agent (or one whose session ended): carry on in the same conversation if there is one
